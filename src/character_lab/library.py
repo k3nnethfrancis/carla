@@ -5,23 +5,11 @@ from pathlib import Path
 
 from .workspaces import HOME
 
-EXAMPLE = {
-    "key": "paths",
-    "title": "Paths · example",
-    "author": "Carla contributors",
-    "normalization": "Original demonstration text; not a Computer seed document.",
-    "passages": [
-        {
-            "id": "1",
-            "label": "A path can change",
-            "text": "A path can connect places, divide a field, remember a journey, or become a place to stay.",
-        }
-    ],
-}
+BUNDLED = Path(__file__).with_name("seeds")
 
 
-def load_library(folder=None):
-    folder = Path(folder) if folder is not None else HOME / "library"
+def _read_library(folder):
+    folder = Path(folder)
     sources = []
     keys = set()
     for path in sorted(folder.glob("*.json")):
@@ -50,7 +38,15 @@ def load_library(folder=None):
             ids.add(ref)
         keys.add(key)
         sources.append(source)
-    return sources or [json.loads(json.dumps(EXAMPLE))]
+    return sources
+
+
+def load_library(folder=None):
+    """Bundled starters plus local documents; a local key overrides its starter."""
+    local = _read_library(folder if folder is not None else HOME / "library")
+    sources = {source["key"]: source for source in _read_library(BUNDLED)}
+    sources.update((source["key"], source) for source in local)
+    return list(sources.values())
 
 
 def main():

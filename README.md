@@ -40,7 +40,7 @@ Use ↑/↓ and Enter to choose, or Escape to go back:
 - Download a tested Qwen3 **8B**, **14B**, or **30B-A3B Base** GGUF (Q4_K_M).
 - Paste a Hugging Face repository or GGUF file URL and choose a file to download.
 - Point to a local GGUF without copying it.
-- Skip setup to browse the original example document offline.
+- Skip setup to browse the bundled Gunkel, Meditations and Tractatus starters offline.
 
 Downloads show their size, license and pinned revision before confirmation.
 Use `/model` → `+ Add model`, or run `carla --setup-model`, to add another model. Generation also requires
@@ -154,6 +154,6 @@ API keys. See [architecture](docs/architecture.md) for code boundaries and
 [research references](docs/resources.md) for method context.
 
 Code is [MIT licensed](LICENSE). Imported texts, model weights and generated
-artifacts retain their own applicable terms. No third-party seed corpus is bundled.
+artifacts retain their own applicable terms. The starter library includes third-party texts; see [source attribution](src/character_lab/seeds/README.md).
 For optional hosted monitoring and stored trace details, see
 [configuration](docs/configuration.md#optional-monitoring).

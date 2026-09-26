@@ -1,0 +1,48 @@
+{
+  "key": "tractatus",
+  "title": "Tractatus",
+  "author": "Ludwig Wittgenstein",
+  "translator": "C. K. Ogden",
+  "url": "https://www.gutenberg.org/ebooks/5740",
+  "download_url": "https://www.gutenberg.org/files/5740/5740-t/5740-t.tex",
+  "source_sha256": "52158eed80f03552c257e22dca26e1684588814554481242be94063ce9c6061f",
+  "scope": "Seven main propositions (1–7), not the subsidiary propositions or complete book.",
+  "normalization": "English PropositionE entries 1–7. Footnote about numbering omitted; whitespace reflowed; proposition 6 overbars rendered in Unicode. No paraphrasing.",
+  "passages": [
+    {
+      "id": "1",
+      "text": "The world is everything that is the case.",
+      "label": "The world is everything that is the case."
+    },
+    {
+      "id": "2",
+      "text": "What is the case, the fact, is the existence of atomic facts.",
+      "label": "What is the case, the fact, is the existence of atomic facts."
+    },
+    {
+      "id": "3",
+      "text": "The logical picture of the facts is the thought.",
+      "label": "The logical picture of the facts is the thought."
+    },
+    {
+      "id": "4",
+      "text": "The thought is the significant proposition.",
+      "label": "The thought is the significant proposition."
+    },
+    {
+      "id": "5",
+      "text": "Propositions are truth-functions of elementary propositions. (An elementary proposition is a truth-function of itself.)",
+      "label": "Propositions are truth-functions of elementary propositions. (An elementary proposition is a truth-function of itself.)"
+    },
+    {
+      "id": "6",
+      "text": "The general form of truth-function is: [p̄, ξ̄, N(ξ̄)]. This is the general form of proposition.",
+      "label": "The general form of truth-function is: [p̄, ξ̄, N(ξ̄)]. This is the general form of proposition."
+    },
+    {
+      "id": "7",
+      "text": "Whereof one cannot speak, thereof one must be silent.",
+      "label": "Whereof one cannot speak, thereof one must be silent."
+    }
+  ]
+}

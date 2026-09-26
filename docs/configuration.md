@@ -123,9 +123,11 @@ For numbered books or curated excerpts, place JSON documents under
 
 Keys and passage IDs must be unique within their scope. `book`/`number` enable
 nested numbered selection; arbitrary passages can instead supply a `label`.
-The default library is one short original example, not Gunkel or Meditations.
-Reference links are in [resources](resources.md); third-party material is not
-redistributed with Carla and its rights are not covered by Carla's MIT license.
+The bundled library contains Gunkel’s Paths table, 487 numbered Meditations
+passages and the seven main Tractatus propositions. These load offline; local
+entries with matching keys override the bundled entries. See
+[source attribution](../src/character_lab/seeds/README.md) for scope and rights.
+The texts are not covered by Carla’s MIT software license.
 
 ## Optional monitoring
 
