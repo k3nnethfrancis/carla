@@ -1,14 +1,8 @@
 # Carla
 
-A terminal lab for growing character documents from base-model continuations.
-Browse seed documents, branch their continuations in a Loom, curate an anthology,
-and explore how it behaves in simulated conversations. Prompts, model settings,
-source provenance and alternative branches remain inspectable.
+Carla (character lab) is a TUI for developing AI characters from base models inspired by [Computer-10](https://x.com/parafactual/status/2102611793369821277?s=20)
 
-Carla is an experimental **document and conversation curation tool**. It does not
-train models yet. It is inspired by the Computer document-growing work; local
-model choices, selection policies and simulation templates are experiments, not
-claims of reproducing a published model.
+Select from seed documents to generate base-model continuations, branch, edit, and curate an anthology of generations and explore how it behaves in simulated conversations. Prompts, model settings, source provenance and alternative branches remain inspectable.
 
 ```text
 Library → Branches → Anthology → Simulator
@@ -40,7 +34,8 @@ the installer prints the line to add to your shell profile.
 After that, run `carla` from any directory to resume your last workspace.
 Use `carla --workspace first-experiment` to create or open a named workspace.
 
-On first launch, Carla offers model setup if no configured GGUF is available:
+On first launch, Carla opens a setup dialog if no configured GGUF is available.
+Use ↑/↓ and Enter to choose, or Escape to go back:
 
 - Download a tested Qwen3 **8B**, **14B**, or **30B-A3B Base** GGUF (Q4_K_M).
 - Paste a Hugging Face repository or GGUF file URL and choose a file to download.
@@ -48,7 +43,7 @@ On first launch, Carla offers model setup if no configured GGUF is available:
 - Skip setup to browse the original example document offline.
 
 Downloads show their size, license and pinned revision before confirmation.
-Run `carla --setup-model` anytime to add another model. Generation also requires
+Use `/model` → `+ Add model`, or run `carla --setup-model`, to add another model. Generation also requires
 `llama-server` on PATH; see [generation setup](#set-up-generation).
 
 Once inside Carla, select a passage with Space, open it with Enter, and explore the
