@@ -1,5 +1,7 @@
 package main
 
+import "strings"
+
 // Walk parent links, rather than insertion order: new siblings may arrive after
 // their cousins. Collapse is UI state and never deletes a saved continuation.
 func (m *model) branchRows() []row {
@@ -20,6 +22,14 @@ func (m *model) branchRows() []row {
 	walk = func(parent string, depth int) {
 		for _, n := range children[parent] {
 			label := documentLabel(n)
+			// The parent tree supplies source context; detached anthology rows
+			// and document headings retain the complete identifier.
+			if depth > 0 && m.section != 2 && n.Label != "" && label == n.Label {
+				parts := strings.Split(label, "-")
+				if len(parts) >= 3 {
+					label = strings.Join(parts[len(parts)-2:], "-")
+				}
+			}
 			if n.Kept {
 				label = "★ " + label
 			}

@@ -242,3 +242,17 @@ func (m *model) documentActions() tea.Cmd {
 	}}
 	return nil
 }
+
+// Preview the selected version's own change, rather than inherited AI text.
+// Use the same wrapping as the document so long lines and Unicode align.
+func (m *model) revealVersionChange() {
+	if m.data.Current == nil {
+		return
+	}
+	text := []rune(m.currentText())
+	offset := max(0, min(m.data.Current.ChangeOffset, len(text)))
+	moveTextCursor(&m.navigator, offset)
+	m.document.SetContent(m.renderDocument(m.document.Width()))
+	row := strings.Count(ansi.Wrap(safe(string(text[:offset]))+"█", max(1, m.document.Width()), ""), "\n")
+	m.document.SetYOffset(row)
+}

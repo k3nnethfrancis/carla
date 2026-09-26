@@ -39,7 +39,12 @@ checkpoint and journal on next open; interrupted output is labeled accordingly.
 ## Persistence
 
 `domain.py` owns source, generated and edited document lineage, annotations,
-selection, simulation runs and anthology snapshots. Source text and generation
+selection, simulation runs and anthology snapshots. Document versions receive stable
+workspace-wide identifiers such as `paths-branch-0001`, `paths-gen-0001`,
+and `paths-edit-0001`. Nested tree rows omit the source prefix; headings and
+Anthology retain it. Counters survive deletion; explicit user titles override labels.
+Existing workspaces receive labels on their next save without changing text or lineage.
+Source text and generation
 prompts are copied into the artifacts so later library edits cannot rewrite history.
 Conversation edits fork through the changed turn and discard later replies only
 in the fork. Curation and export do not trigger training.

@@ -109,6 +109,7 @@ class Session:
             node["origins"] = p.origins(node["id"])
             node["status"] = generation_status(current)
             node["title"] = display_title(node)
+            node["change_offset"] = p.change_offset(node["id"])
             ancestor = current
             while not ancestor.get("trace", {}).get("model") and ancestor.get("parent"):
                 ancestor = p.node(ancestor["parent"])
@@ -127,6 +128,7 @@ class Session:
                         "kept",
                         "status",
                         "title",
+                        "label",
                         "created",
                     )
                 }

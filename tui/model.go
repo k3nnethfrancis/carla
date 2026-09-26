@@ -23,9 +23,10 @@ type origin struct {
 	Kind       string
 }
 type node struct {
-	ID, Parent, Kind, Status, Title, Text, Preview, Model string
-	Kept                                                  bool
-	Origins                                               []origin
+	ChangeOffset                                                 int `json:"change_offset"`
+	ID, Parent, Kind, Status, Title, Text, Preview, Model, Label string
+	Kept                                                         bool
+	Origins                                                      []origin
 }
 type localModel struct{ Name, Alias string }
 type settings struct {
@@ -168,6 +169,7 @@ type model struct {
 	searching              bool
 	search                 textinput.Model
 	document, inspector    viewport.Model
+	previewChangePending   bool
 	inspection             string
 	showInspector          bool
 	editor                 textarea.Model
@@ -623,6 +625,9 @@ func (m *model) apply(e event) tea.Cmd {
 			}
 		}
 		m.selected = max(0, min(m.selected, len(m.rows())-1))
+		if oldID != m.currentID() {
+			m.previewChangePending = (m.section == 1 || m.section == 2) && !m.data.Busy && m.editing == ""
+		}
 		m.reflow()
 		if noteSaved {
 			for i := len(m.data.Annotations) - 1; i >= 0; i-- {

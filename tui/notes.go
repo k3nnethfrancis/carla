@@ -125,9 +125,10 @@ func moveTextCursor(area *textarea.Model, offset int) {
 	area.MoveToBegin()
 	for area.Line() < target {
 		previous := area.Line()
+		// Skip wrapped display rows when seeking a logical text position.
+		area.CursorEnd()
 		area.CursorDown()
-		// CursorDown may move within a wrapped line; stop only at end of text.
-		if area.Line() == previous && area.Line() == area.LineCount()-1 {
+		if area.Line() == previous {
 			break
 		}
 	}

@@ -119,3 +119,68 @@ def test_origins_follow_nested_branches_edits_and_reload(tmp_path):
         origin_labels(fork["text"], p.origins(fork["id"]))
         == ["source"] * 4 + ["ai"] * 6
     )
+
+
+def test_numbered_labels_preserve_lineage_and_survive_restart_and_deletion(tmp_path):
+    from character_lab.domain import display_title
+
+    p = Project(tmp_path)
+    root = p.add("Source title", kind="source")
+    gen = p.add("Source title continuation", parent=root["id"])
+    edit = p.edit(gen["id"], "Edited text")
+    fork = p.add(edit["text"], parent=edit["id"], kind="fork")
+    assert [display_title(n) for n in p.data["nodes"]] == [
+        "doc-branch-0001",
+        "doc-gen-0001",
+        "doc-edit-0001",
+        "doc-branch-0002",
+    ]
+    p.delete_nodes([fork["id"]], [fork["id"]])
+    p = Project(tmp_path)
+    assert display_title(p.add("another fork", kind="fork")) == "doc-branch-0003"
+    assert p.node(edit["id"])["parent"] == gen["id"]
+    p.node(gen["id"])["title"] = "My own name"
+    assert display_title(p.node(gen["id"])) == "My own name"
+
+
+def test_legacy_labels_do_not_use_text_or_change_content():
+    from character_lab.domain import assign_labels, display_title
+
+    data = {
+        "nodes": [dict(id="a", kind="generated", text="First AI line", parent=None)]
+    }
+    assign_labels(data)
+    assign_labels(data)
+    assert display_title(data["nodes"][0]) == "doc-gen-0001"
+    assert data["nodes"][0]["text"] == "First AI line"
+    assert data["label_counters"] == {"Gen": 1}
+
+
+def test_preview_offset_tracks_this_version_not_inherited_ai(tmp_path):
+    p = Project(tmp_path)
+    root = p.add("Seed 日本語\n", kind="source")
+    first = p.add(root["text"] + "Old AI\n", parent=root["id"], prompt=root["text"])
+    second = p.add(first["text"] + "New AI", parent=first["id"], prompt=first["text"])
+    assert p.change_offset(second["id"]) == len(first["text"])
+    edit = p.edit(second["id"], second["text"].replace("New", "Changed"))
+    assert p.change_offset(edit["id"]) == len(first["text"])
+    deletion = p.edit(second["id"], second["text"].replace("Old AI\n", ""))
+    assert p.change_offset(deletion["id"]) == len(root["text"])
+    fork = p.add(second["text"], parent=second["id"], kind="fork")
+    assert p.change_offset(fork["id"]) == len(first["text"])
+    assert p.change_offset(root["id"]) == 0
+
+
+def test_source_labels_inherit_and_migrate_existing_numbers(tmp_path):
+    from character_lab.domain import assign_labels, display_title
+
+    p = Project(tmp_path)
+    root = p.add("Seed", kind="source", source_documents=[{"key": "gunkel"}])
+    gen = p.add("Seed output", parent=root["id"])
+    assert display_title(root) == "paths-branch-0001"
+    assert display_title(gen) == "paths-gen-0001"
+    gen.pop("label_number")
+    gen["label"] = "Gen 7"
+    assign_labels(p.data)
+    assert display_title(gen) == "paths-gen-0007"
+    assert display_title(p.add("Next", parent=gen["id"])) == "paths-gen-0008"

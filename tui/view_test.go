@@ -1157,3 +1157,51 @@ func TestExistingNoteSaveUpdatesInPlace(t *testing.T) {
 		t.Fatal("edit treated as new note")
 	}
 }
+
+func TestVersionPreviewScrollsToChangeOnSelection(t *testing.T) {
+	for _, width := range []int{80, 140} {
+		m := fixture()
+		m.width, m.height, m.section, m.focus = width, 32, 1, 0
+		prefix := strings.Repeat("Long source 日本語 text that wraps across the preview pane. ", 180) + "\n"
+		n := node{ID: "new-version", Kind: "generated", Text: prefix + "NEW CONTINUATION\n" + strings.Repeat("more text\n", 50), ChangeOffset: len([]rune(prefix))}
+		next := m.data
+		next.Current = &n
+		next.Nodes = []node{n}
+		raw, _ := json.Marshal(next)
+		m.apply(event{Type: "state", Data: raw})
+		if width < 90 {
+			m.focus = 1
+			m.reflow()
+		}
+		if m.document.YOffset() == 0 || !strings.Contains(ansi.Strip(m.document.View()), "NEW CONTINUATION") {
+			t.Fatalf("width %d: selection did not reveal continuation: %s", width, m.document.View())
+		}
+		if m.cursorOffset() != n.ChangeOffset {
+			t.Fatal("cursor should enter at previewed change")
+		}
+		m.focus = 0
+		m.document.SetYOffset(5)
+		m.apply(event{Type: "state", Data: raw})
+		if m.document.YOffset() != 5 {
+			t.Fatal("refreshing the same selection must preserve manual scrolling")
+		}
+	}
+}
+
+func TestBranchIdentifiersCompactOnlyNestedAutomaticNames(t *testing.T) {
+	m := fixture()
+	m.section = 1
+	m.data.Nodes = []node{
+		{ID: "root", Title: "paths-branch-0001", Label: "paths-branch-0001", Status: "complete"},
+		{ID: "gen", Parent: "root", Title: "paths-gen-0001", Label: "paths-gen-0001", Status: "complete", Kept: true},
+		{ID: "edit", Parent: "gen", Title: "My name", Label: "paths-edit-0001", Status: "complete"},
+	}
+	rows := m.branchRows()
+	if !strings.Contains(rows[0].label, "paths-branch-0001") || strings.Contains(rows[1].label, "paths-") || !strings.Contains(rows[1].label, "gen-0001") || !strings.Contains(rows[2].label, "My name") {
+		t.Fatalf("unexpected labels: %#v", rows)
+	}
+	m.section = 2
+	if !strings.Contains(m.branchRows()[0].label, "paths-gen-0001") {
+		t.Fatal("anthology needs source context")
+	}
+}

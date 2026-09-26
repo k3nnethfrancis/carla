@@ -151,6 +151,10 @@ func (m *model) reflow() {
 			m.document.SetHeight(height)
 			m.syncCursor(width, height)
 			m.document.SetContent(m.renderDocument(width))
+			if m.previewChangePending {
+				m.previewChangePending = false
+				m.revealVersionChange()
+			}
 			m.editor.SetWidth(width)
 			m.editor.SetHeight(height)
 		case 2:
