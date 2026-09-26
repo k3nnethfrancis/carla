@@ -17,7 +17,7 @@ import (
 func main() {
 	for _, arg := range os.Args[1:] {
 		if arg == "--help" || arg == "-h" {
-			fmt.Println("carla [--workspace NAME | --project PATH] [--models JSON] [--policy-model JSON]\nPython launcher: carla --setup-model to add or download a model.\n\nLocal document Loom. Resumes your last workspace.\nCTRL+W workspaces · CTRL+K actions · /keys bindings · CTRL+C quit\nRequires a UTF-8 terminal of at least 60 × 18 cells.")
+			fmt.Println("carla [--workspace NAME | --project PATH] [--models JSON] [--policy-model JSON]\nUse --setup-model to add or download a model.\n\nLocal document Loom. Resumes your last workspace.\nCTRL+W workspaces · CTRL+K actions · /keys bindings · CTRL+C quit\nRequires a UTF-8 terminal of at least 60 × 18 cells.")
 			return
 		}
 	}

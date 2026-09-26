@@ -88,3 +88,13 @@ Narrow terminals collapse panels; below 60 × 18 only a resize/quit view is show
 
 See `service.py` for backend commands, `tui/command.go` for command descriptions,
 and tests alongside each subsystem for its executable behavioral contract.
+
+## Model onboarding
+
+Setup uses the existing Go dialog stack (rows, inputs, parent/back navigation and
+semantic colors). The backend emits structured `setup` events for catalog choices,
+resolved download plans, progress, completion and errors. Selecting a source fetches
+metadata only; a separate command confirms the download. Local imports do not copy
+weights. The transfer runs in a child process so cancellation stops the Hub's
+worker threads and leaves its partial cache reusable. Registration and model
+selection happen in the owning Session only after a successful transfer.

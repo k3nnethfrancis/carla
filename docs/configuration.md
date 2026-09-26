@@ -2,11 +2,12 @@
 
 ## Models
 
-The installed `carla` launcher opens interactive model setup when no configured
-base GGUF exists. `carla --setup-model` opens it explicitly to add another model.
-Help and noninteractive launches do not trigger downloads or prompts, and an
-explicit `--models FILE` bypasses detection. Direct `bin/carla` launches bypass
-this Python setup step; use the installed launcher for onboarding.
+Carla opens its model setup dialog when no configured base GGUF exists.
+Use arrows and Enter to select, and Escape to go back one step or skip setup.
+File paths and URLs are entered in the same input controls as other Carla dialogs.
+`carla --setup-model` opens setup explicitly; inside Carla, use `/model` →
+`+ Add model`. An explicit `--models FILE` bypasses automatic detection.
+Both the installed launcher and direct TUI binary use this same setup flow.
 
 The preset menu offers the Qwen3 8B, 14B and 30B-A3B Base Q4_K_M files used in local
 experiments, pinned to those revisions. Their GGUF sizes are approximately 4.68,
@@ -16,7 +17,7 @@ Hugging Face repository URL, or a direct GGUF blob/resolve URL. Repository choic
 list GGUF files; a split selection downloads every shard and registers the first.
 The selected revision resolves to a commit before downloading.
 
-The setup displays file size, license metadata and the model card, then asks before
+The setup displays file size, license metadata and the source repository, then asks before
 downloading. It uses [Hugging Face Hub's download/cache support](https://huggingface.co/docs/huggingface_hub/guides/download)
 under `$CARLA_DATA_DIR/models`. Retry the same selection after interruption to reuse
 cached progress. For gated/private repositories, authenticate with Hugging Face or
@@ -26,6 +27,9 @@ training type must be identified by the user. Base models go into `models.json`;
 an instruct model can be configured as the separate Grow selector. An existing
 policy model is not silently replaced.
 
+Metadata checks and downloads run in the background. Download progress appears
+inside Carla; Escape cancels the transfer and retains cached partial files.
+Errors appear in the same dialog, with a way back to edit the source.
 Setup registers a model only after successful acquisition. It leaves existing
 entries intact and selects a distinct configured port, though another external
 process can still occupy that port. Initial context is 8192 and GPU layers 99;

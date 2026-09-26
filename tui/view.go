@@ -211,6 +211,9 @@ func (m *model) navigation(r rect) string {
 func (m *model) dialogRect() rect {
 	width := min(76, m.width-4)
 	height := min(m.height-6, 18)
+	if m.dialog != nil && strings.HasPrefix(m.dialog.kind, "setup-") && len(m.dialog.rows) > 0 {
+		height = min(height, len(m.dialog.rows)+8)
+	}
 	if m.dialog != nil && len(m.dialog.fields) > 0 {
 		height = min(m.height-4, len(m.dialog.fields)*3+6)
 	}
@@ -251,11 +254,24 @@ func (m *model) renderDialog() string {
 			body = append(body, "")
 		}
 		for _, text := range m.dialogPreviewLines() {
-			body = append(body, dim.Render(line(text, r.w-4)))
+			style := dim
+			if d.kind == "setup-error" {
+				style = m.accent("#A84F39", "#DB937C")
+			}
+			body = append(body, style.Render(line(text, r.w-4)))
 		}
 		footer := m.keyLabel("nav.enter") + " open · " + m.keyLabel("nav.back") + " close"
 		if d.parent != nil {
 			footer = m.keyLabel("nav.enter") + " open · " + m.keyLabel("nav.back") + " back"
+		}
+		if strings.HasPrefix(d.kind, "setup-") {
+			footer = "↑↓ select · ENTER choose · ESC back"
+			if d.kind == "setup-home" && d.parent == nil {
+				footer = "↑↓ select · ENTER choose · ESC skip"
+			}
+		}
+		if d.kind == "setup-busy" {
+			footer = "ESC cancel"
 		}
 		if d.kind == "help" {
 			footer = m.keyLabel("nav.up") + "/" + m.keyLabel("nav.down") + " commands · " + m.keyLabel("nav.back") + " return"
@@ -268,7 +284,7 @@ func (m *model) renderDialog() string {
 		}
 		if d.query != "" {
 			footer = "Filter: " + d.query + " · " + footer
-		} else if d.kind != "keys" && d.kind != "delete" {
+		} else if d.kind != "keys" && d.kind != "delete" && !strings.HasPrefix(d.kind, "setup-") {
 			footer = "Type to filter · " + footer
 		}
 		body = append(body, footer)
@@ -292,6 +308,9 @@ func (m *model) renderDialog() string {
 			body = append(body, bold.Render(label), value, "")
 		}
 		footer := m.keyLabel("nav.enter") + " next · " + m.keyLabel("save") + " save · " + m.keyLabel("nav.back") + " cancel"
+		if d.kind == "setup-input" {
+			footer = "ENTER continue · ESC back"
+		}
 		if d.kind == "note-new" || d.kind == "note-edit" {
 			footer = "ENTER save · CTRL+ENTER save · ESC cancel"
 		}

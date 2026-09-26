@@ -219,7 +219,7 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		raw := msg.String()
 		key := m.navigationKey(raw)
-		if raw == "/" && (m.focus != 3 || m.dialog != nil || m.searching || m.sectionFocus) && !m.keyCapture {
+		if raw == "/" && !(m.dialog != nil && strings.HasPrefix(m.dialog.kind, "setup-")) && (m.focus != 3 || m.dialog != nil || m.searching || m.sectionFocus) && !m.keyCapture {
 			m.editor.Blur()
 			m.search.Blur()
 			return m, m.focusCommand(true)

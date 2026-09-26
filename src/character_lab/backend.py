@@ -61,6 +61,14 @@ async def serve(args):
             session = Session(folder, emit, models, policy_model, workspaces)
             await emit("library", session.sources)
             await session.snapshot()
+            if args.setup_model or (
+                models is None
+                and not any(
+                    Path(m.get("path", "")).is_file()
+                    for m in session.project.data["models"]
+                )
+            ):
+                await session.execute("setup.open", {}, None)
             while line := await reader.readline():
                 request_id = None
                 try:
@@ -111,6 +119,7 @@ def main():
     parser = argparse.ArgumentParser(description="Carla local event service")
     parser.add_argument("--project", type=Path)
     parser.add_argument("--workspace")
+    parser.add_argument("--setup-model", action="store_true")
     parser.add_argument("--models", type=Path)
     parser.add_argument("--policy-model", type=Path)
     args = parser.parse_args()

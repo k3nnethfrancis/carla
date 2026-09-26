@@ -41,6 +41,7 @@ class Session:
         self.sources = library()
         self.job = None
         self.job_id = None
+        self.setup_plans = []
         self.lock = None
         self.view_node = None
         self.active_node = None
@@ -184,6 +185,11 @@ class Session:
             raise ValueError(
                 "Stop the active operation before changing the workspace or document"
             )
+        if command.startswith("setup."):
+            from .setup_service import dispatch
+
+            await dispatch(self, command, args, request_id)
+            return
         p = self.project
         if "token_range" in args:
             raise ValueError("Token ranges were removed; use a single maximum")

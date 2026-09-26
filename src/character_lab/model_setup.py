@@ -1,4 +1,4 @@
-"""Explicit first-run model acquisition, before the terminal renderer starts.
+"""Model acquisition primitives and a cancellable transfer worker.
 
 The Hub owns transfer progress, cache and resumption. Carla pins the resolved
 revision, downloads only the chosen GGUF (and its shards), and registers it only
@@ -81,59 +81,40 @@ def local_gguf(value):
     return path.parent / names[0]
 
 
-def choose(labels, ask=input):
-    for index, label in enumerate(labels, 1):
-        print(f"  {index}. {label}")
-    while True:
-        value = ask("Choose a number: ").strip()
-        if value.isdigit() and 1 <= int(value) <= len(labels):
-            return int(value) - 1
-        print(f"Choose 1–{len(labels)}.")
-
-
-def download(repo, revision, filename=None, ask=input):
+def plans(repo, revision, filename=None):
+    """Resolve metadata only; the returned immutable plans require user confirmation."""
     info = HfApi().model_info(repo, revision=revision, files_metadata=True)
     files = {
         f.rfilename: f for f in info.siblings if f.rfilename.lower().endswith(".gguf")
     }
-    if not files:
-        raise ValueError("No GGUF files found in that model repository")
-    if filename is None:
-        options = sorted(
+    options = (
+        [filename]
+        if filename
+        else sorted(
             name
             for name in files
             if not SHARD.fullmatch(name) or SHARD.fullmatch(name)[2] == "00001"
         )
-        if not options:
-            raise ValueError("No complete GGUF starting shard found")
-        filename = options[choose(options, ask)]
-    names = shard_files(filename, files)
-    sizes = [files[name].size for name in names]
-    size = (
-        f"{sum(sizes) / 1024**3:.2f} GiB"
-        if all(n is not None for n in sizes)
-        else "size unavailable"
     )
-    license_name = (info.card_data or {}).get(
-        "license", "not specified — check the model card"
-    )
-    print(f"\n{repo}\nFiles: {', '.join(names)}\nSize: {size}\nLicense: {license_name}")
-    print(f"Model card: https://huggingface.co/{repo}\nRevision: {info.sha}")
-    print(f"Download cache: {HOME / 'models'}")
-    if ask("Download these files? [y/N] ").strip().lower() not in {"y", "yes"}:
-        return None
-    paths = [
-        hf_hub_download(
-            repo_id=repo,
-            filename=name,
-            revision=info.sha,
-            cache_dir=str(HOME / "models"),
+    if not options:
+        raise ValueError("No GGUF files found in that repository")
+    result = []
+    for option in options:
+        names = shard_files(option, files)
+        sizes = [files[name].size for name in names]
+        result.append(
+            dict(
+                repo=repo,
+                revision=info.sha,
+                files=names,
+                name=option,
+                size=sum(sizes) if all(n is not None for n in sizes) else None,
+                license=(info.card_data or {}).get(
+                    "license", "Not specified; check the model card"
+                ),
+            )
         )
-        for name in names
-    ]
-    return local_gguf(paths[0]), dict(
-        repo=repo, revision=info.sha, files=names, license=license_name
-    )
+    return result
 
 
 def register(path, name, kind, source):
@@ -142,8 +123,9 @@ def register(path, name, kind, source):
         registry = HOME / ("models.json" if kind == "base" else "policy-model.json")
         existing = load_models(registry, kind) if registry.exists() else []
         if any(Path(model["path"]).resolve() == path.resolve() for model in existing):
-            print("This model is already configured.")
-            return
+            return next(
+                m for m in existing if Path(m["path"]).resolve() == path.resolve()
+            )
         if kind == "instruct" and existing:
             raise ValueError(
                 "A Grow policy model is already configured; edit policy-model.json to replace it"
@@ -173,76 +155,68 @@ def register(path, name, kind, source):
             json.dumps([*existing, model] if kind == "base" else model, indent=2) + "\n"
         )
         temp.replace(registry)
-    print(
-        f"Saved {name}. {'Select it with /model.' if kind == 'base' else 'Ready for Grow.'}"
-    )
+    return model
 
 
-def needs_setup(args):
-    """Respect explicit launch configuration and saved workspace model catalogs."""
-    import argparse
+def download_worker():
+    """Separate process: cancellation terminates network transfers, not just an await."""
+    import sys
+    import time
 
-    parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--models")
-    parser.add_argument("--project")
-    parser.add_argument("--workspace")
-    selected, _ = parser.parse_known_args(args)
-    if selected.models:
-        return False
-    registry = HOME / "models.json"
-    models = load_models(registry) if registry.exists() else []
-    folder = Path(selected.project).expanduser() if selected.project else None
-    if selected.workspace:
-        folder = HOME / selected.workspace
-    if folder is None and (HOME / "workspaces.json").exists():
-        last = json.loads((HOME / "workspaces.json").read_text()).get("last")
-        folder = Path(last) if last else None
-    if folder and (folder / "project.json").exists():
-        models += json.loads((folder / "project.json").read_text()).get("models", [])
-    return not any(Path(m.get("path", "")).is_file() for m in models)
+    from tqdm import tqdm
 
+    plan = json.loads(sys.stdin.readline())
 
-def run(ask=input):
-    print(
-        "\nCarla · Model setup\nQwen presets have been used locally; character quality and speed depend on your hardware."
-    )
-    print(
-        "Generation requires llama-server on PATH. You can skip setup to browse offline."
-    )
-    selected = choose(
-        [
-            *(p[0] for p in PRESETS),
-            "Download a GGUF from Hugging Face",
-            "Use a local GGUF",
-            "Skip — browse without a model",
-        ],
-        ask,
-    )
-    if selected == 5:
-        return
-    kind = "base"
-    if selected < 3:
-        name, repo, revision, filename = PRESETS[selected]
-        result = download(repo, revision, filename, ask)
-        if result is None:
-            return
-        path, source = result
-    else:
-        if selected == 3:
-            repo, revision, filename = parse_hub_source(
-                ask("Hugging Face repo or GGUF URL: ")
+    def emit(data):
+        print(json.dumps(data), flush=True)
+
+    class Progress(tqdm):
+        def __init__(self, *args, **kwargs):
+            kwargs["disable"] = True
+            self.received = 0
+            self.reported = 0
+            super().__init__(*args, **kwargs)
+
+        def update(self, amount=1):
+            self.received += amount
+            if time.monotonic() - self.reported >= 0.2:
+                self.reported = time.monotonic()
+                emit(
+                    dict(
+                        stage="progress",
+                        downloaded=int(self.received),
+                        total=int(self.total or 0),
+                    )
+                )
+
+        def close(self):
+            pass
+
+    try:
+        paths = []
+        for index, name in enumerate(plan["files"]):
+            emit(
+                dict(
+                    stage="progress",
+                    file=name,
+                    index=index + 1,
+                    count=len(plan["files"]),
+                )
             )
-            result = download(repo, revision, filename, ask)
-            if result is None:
-                return
-            path, source = result
-        else:
-            path = local_gguf(ask("Local GGUF path: ").strip())
-            source = {"origin": "local"}
-        print("Identify the model's training type (GGUF does not establish this):")
-        role = choose(
-            ["Base model — Loom and Simulator", "Instruct model — Grow selector"], ask
-        )
-        kind = "base" if role == 0 else "instruct"
-        name = path.stem
-    register(path, name, kind, source)
+            paths.append(
+                hf_hub_download(
+                    repo_id=plan["repo"],
+                    filename=name,
+                    revision=plan["revision"],
+                    cache_dir=str(HOME / "models"),
+                    tqdm_class=Progress,
+                )
+            )
+        emit(dict(stage="downloaded", path=str(local_gguf(paths[0]))))
+    except Exception as exc:
+        emit(dict(stage="error", message=str(exc)))
+        raise SystemExit(1) from None
+
+
+if __name__ == "__main__":
+    download_worker()

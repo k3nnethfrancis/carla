@@ -38,6 +38,7 @@ func TestPythonTransport(t *testing.T) {
 	}
 	read("library")
 	read("state")
+	read("setup")
 	if _, ok := c.send("seed.toggle", map[string]any{"ref": "paths:1"})().(sent); !ok {
 		t.Fatal("send failed")
 	}

@@ -39,6 +39,7 @@ func (m *model) openDialog(kind string) tea.Cmd {
 			}
 			d.rows = append(d.rows, row{id: model.Alias, label: label, preview: "Loom generator · raw base completion. Grow selector: " + m.data.PolicyModel})
 		}
+		d.rows = append(d.rows, row{id: "setup", label: "+ Add model", preview: "Download a GGUF or use a local file."})
 	case "new":
 		d.title = "New workspace"
 		d.add("Name", "")
@@ -89,6 +90,14 @@ func (d *dialog) add(label, value string) {
 	d.fields = append(d.fields, field{label, i})
 }
 func (m *model) submitDialog() tea.Cmd {
+	if m.dialog != nil && strings.HasPrefix(m.dialog.kind, "setup-") {
+		return m.submitSetup(m.dialog)
+	}
+	if m.dialog != nil && (m.dialog.kind == "models" || m.dialog.kind == "sim-model" || m.dialog.kind == "selector-pick") && len(m.dialog.rows) > 0 && m.dialog.rows[m.dialog.index].id == "setup" {
+		m.setupReturn = m.dialog
+		m.dialog = nil
+		return m.send("setup.open", nil)
+	}
 	if m.dialog != nil && strings.HasPrefix(m.dialog.kind, "loom-policy") {
 		return m.submitLoomPolicy(m.dialog)
 	}

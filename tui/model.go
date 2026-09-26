@@ -117,6 +117,7 @@ type dialog struct {
 type loomTile struct{ ID, Title, Text, Status string }
 
 type model struct {
+	setupReturn            *dialog
 	conversationOpen       bool
 	conversationEdit       int
 	policyPulses           map[string]policyPulse
@@ -412,6 +413,8 @@ func (m *model) branch() tea.Cmd {
 }
 func (m *model) apply(e event) tea.Cmd {
 	switch e.Type {
+	case "setup":
+		return m.setupEvent(e.Data)
 	case "policy.detection":
 		return m.detectPolicy(e.Data)
 	case "loom.start":

@@ -36,7 +36,7 @@ def test_split_gguf_requires_all_parts_and_preserves_cache_symlink(local_data):
     assert len(available_models([DEFAULT_MODEL])) == 1
 
 
-def test_download_confirmation_pinning_and_failure_no_registry(local_data, monkeypatch):
+def test_download_plan_pins_revision_without_fetching(local_data, monkeypatch):
     files = ["model-00001-of-00002.gguf", "model-00002-of-00002.gguf"]
     info = SimpleNamespace(
         sha="a" * 40,
@@ -46,6 +46,27 @@ def test_download_confirmation_pinning_and_failure_no_registry(local_data, monke
     monkeypatch.setattr(
         setup, "HfApi", lambda: SimpleNamespace(model_info=lambda *a, **kw: info)
     )
+
+    def forbidden(**kwargs):
+        raise AssertionError("Metadata inspection must never download weights")
+
+    monkeypatch.setattr(setup, "hf_hub_download", forbidden)
+    result = setup.plans("owner/repo", "main")
+    assert len(result) == 1 and result[0]["files"] == files
+    assert result[0]["revision"] == info.sha and result[0]["size"] == 16
+    assert not (local_data / "models.json").exists()
+
+
+def test_worker_downloads_only_confirmed_shards(local_data, monkeypatch, capsys):
+    import io
+    import sys
+
+    plan = {
+        "repo": "owner/repo",
+        "revision": "a" * 40,
+        "files": ["m-00001-of-00002.gguf", "m-00002-of-00002.gguf"],
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(plan) + "\n"))
     calls = []
 
     def fetch(**kwargs):
@@ -55,41 +76,8 @@ def test_download_confirmation_pinning_and_failure_no_registry(local_data, monke
         return str(path)
 
     monkeypatch.setattr(setup, "hf_hub_download", fetch)
-    assert setup.download("owner/repo", "main", files[0], lambda _: "n") is None
-    assert calls == []
-    result = setup.download("owner/repo", "main", files[0], lambda _: "y")
-    assert len(calls) == 2 and all(c["revision"] == info.sha for c in calls)
-    assert result[1]["files"] == files
+    setup.download_worker()
+    events = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert events[-1]["stage"] == "downloaded"
+    assert len(calls) == 2 and all(c["revision"] == plan["revision"] for c in calls)
     assert not (local_data / "models.json").exists()
-
-    def fail(**kwargs):
-        raise OSError("interrupted")
-
-    monkeypatch.setattr(setup, "hf_hub_download", fail)
-    with pytest.raises(OSError):
-        setup.download("owner/repo", "main", files[0], lambda _: "y")
-    assert not (local_data / "models.json").exists()
-
-
-def test_detection_local_wizard_and_skip(local_data):
-    assert setup.needs_setup([])
-    assert not setup.needs_setup(["--models", "custom.json"])
-    setup.run(lambda _: "6")
-    assert not (local_data / "models.json").exists()
-    model = local_data / "local.gguf"
-    model.write_bytes(b"GGUFtest")
-    answers = iter(["5", str(model), "1"])
-    setup.run(lambda _: next(answers))
-    assert not setup.needs_setup([])
-    registry = json.loads((local_data / "models.json").read_text())
-    assert registry[0]["kind"] == "base" and registry[0]["source"] == {
-        "origin": "local"
-    }
-    # Existing custom workspace models suppress setup even without a shared registry.
-    (local_data / "models.json").unlink()
-    workspace = local_data / "workspace"
-    workspace.mkdir()
-    (workspace / "project.json").write_text(json.dumps({"models": registry}))
-    assert not setup.needs_setup(["--project", str(workspace)])
-    model.unlink()
-    assert setup.needs_setup(["--project", str(workspace)])

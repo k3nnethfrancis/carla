@@ -103,6 +103,7 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 			for _, model := range m.data.SelectorModels {
 				next.rows = append(next.rows, row{id: model.Alias, label: model.Name, preview: "Local selector; selection criteria stay out of generator context."})
 			}
+			next.rows = append(next.rows, row{id: "setup", label: "+ Add model"})
 			m.dialog = next
 			return nil
 		}
@@ -149,6 +150,7 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 			for _, model := range m.data.Models {
 				next.rows = append(next.rows, row{id: model.Alias, label: model.Name})
 			}
+			next.rows = append(next.rows, row{id: "setup", label: "+ Add model"})
 			m.dialog = next
 		case "character_template", "visitor_template", "visitor_brief", "opening_prompt":
 			return m.beginEdit(r.id)

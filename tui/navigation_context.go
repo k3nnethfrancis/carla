@@ -238,7 +238,7 @@ func filterRows(rows []row, query string) []row {
 }
 func (m *model) filterDialog(msg tea.KeyPressMsg) bool {
 	d := m.dialog
-	if len(d.fields) > 0 || d.kind == "keys" || d.kind == "delete" {
+	if len(d.fields) > 0 || d.kind == "keys" || d.kind == "delete" || (strings.HasPrefix(d.kind, "setup-") && d.kind != "setup-files") {
 		return false
 	}
 	if msg.Code != tea.KeyBackspace && (msg.Text == "" || msg.Mod != 0) {
@@ -263,6 +263,11 @@ func (m *model) filterDialog(msg tea.KeyPressMsg) bool {
 // Closing an auxiliary command such as Help restores a suspended picker/editor.
 func (m *model) closeDialog() tea.Cmd {
 	d := m.dialog
+	if d != nil && d.kind == "setup-busy" {
+		m.dialog = d.parent
+		m.pending = false
+		return m.send("cancel", nil)
+	}
 	if d != nil && d.parent != nil {
 		m.dialog = d.parent
 		return nil
