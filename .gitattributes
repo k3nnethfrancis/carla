@@ -1,0 +1,2 @@
+# Terminal golden snapshots intentionally retain cell-padding whitespace.
+tui/testdata/*.txt -whitespace

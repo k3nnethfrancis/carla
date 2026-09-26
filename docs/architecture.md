@@ -1,0 +1,90 @@
+# Architecture
+
+```text
+Go / Bubble Tea + Lip Gloss
+  focus, layout, editing buffers, command completion, grids
+                │ commands / events (localhost NDJSON)
+Python / asyncio Session
+  validation, workspace ownership, one active operation
+       ├─ Project + StreamJournal: ancestry, traces, recovery
+       ├─ library: shared source documents
+       ├─ Runtime + Admission: local llama.cpp, bounded requests
+       ├─ policy: generate → unload → select → repeat
+       └─ simulator + TurnMonitor: conversations and optional classification
+```
+
+## Boundaries and protocol
+
+Go starts one Python child. Python binds `127.0.0.1:0` and sends `{v, port, token}`
+on its private stdout pipe. The client authenticates with that per-launch token.
+Subsequent frames are UTF-8 newline-delimited JSON. Protocol version is 1.
+This is an internal local protocol, not a stable public API.
+
+```json
+{"v":1,"id":"12","command":"continue","args":{"branch":true,"offset":340}}
+{"v":1,"seq":41,"type":"token","id":"12","data":{"node":"branch-id","text":" A path"}}
+```
+
+Events have a monotonic connection sequence and a correlated request ID.
+A single writer lock and awaited socket drain preserve ordering and apply
+backpressure. Text offsets are Unicode code points, not bytes or terminal cells.
+Python emits data, not ANSI or layout instructions. Go never writes workspace JSON.
+
+Short mutations run serially. Long operations run in a cancellable task, with
+up to four workers submitting requests to one resident model. Workspace switching
+and incompatible edits are rejected while generation is active. Disconnect
+cancels generation and saves partial output. A forced kill recovers from the
+checkpoint and journal on next open; interrupted output is labeled accordingly.
+
+## Persistence
+
+`domain.py` owns source, generated and edited document lineage, annotations,
+selection, simulation runs and anthology snapshots. Source text and generation
+prompts are copied into the artifacts so later library edits cannot rewrite history.
+Conversation edits fork through the changed turn and discard later replies only
+in the fork. Curation and export do not trigger training.
+
+`persistence.py` appends new chunks and provider events to `stream.jsonl`.
+Full snapshots at turn/operation boundaries include a journal sequence and are
+atomically renamed before the journal is removed. Recovery skips records at or
+below that sequence; this prevents duplicate text if interrupted between those
+steps. Writes are not fsynced, so this is process-crash recovery rather than a
+power-loss durability guarantee. Full checkpoints remain synchronous and can
+pause very large workspaces; per-token writes no longer serialize the workspace.
+
+## Inference and scheduling
+
+`runtime.py` uses raw `/completion` with exact prompt text. `scheduling.py`
+reserves the full prompt plus output budget against the server's shared context,
+and checks slot limits and available host memory. It never reduces a budget to
+increase parallelism. Host memory is only a heuristic; discrete GPU VRAM and
+optimal throughput are not modeled. `Max` commonly serializes requests.
+
+`simulator.py` groups adjacent speaker roles by model alias. Within one segment,
+each conversation advances independently, including its own monitor wait.
+Model changes are barriers: finish the current segment, unload its model, then
+load the next. Same weights configured under different aliases still count as
+different models. The server performs continuous batching, not separate GPUs.
+
+Simulation prompts contain the frozen anthology plus transcript for the character,
+and visitor brief plus transcript for the visitor. Templates are configurable.
+Each turn records model, settings, prompt, response events and observations.
+The policy selector has a separate instruct-model chat request; its specification
+is never added to the character context.
+
+`stream_monitor.py` snapshots character prefixes for optional OpenRouter scans.
+It permits one in-flight check per conversation, coalesces additional tokens,
+and keeps exact request/response evidence. Final checks are awaited before that
+conversation advances; other conversations can proceed. Explicit Stop actions
+interrupt the affected stream, while Warn and provider errors do not stop it.
+
+## Frontend
+
+`tui/` owns command routing, contextual completion, keybindings, tree selection,
+conversation grids and the document editor. Library, Branches, Anthology and
+Simulator are the main views. Notes belong to documents. The terminal supplies
+light/dark base colors; provenance and speaker roles use distinct accents.
+Narrow terminals collapse panels; below 60 × 18 only a resize/quit view is shown.
+
+See `service.py` for backend commands, `tui/command.go` for command descriptions,
+and tests alongside each subsystem for its executable behavioral contract.

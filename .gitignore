@@ -1,0 +1,28 @@
+# Dependencies, build output, local caches
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+bin/
+dist/
+*.pyc
+.DS_Store
+# User data and credentials never belong in source control.
+.env
+.env.*
+!.env.example
+*.gguf
+*.safetensors
+*.log
+runs/
+data/
+artifacts/
+docs/internal/
+# Local editor/agent state
+.idea/
+.vscode/
+.claude/
+.codex/
+
+*.local.json

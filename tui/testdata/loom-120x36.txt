@@ -1,0 +1,35 @@
+                                                                                                                       
+ carla / Gunkel exploration                                  Next: Qwen3-14B Base                                      
+  Library   Branches   Anthology   Simulator                                                                           
+ ┌────────────────────────┐ ┌─────────────────────────────────────────────────────────────────────────────────────────┐
+ │   Library              │ │ › Source preview                                                                        │
+ │                        │ │                                                                                         │
+ │ ▾ ✓ Gunkel · Paths · … │ │ ✓ Gunkel · Paths · 1 selected                                                           │
+ │  ✓ paths Paths that l… │ │                                                                                         │
+ │ ▸   Meditations        │ │ Expand with →. Space selects passages; Enter opens the selected set in Branches.        │
+ │ ▸   Tractatus          │ │                                                                                         │
+ │                        │ │ ENTER opens together: Gunkel · Paths (1)                                                │
+ │                        │ │                                                                                         │
+ │                        │ │                                                                                         │
+ │                        │ │                                                                                         │
+ │                        │ │                                                                                         │
+ │                        │ │                                                                                         │
+ │                        │ │                                                                                         │
+ │                        │ │                                                                                         │
+ │                        │ │                                                                                         │
+ │                        │ │                                                                                         │
+ │                        │ │                                                                                         │
+ │                        │ │                                                                                         │
+ │                        │ │                                                                                         │
+ │                        │ │                                                                                         │
+ │                        │ │                                                                                         │
+ │                        │ │                                                                                         │
+ │ 1 selected · CTRL+F f… │ │                                                                                         │
+ │                        │ │ Source · AI · Human edits                                                               │
+ └────────────────────────┘ └─────────────────────────────────────────────────────────────────────────────────────────┘
+ ENTER opens together: Gunkel · Paths (1)                                                                              
+ ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+ │ Type / for commands                                                                                                │
+ └────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+                                                                                                                       
+ SPACE select · ENTER to Branches · TAB next                                                              Saved locally

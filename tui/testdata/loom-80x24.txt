@@ -1,0 +1,23 @@
+                                                                               
+ carla / Gunkel exploration              Next: Qwen3-14B Base                  
+  Library   Branches   Anthology   Simulator                                   
+ ┌────────────────────────────────────────────────────────────────────────────┐
+ │ › Source preview                                                           │
+ │                                                                            │
+ │ ✓ Gunkel · Paths · 1 selected                                              │
+ │                                                                            │
+ │ Expand with →. Space selects passages; Enter opens the selected set in     │
+ │ Branches.                                                                  │
+ │                                                                            │
+ │ ENTER opens together: Gunkel · Paths (1)                                   │
+ │                                                                            │
+ │                                                                            │
+ │                                                                            │
+ │ Source · AI · Human edits                                                  │
+ └────────────────────────────────────────────────────────────────────────────┘
+ ENTER opens together: Gunkel · Paths (1)                                      
+ ┌────────────────────────────────────────────────────────────────────────────┐
+ │ Type / for commands                                                        │
+ └────────────────────────────────────────────────────────────────────────────┘
+                                                                               
+ SPACE select · ENTER to Branches · TAB next                      Saved locally

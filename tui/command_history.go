@@ -1,0 +1,85 @@
+package main
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// Command history belongs to the workspace but never enters model context.
+func (m *model) loadCommandHistory() {
+	m.commandHistory = nil
+	m.historyPosition = 0
+	m.historyDraft = ""
+	data, err := os.ReadFile(filepath.Join(m.data.Workspace.Path, "command-history.json"))
+	if err == nil {
+		_ = json.Unmarshal(data, &m.commandHistory)
+	}
+}
+func (m *model) recordCommand(a action) {
+	fields := strings.Fields(m.command.Value())
+	command := "/" + commandName(a)
+	if len(fields) > 1 {
+		command += " " + strings.Join(fields[1:], " ")
+	}
+	n := len(m.commandHistory)
+	if n == 0 || m.commandHistory[n-1] != command {
+		m.commandHistory = append(m.commandHistory, command)
+	}
+	m.historyPosition = 0
+	m.historyDraft = ""
+	// Atomic replacement prevents a restart from observing a partial history.
+	if m.data.Workspace.Path == "" {
+		return
+	}
+	data, _ := json.MarshalIndent(m.commandHistory, "", "  ")
+	path := filepath.Join(m.data.Workspace.Path, "command-history.json")
+	if err := os.WriteFile(path+".tmp", data, 0600); err == nil {
+		_ = os.Rename(path+".tmp", path)
+	}
+}
+func (m *model) browseCommandHistory(step int) {
+	if len(m.commandHistory) == 0 {
+		return
+	}
+	if m.historyPosition == 0 {
+		m.historyDraft = m.command.Value()
+	}
+	m.historyPosition = max(0, min(len(m.commandHistory), m.historyPosition+step))
+	value := m.historyDraft
+	if m.historyPosition > 0 {
+		value = m.commandHistory[len(m.commandHistory)-m.historyPosition]
+	}
+	m.command.SetValue(value)
+	m.command.CursorEnd()
+	m.commandIndex = 0
+	m.reflow()
+}
+func (m *model) commandHints() []string {
+	if m.focus != 3 {
+		return nil
+	}
+	fields := strings.Fields(m.command.Value())
+	if len(fields) == 0 {
+		return nil
+	}
+	switch fields[0] {
+	case "/continue", "/generate":
+		return []string{"--tokens N|Max · maximum output tokens",
+			"e.g. /continue --tokens 1024"}
+	case "/loom":
+		if m.section == 3 {
+			if _, ok := m.conversationTarget(); ok {
+				return []string{"[alternatives] · --turns N · --tokens N|Max", "Continues selected conversation; turns = additional character replies"}
+			}
+			return []string{"[conversations] · --turns N · --tokens N|Max", "Turns = character replies; tokens = cap per reply"}
+		}
+		if m.section != 1 {
+			return []string{"Open Branches or Simulator to run /loom"}
+		}
+		return []string{"[branches] · --tokens N|Max",
+			"e.g. /loom 5 --tokens 1024 · tokens = cap per branch"}
+	}
+	return nil
+}

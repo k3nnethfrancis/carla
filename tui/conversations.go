@@ -1,0 +1,324 @@
+package main
+
+import (
+	tea "charm.land/bubbletea/v2"
+	"fmt"
+	"github.com/charmbracelet/x/ansi"
+	"strconv"
+	"strings"
+)
+
+type conversationParent struct {
+	Run          string
+	Conversation int
+}
+
+// A run groups sibling alternatives; a one-conversation run is a leaf. Forks
+// remain nested beneath their originating conversation, including on reload.
+func (m *model) simulationRows() []row {
+	rows := []row{{id: "config", kind: "sim-config", label: "Configure"}, {id: "run", kind: "sim-run", label: "▶ Run conversations"}}
+	runs := append([]runSummary{}, m.data.SimulationRuns...)
+	if m.simulation != nil {
+		found := false
+		for i := range runs {
+			if runs[i].ID == m.simulation.ID {
+				runs[i].Conversations = m.simulation.Conversations
+				runs[i].Status = m.simulation.Status
+				found = true
+			}
+		}
+		if !found {
+			runs = append(runs, runSummary{ID: m.simulation.ID, Status: m.simulation.Status, Count: len(m.simulation.Conversations), Conversations: m.simulation.Conversations, Parent: m.simulation.Parent})
+		}
+	}
+	seen := map[string]bool{}
+	var addRun func(runSummary, int)
+	var addChildren func(string, int, int)
+	addChildren = func(run string, index, depth int) {
+		for _, r := range runs {
+			if r.Parent != nil && r.Parent.Run == run && r.Parent.Conversation == index {
+				addRun(r, depth)
+			}
+		}
+	}
+	addRun = func(r runSummary, depth int) {
+		if seen[r.ID] {
+			return
+		}
+		seen[r.ID] = true
+		cs := r.Conversations
+		if len(cs) == 0 {
+			for i := 0; i < r.Count; i++ {
+				cs = append(cs, simulationConversation{Index: i, Status: r.Status})
+			}
+		}
+		if len(cs) > 1 {
+			arrow := "▾ "
+			if m.collapsed[r.ID] {
+				arrow = "▸ "
+			}
+			rows = append(rows, row{id: r.ID, kind: "simulation", depth: depth, label: arrow + fmt.Sprintf("Loom · %d conversations · %s", len(cs), r.Status), preview: r.ID})
+			if m.collapsed[r.ID] {
+				return
+			}
+			depth++
+		}
+		for _, c := range cs {
+			key := conversationKey(r.ID, c.Index)
+			label := fmt.Sprintf("Conversation %d · %s", c.Index+1, conversationStatus(c))
+			hasChildren := false
+			for _, child := range runs {
+				if child.Parent != nil && child.Parent.Run == r.ID && child.Parent.Conversation == c.Index {
+					hasChildren = true
+				}
+			}
+			if hasChildren {
+				if m.collapsed[key] {
+					label = "▸ " + label
+				} else {
+					label = "▾ " + label
+				}
+			}
+			for _, t := range c.Turns {
+				if turnFlagged(t) {
+					label = "! " + label
+					break
+				}
+			}
+			rows = append(rows, row{id: key, kind: "conversation", depth: depth, label: label, preview: r.ID})
+			if !m.collapsed[key] {
+				addChildren(r.ID, c.Index, depth+1)
+			}
+		}
+	}
+	for _, r := range runs {
+		if r.Parent == nil {
+			addRun(r, 0)
+		}
+	}
+	for _, r := range runs {
+		if !seen[r.ID] { // Missing/deleted ancestor still leaves its descendants reachable.
+			parentExists := false
+			for _, p := range runs {
+				if r.Parent != nil && p.ID == r.Parent.Run {
+					parentExists = true
+				}
+			}
+			if !parentExists {
+				addRun(r, 0)
+			}
+		}
+	}
+	return rows
+}
+func (m *model) conversationTarget() (map[string]any, bool) {
+	if m.section != 3 {
+		return nil, false
+	}
+	focus := m.focus
+	if focus == 3 && m.commandOrigin != nil {
+		focus = m.commandOrigin.focus
+	}
+	if focus == 1 && m.simulation != nil {
+		if m.conversationOpen {
+			return map[string]any{"run": m.simulation.ID, "conversation": m.gridSelection}, true
+		}
+		if m.gridVisible() {
+			return map[string]any{"run": m.simulation.ID, "conversation": m.gridSelection}, true
+		}
+	}
+	r := m.targetRow()
+	if r.kind == "conversation" {
+		parts := strings.SplitN(r.id, ":", 2)
+		if len(parts) == 2 {
+			index, err := strconv.Atoi(parts[1])
+			if err == nil {
+				return map[string]any{"run": parts[0], "conversation": index}, true
+			}
+		}
+	}
+	return nil, false
+}
+func (m *model) simulatorBack() bool {
+	if m.section != 3 || m.editing != "" {
+		return false
+	}
+	if m.focus == 1 {
+		if m.conversationOpen {
+			m.conversationOpen = false
+			m.loomGrid = m.simulation != nil && len(m.simulation.Conversations) > 1
+			if !m.loomGrid {
+				m.focus = 0
+			}
+			m.gridPinned = true
+		} else {
+			m.focus = 0
+		}
+		m.reflow()
+		return true
+	}
+	return false
+}
+func (m *model) conversationArrow(direction string) {
+	r := m.targetRow()
+	if r.kind != "simulation" && r.kind != "conversation" {
+		return
+	}
+	if direction == "right" {
+		m.collapsed[r.id] = false
+		return
+	}
+	if !m.collapsed[r.id] {
+		m.collapsed[r.id] = true
+		return
+	}
+	rows := m.rows()
+	for i := m.selected - 1; i >= 0; i-- {
+		if rows[i].depth < r.depth {
+			m.selected = i
+			return
+		}
+	}
+}
+func (m *model) editConversation(visitor bool) tea.Cmd {
+	if !m.conversationOpen || m.simulation == nil {
+		m.status = "Open a conversation first"
+		return nil
+	}
+	if m.data.Busy || m.pending {
+		return nil
+	}
+	if visitor {
+		turns := m.simulation.Conversations[m.gridSelection].Turns
+		if len(turns) > 0 && turns[len(turns)-1].Role != "character" {
+			m.status = "Edit the existing visitor message, or /loom to get a character reply"
+			return nil
+		}
+		m.conversationEdit = -1
+		return m.startConversationEdit("")
+	}
+	d := &dialog{kind: "conversation-edit", title: "Edit a turn · creates a fork through this message"}
+	for i, t := range m.simulation.Conversations[m.gridSelection].Turns {
+		d.rows = append(d.rows, row{id: strconv.Itoa(i), label: fmt.Sprintf("%d · %s", i+1, speakerName(t.Role)), preview: t.Text})
+	}
+	m.dialog = d
+	return nil
+}
+func (m *model) startConversationEdit(text string) tea.Cmd {
+	m.dialog = nil
+	m.editing = "conversation"
+	m.editor.SetValue(text)
+	m.editor.CursorEnd()
+	m.focus = 1
+	m.reflow()
+	return m.editor.Focus()
+}
+func (m *model) saveConversationEdit(text string) tea.Cmd {
+	args := map[string]any{"run": m.simulation.ID, "conversation": m.gridSelection, "text": text}
+	if m.conversationEdit < 0 {
+		args["visitor"] = true
+	} else {
+		args["turn"] = m.conversationEdit
+	}
+	return m.send("simulator.fork", args)
+}
+func speakerName(role string) string {
+	if role == "character" {
+		return "Character"
+	}
+	return "Visitor"
+}
+func (m *model) conversationDocument(width int) string {
+	if m.simulation == nil || !m.conversationOpen {
+		if m.simulation == nil {
+			return ansi.Wrap(safe(m.simulationText()), width, "")
+		}
+		return "Select a conversation to open it, or select a Loom to view its grid."
+	}
+	c := m.simulation.Conversations[m.gridSelection]
+	blocks := []string{m.helpStyle().Render(fmt.Sprintf("Conversation %d · %s", c.Index+1, conversationStatus(c)))}
+	for i, t := range c.Turns {
+		style := m.humanStyle().Bold(false)
+		if t.Role == "character" {
+			style = m.aiStyle()
+		}
+		name := speakerName(t.Role)
+		detail := t.Model.Name
+		if t.Origin == "human" || t.Origin == "human_edit" {
+			detail = "human written"
+		}
+		if detail != "" {
+			name += " · " + detail
+		}
+		heading := style.Bold(true).Render(ansi.Wrap(safe(fmt.Sprintf("%02d  %s", i+1, name)), width, ""))
+		body := style.Render(ansi.Wrap(safe(t.Text), width, ""))
+		block := heading + "\n\n" + body
+		if t.Monitor.Status != "" {
+			info := strings.TrimPrefix(monitorSummary(t.Monitor), "Policy: ")
+			block += "\n\n" + m.accent("#79628C", "#B8A0CB").Render(ansi.Wrap("// policy · "+safe(info), width, ""))
+		}
+		if len(t.Flags) > 0 {
+			block += "\n" + dim.Render(ansi.Wrap("// generation · "+strings.Join(t.Flags, ", "), width, ""))
+		}
+		blocks = append(blocks, block)
+	}
+	return strings.Join(blocks, "\n\n\n")
+}
+
+func (m *model) selectConversationRow() {
+	if m.simulation == nil {
+		return
+	}
+	key := conversationKey(m.simulation.ID, m.gridSelection)
+	for i, r := range m.rows() {
+		if r.id == key {
+			m.selected = i
+			return
+		}
+	}
+}
+
+func (m *model) selectLoomRow() {
+	if m.simulation == nil {
+		return
+	}
+	// Reveal ancestors of a resumed Loom before selecting its new group.
+	id := m.simulation.ID
+	for steps := 0; steps <= len(m.data.SimulationRuns); steps++ {
+		m.collapsed[id] = false
+		var parent *conversationParent
+		if id == m.simulation.ID {
+			parent = m.simulation.Parent
+		} else {
+			for _, r := range m.data.SimulationRuns {
+				if r.ID == id {
+					parent = r.Parent
+					break
+				}
+			}
+		}
+		if parent == nil {
+			break
+		}
+		m.collapsed[conversationKey(parent.Run, parent.Conversation)] = false
+		id = parent.Run
+	}
+	for i, r := range m.rows() {
+		if r.id == m.simulation.ID {
+			m.selected = i
+			return
+		}
+	}
+}
+
+func turnFlagged(t simulationTurn) bool {
+	if len(t.Monitor.Detections) > 0 {
+		return true
+	}
+	for _, check := range t.MonitorChecks {
+		if len(check.Detections) > 0 {
+			return true
+		}
+	}
+	return false
+}
