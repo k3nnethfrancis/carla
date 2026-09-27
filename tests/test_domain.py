@@ -86,7 +86,7 @@ async def test_context_overflow_never_sends_truncated_prompt(tmp_path, monkeypat
 
 
 def test_origins_follow_nested_branches_edits_and_reload(tmp_path):
-    from character_lab.domain import origin_labels
+    from character_lab.ancestry import origin_labels
 
     p = Project(tmp_path)
     root = p.add("Original α\ntext.", kind="source")

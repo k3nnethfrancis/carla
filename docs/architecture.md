@@ -6,7 +6,9 @@ Go / Bubble Tea + Lip Gloss
                 │ commands / events (localhost NDJSON)
 Python / asyncio Session
   validation, workspace ownership, one active operation
-       ├─ Project + StreamJournal: ancestry, traces, recovery
+       ├─ Project: document changes and curation
+       │     ├─ ancestry: pure text-origin and first-change calculations
+       │     └─ WorkspaceStore: snapshots, stream journal and recovery
        ├─ library: shared source documents
        ├─ Runtime + Admission: local llama.cpp, bounded requests
        ├─ policy: generate → unload → select → repeat
@@ -51,7 +53,16 @@ prompts are copied into the artifacts so later library edits cannot rewrite hist
 Conversation edits fork through the changed turn and discard later replies only
 in the fork. Curation and export do not trigger training.
 
-`persistence.py` appends new chunks and provider events to `stream.jsonl`.
+`ancestry.py` computes inherited source/AI/human spans, remaps them across edits,
+and finds a version's first change. It receives a node index and performs no I/O
+or mutation. `Project` owns document changes and builds that index when needed;
+selection, curation and export remain document operations rather than new layers.
+
+`persistence.WorkspaceStore` loads the JSON snapshot, replays its stream journal,
+and owns the write → atomic replace → journal compaction sequence. `Project`
+retains interrupted-status decisions and document labels; both share the same
+in-memory data object. The existing file layout and schema are unchanged.
+The store appends new chunks and provider events to `stream.jsonl`.
 Full snapshots at turn/operation boundaries include a journal sequence and are
 atomically renamed before the journal is removed. Recovery skips records at or
 below that sequence; this prevents duplicate text if interrupted between those
