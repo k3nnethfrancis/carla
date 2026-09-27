@@ -8,7 +8,7 @@
  │  ✓ paths Paths that l… │ │                                                                              │ │ Qwen3-14B Base                 │
  │ ▸   Meditations        │ │ Expand with →. Space selects passages; Enter opens the selected set in       │ │                                │
  │ ▸   Tractatus          │ │ Branches.                                                                    │ │ Raw completion                 │
- │                        │ │                                                                              │ │ No system prompt               │
+ │ + Add document         │ │                                                                              │ │ No system prompt               │
  │                        │ │ ENTER opens together: Gunkel · Paths (1)                                     │ │                                │
  │                        │ │                                                                              │ │ Source: Gunkel / Paths         │
  │                        │ │                                                                              │ │                                │

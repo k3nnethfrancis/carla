@@ -92,7 +92,12 @@ with `CARLA_PYTHON` when needed. The documented installation is from source.
 ## Document library
 
 The library is shared across workspaces, but loading a workspace does not select
-all its documents. Import a UTF-8 plain-text document you are entitled to use:
+all its documents. In the TUI, use `/import` or **+ Add document** in Library.
+Enter a local UTF-8 `.txt` or `.md` file path, an optional title (defaults to the
+filename), and optional author/source URL. Tab or Enter moves between fields; Enter on the last field imports.
+Ctrl+Enter imports from any field; Escape cancels. The document appears immediately, without selecting it as a seed.
+
+Alternatively, import from the command line:
 
 ```sh
 uv run python -m character_lab.library ./seed.txt \

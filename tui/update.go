@@ -24,6 +24,7 @@ var allActions = []action{
 	{"find", "Filter this list", "ctrl+f"}, {"active", "View active generation", ""}, {"rename", "Rename document", ""},
 	{"visitor", "Write a visitor message in a conversation fork", ""}, {"grid", "Show Loom grid", ""}, {"loom-policy", "Configure conversation warnings and stop rules", ""},
 	{"character-sampling", "Character temperature, top-p and output tokens", ""}, {"visitor-sampling", "Visitor temperature, top-p and output tokens", ""},
+	{"import", "Import a document into Library", ""},
 }
 
 func (m *model) perform(id string) tea.Cmd {
@@ -158,6 +159,8 @@ func (m *model) perform(id string) tea.Cmd {
 		return m.beginEdit("policy_spec")
 	case "prompt":
 		return m.beginEdit("policy_prompt")
+	case "import":
+		return m.openDialog("import")
 	case "models":
 		if m.section == 3 {
 			return m.speakerPicker()
@@ -219,7 +222,7 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		raw := msg.String()
 		key := m.navigationKey(raw)
-		if raw == "/" && !(m.dialog != nil && strings.HasPrefix(m.dialog.kind, "setup-")) && (m.focus != 3 || m.dialog != nil || m.searching || m.sectionFocus) && !m.keyCapture {
+		if raw == "/" && !(m.dialog != nil && (strings.HasPrefix(m.dialog.kind, "setup-") || m.dialog.kind == "import")) && (m.focus != 3 || m.dialog != nil || m.searching || m.sectionFocus) && !m.keyCapture {
 			m.editor.Blur()
 			m.search.Blur()
 			return m, m.focusCommand(true)

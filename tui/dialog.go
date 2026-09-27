@@ -20,6 +20,12 @@ func (m *model) openDialog(kind string) tea.Cmd {
 	}
 	d := &dialog{kind: kind, args: map[string]any{}}
 	switch kind {
+	case "import":
+		d.title = "Add document"
+		d.add("File path (.txt or .md)", "")
+		d.add("Title (blank uses filename)", "")
+		d.add("Author (optional)", "")
+		d.add("Source URL (optional)", "")
 	case "workspaces":
 		d.title = "Workspaces"
 		for _, w := range m.data.Workspaces {
@@ -153,6 +159,15 @@ func (m *model) submitDialog() tea.Cmd {
 		var command string
 		args := d.args
 		switch d.kind {
+		case "import":
+			if m.pending {
+				return nil
+			}
+			if strings.TrimSpace(values[0]) == "" {
+				m.status = "Enter a file path"
+				return nil
+			}
+			return m.send("library.import", map[string]any{"path": strings.TrimSpace(values[0]), "title": values[1], "author": values[2], "url": values[3]})
 		case "rename":
 			command = "node.rename"
 			args["title"] = values[0]

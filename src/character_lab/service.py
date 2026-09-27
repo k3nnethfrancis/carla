@@ -192,6 +192,24 @@ class Session:
 
             await dispatch(self, command, args, request_id)
             return
+        if command == "library.import":
+            from .library import import_document
+
+            source = import_document(
+                args.get("path", ""),
+                args.get("title", ""),
+                args.get("author", ""),
+                args.get("url", ""),
+            )
+            self.sources = library()
+            await self.emit("library", self.sources, request_id)
+            await self.snapshot()
+            await self.emit(
+                "library.imported",
+                {"key": source["key"], "title": source["title"]},
+                request_id,
+            )
+            return
         p = self.project
         if "token_range" in args:
             raise ValueError("Token ranges were removed; use a single maximum")

@@ -756,3 +756,21 @@ async def test_simulator_fork_and_resume_commands(session):
         await s.execute(
             "simulator.open", {"run": source["id"], "conversation": 100}, "invalid"
         )
+
+
+@pytest.mark.asyncio
+async def test_import_refreshes_shared_library_without_selecting_seed(
+    session, tmp_path
+):
+    s = session
+    path = tmp_path / "Imported.md"
+    path.write_text("A new seed.\n")
+    selected = list(s.project.selected)
+    await s.execute("library.import", {"path": str(path)}, "import")
+    assert s.project.selected == selected
+    assert any(source["title"] == "Imported" for source in s.sources)
+    assert [event[0] for event in s.events[-3:]] == [
+        "library",
+        "state",
+        "library.imported",
+    ]
