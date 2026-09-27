@@ -4,7 +4,7 @@ install: setup build
 setup:
 	uv sync --locked
 build:
-	cd tui && go build -o ../bin/carla .
+	uv run --locked python scripts/build.py
 test:
 	uv run --locked pytest -q
 	cd tui && go test ./...

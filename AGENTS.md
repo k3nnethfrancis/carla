@@ -1,6 +1,19 @@
 # Carla contributor guidance
 
-Read README.md and docs/architecture.md before changing the pipeline.
+Read [README.md](README.md) for setup, [architecture](docs/architecture.md) for
+ownership, and [development](docs/development.md) for issues, PRs and releases.
+For UI work, use only the relevant guidance in
+[skills/tui-design/SKILL.md](skills/tui-design/SKILL.md), Carla's own adaptation.
+
+- `src/character_lab/` owns the backend; `tests/` its regressions.
+- `tui/` owns the frontend and Go interaction tests.
+- `.github/` and `scripts/` own contribution, build and release operations.
+
+Use GitHub Issues for actionable bugs/features and a focused branch/PR for changes.
+Keep research notes and experiments local; don't create a parallel repo task ledger.
+Before handing off, run `make test lint build`, exercise changed terminal journeys,
+and report the outcome, evidence and remaining gaps. Don't publish releases or
+change repository visibility merely because checks pass.
 
 - Python owns domain state, prompts, inference, persistence and job lifecycles.
   Go owns terminal interaction and rendering. Exchange structured NDJSON events.

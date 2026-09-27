@@ -1,20 +1,40 @@
 name: Checks
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
   test:
+    timeout-minutes: 20
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
         with:
           go-version-file: tui/go.mod
           cache-dependency-path: tui/go.sum
       - run: uv python install 3.12
       - run: uv sync --locked --python 3.12
       - run: make test lint build
+      - name: Check version without a terminal or workspace
+        shell: bash
+        run: |
+          export CARLA_DATA_DIR="$RUNNER_TEMP/carla-version-unused"
+          EXPECTED=$(uv run python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          DIRECT=$(./bin/carla --version)
+          INSTALLED=$(uv run carla --version)
+          test "$DIRECT" = "$INSTALLED"
+          [[ "$DIRECT" == "carla $EXPECTED"* ]]
+          test ! -e "$CARLA_DATA_DIR"

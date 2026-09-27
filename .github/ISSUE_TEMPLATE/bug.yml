@@ -1,0 +1,30 @@
+name: Bug report
+description: Report a reproducible Carla problem.
+labels: [bug]
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Expected behavior and what you observed instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How can we reproduce it?
+      description: Include the commands or key sequence. Use synthetic text rather than private traces.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Carla version
+      description: Run carla --version, or give the commit if your build predates that option.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, terminal and terminal size; model/quantization and llama.cpp version if generation is involved. Do not include credentials or private documents.
