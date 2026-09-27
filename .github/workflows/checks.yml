@@ -15,7 +15,10 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
+        python: ['3.11', '3.12']
     runs-on: ${{ matrix.os }}
+    env:
+      UV_PYTHON: ${{ matrix.python }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -25,8 +28,8 @@ jobs:
         with:
           go-version-file: tui/go.mod
           cache-dependency-path: tui/go.sum
-      - run: uv python install 3.12
-      - run: uv sync --locked --python 3.12
+      - run: uv python install ${{ matrix.python }}
+      - run: uv sync --locked --python ${{ matrix.python }}
       - run: make test lint build
       - name: Check version without a terminal or workspace
         shell: bash
@@ -38,3 +41,10 @@ jobs:
           test "$DIRECT" = "$INSTALLED"
           [[ "$DIRECT" == "carla $EXPECTED"* ]]
           test ! -e "$CARLA_DATA_DIR"
+      - name: Check source installer and launcher
+        shell: bash
+        run: |
+          export CARLA_BIN_DIR="$RUNNER_TEMP/carla-install-bin"
+          uv run --locked python scripts/install.py
+          test -x "$CARLA_BIN_DIR/carla"
+          test "$("$CARLA_BIN_DIR/carla" --version)" = "$(./bin/carla --version)"

@@ -92,21 +92,34 @@ class Runtime:
                 self.sleep_guard = subprocess.Popen(
                     ["caffeinate", "-i", "-w", str(self.process.pid)]
                 )
-        for _ in range(120):
-            if self.process.poll() is not None:
-                raise ValueError(
-                    "Model server exited. Details are saved in model-server.log."
-                )
-            await asyncio.sleep(1)
-            async with httpx.AsyncClient(timeout=3, trust_env=False) as client:
-                try:
-                    if (
-                        await client.get(self.model["url"] + "/health")
-                    ).status_code == 200:
-                        return
-                except httpx.RequestError:
-                    pass
-        raise ValueError("Model loading timed out; see model-server.log.")
+        try:
+            for _ in range(120):
+                if self.process.poll() is not None:
+                    raise ValueError(
+                        "Model server exited. Details are saved in model-server.log."
+                    )
+                await asyncio.sleep(1)
+                async with httpx.AsyncClient(timeout=3, trust_env=False) as client:
+                    try:
+                        if (
+                            await client.get(self.model["url"] + "/health")
+                        ).status_code == 200:
+                            models = (
+                                await client.get(self.model["url"] + "/v1/models")
+                            ).json()
+                            if self.model["alias"] not in [
+                                m["id"] for m in models["data"]
+                            ]:
+                                raise ValueError(
+                                    "A different model owns this endpoint. Stop it or choose another endpoint."
+                                )
+                            return
+                    except httpx.RequestError:
+                        pass
+            raise ValueError("Model loading timed out; see model-server.log.")
+        except BaseException:
+            self.close()
+            raise
 
     async def context(self, client):
         """Read the loaded capacity; a configured zero means native, not zero tokens."""
@@ -214,6 +227,11 @@ class Runtime:
                 self.process.wait(timeout=5)
         if self.sleep_guard and self.sleep_guard.poll() is None:
             self.sleep_guard.terminate()
+            try:
+                self.sleep_guard.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.sleep_guard.kill()
+                self.sleep_guard.wait(timeout=5)
 
     async def judge(self, messages, trace):
         """Separate instruct-model call; never used for the base-model document."""

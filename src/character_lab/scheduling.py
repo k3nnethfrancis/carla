@@ -90,7 +90,8 @@ class Admission:
                 ):
                     # Recheck memory even when no request completes.
                     try:
-                        await asyncio.wait_for(self.condition.wait(), timeout=1)
+                        async with asyncio.timeout(1):
+                            await self.condition.wait()
                     except TimeoutError:
                         pass
                 self.active += 1
