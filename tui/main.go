@@ -14,10 +14,26 @@ import (
 	"github.com/charmbracelet/x/term"
 )
 
+// make build supplies both values; direct go build stays visibly unversioned.
+var appVersion = "dev"
+var appRevision string
+
+func versionString() string {
+	result := "carla " + appVersion
+	if appRevision != "" {
+		result += " (" + appRevision + ")"
+	}
+	return result
+}
+
 func main() {
 	for _, arg := range os.Args[1:] {
+		if arg == "--version" {
+			fmt.Println(versionString())
+			return
+		}
 		if arg == "--help" || arg == "-h" {
-			fmt.Println("carla [--workspace NAME | --project PATH] [--models JSON] [--policy-model JSON]\nUse --setup-model to add or download a model.\n\nLocal document Loom. Resumes your last workspace.\nCTRL+W workspaces · CTRL+K actions · /keys bindings · CTRL+C quit\nRequires a UTF-8 terminal of at least 60 × 18 cells.")
+			fmt.Println("carla [--workspace NAME | --project PATH] [--models JSON] [--policy-model JSON]\nUse --setup-model to add or download a model. --version prints the app build.\n\nLocal document Loom. Resumes your last workspace.\nCTRL+W workspaces · CTRL+K actions · /keys bindings · CTRL+C quit\nRequires a UTF-8 terminal of at least 60 × 18 cells.")
 			return
 		}
 	}

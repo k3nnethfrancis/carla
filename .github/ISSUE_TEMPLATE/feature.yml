@@ -1,0 +1,17 @@
+name: Feature request
+description: Propose a focused improvement to Carla.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What would a useful outcome look like?
+      description: Describe the workflow and how we could verify it works.
+    validations:
+      required: true
