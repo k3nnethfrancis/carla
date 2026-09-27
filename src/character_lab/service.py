@@ -5,14 +5,12 @@ emission, so a slow frontend applies backpressure rather than dropping tokens.
 """
 
 import asyncio
-import copy
 import json
 import math
 import random
 from pathlib import Path
-from uuid import uuid4
 
-from . import monitor, simulator
+from . import simulator
 from .domain import Project, display_title, generation_status, library, now
 from .model_metadata import native_context
 from .models import available_models
@@ -218,114 +216,10 @@ class Session:
             or (args["n_predict"] != -1 and args["n_predict"] < 1)
         ):
             raise ValueError("Output tokens must be a positive integer or Max (-1)")
-        if command.startswith("loom-policy."):
-            config = simulator.configuration(p, self.runtime.model["alias"])
-            items = monitor.dimensions(config)
-            if command == "loom-policy.add":
-                items.append(
-                    dict(
-                        id="custom_" + uuid4().hex,
-                        name=args["name"],
-                        spec=args["spec"],
-                        enabled=True,
-                        action="warn",
-                        color="amber",
-                        decision="most_likely",
-                        threshold=0.8,
-                    )
-                )
-            else:
-                item = next((d for d in items if d["id"] == args["id"]), None)
-                if item is None:
-                    raise ValueError("Dimension not found")
-                if command == "loom-policy.delete":
-                    if item["id"] in monitor.BUILTINS:
-                        raise ValueError("Default dimensions cannot be deleted")
-                    items.remove(item)
-                elif command == "loom-policy.update":
-                    item.update({k: v for k, v in args.items() if k != "id"})
-                else:
-                    raise ValueError("Unknown policy operation")
-            args = {"monitor_dimensions": items}
-            command = "simulator.configure"
-        if command == "simulator.configure":
-            config = {**simulator.configuration(p, self.runtime.model["alias"]), **args}
-            simulator.validate(config, p, self.validate_settings)
-            p.data["simulator_config"] = config
-            p.save()
-            await self.snapshot(request_id)
-            return
-        if command == "simulator.fork":
-            seed = simulator.conversation_seed(p, args["run"], args["conversation"])
-            run = simulator.fork_conversation(p, seed, args)
-            await self.snapshot(request_id)
-            await self.emit(
-                "simulation",
-                simulator.view(run) | {"opened": True, "open_conversation": 0},
-                request_id,
-            )
-            return
-        if command == "simulator.open":
-            run = next(
-                (
-                    r
-                    for r in p.data.get("simulation_runs", [])
-                    if r["id"] == args["run"]
-                ),
-                None,
-            )
-            if run is None:
-                raise ValueError("Simulation run not found")
-            index = args.get("conversation")
-            if index is not None and (
-                type(index) is not int or not 0 <= index < len(run["conversations"])
-            ):
-                raise ValueError("Conversation not found")
-            await self.emit(
-                "simulation",
-                simulator.view(run)
-                | {"opened": True, "open_conversation": args.get("conversation")},
-                request_id,
-            )
-            return
-        if command == "simulator.inspect":
-            run = next(
-                r for r in p.data.get("simulation_runs", []) if r["id"] == args["run"]
-            )
-            await self.emit("inspection", run, request_id)
-            return
-        if command in {"simulator.run", "simulator.preview"}:
-            self.active_node = None
-            config = copy.deepcopy(
-                simulator.configuration(p, self.runtime.model["alias"])
-            )
-            seed = None
-            if command == "simulator.run" and "run" in args:
-                seed = simulator.conversation_seed(p, args["run"], args["conversation"])
-                config[
-                    "documents"
-                ] = []  # The frozen ancestor anthology is carried by seed.
-            if command == "simulator.preview":
-                config.update(
-                    preview=True,
-                    opening_mode="generated",
-                    conversations=3,
-                    documents=[],
-                )
-            if "count" in args:
-                config["conversations"] = args["count"]
-            if "turns" in args:
-                config["turns"] = args["turns"]
-            if "n_predict" in args:
-                for role in ("character", "visitor"):
-                    config[role + "_settings"]["n_predict"] = args["n_predict"]
-            simulator.validate(config, p, self.validate_settings)
-            if not config["documents"] and not config.get("preview") and not seed:
-                raise ValueError("Select at least one anthology document in Simulator")
-            self.runtime.close()
-            self.job_id = request_id
-            self.job = asyncio.create_task(self.simulate(config, seed))
-            await self.snapshot(request_id)
+        if command.startswith("simulator.") or command.startswith("loom-policy."):
+            from .simulator_commands import dispatch
+
+            await dispatch(self, command, args, request_id)
             return
         if command == "grow.selector":
             if args["alias"] != self.policy_model["alias"]:
@@ -825,6 +719,14 @@ class Session:
             if self.lock:
                 self.lock.close()
                 self.lock = None
+
+    async def start_simulation(self, config, seed, request_id):
+        """Take ownership of a validated run before returning to the command reader."""
+        self.active_node = None
+        self.runtime.close()
+        self.job_id = request_id
+        self.job = asyncio.create_task(self.simulate(config, seed))
+        await self.snapshot(request_id)
 
     async def simulate(self, config, seed=None):
         p = self.project
