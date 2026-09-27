@@ -75,16 +75,10 @@ func (m *model) selectionAction(id string) tea.Cmd {
 		m.branchSelection = map[string]bool{}
 		m.reflow()
 	case "keep", "remove":
-		ids := m.selectedBranches()
-		if len(ids) == 0 && m.targetRow().kind == "node" {
-			ids = []string{m.targetRow().id}
-		}
+		ids := m.actionNodeIDs()
 		return m.send("node.keep", map[string]any{"nodes": ids, "kept": id == "keep"})
 	case "delete":
-		ids := m.selectedBranches()
-		if len(ids) == 0 && m.targetRow().kind == "node" {
-			ids = []string{m.targetRow().id}
-		}
+		ids := m.actionNodeIDs()
 		if len(ids) == 0 {
 			return nil
 		}

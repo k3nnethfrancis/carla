@@ -774,3 +774,14 @@ async def test_import_refreshes_shared_library_without_selecting_seed(
         "state",
         "library.imported",
     ]
+
+
+async def test_edit_state_acknowledges_its_request(session):
+    root = session.project.add("original")
+    await session.execute(
+        "node.edit", {"node": root["id"], "text": "edited 🙂"}, "save-42"
+    )
+    kind, state, request_id = session.events[-1]
+    assert (kind, request_id) == ("state", "save-42")
+    assert state["current"]["text"] == "edited 🙂"
+    assert state["current"]["parent"] == root["id"]

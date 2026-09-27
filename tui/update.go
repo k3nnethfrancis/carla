@@ -94,7 +94,7 @@ func (m *model) perform(id string) tea.Cmd {
 		}
 		return m.send("simulator.inspect", map[string]any{"run": m.simulation.ID})
 	}
-	if documentAction(id) && (m.targetRow().kind != "node" || m.targetRow().id != m.currentID() || m.pending) {
+	if documentAction(id) && !(m.section == 3 && id == "branch") && (m.targetRow().kind != "node" || m.targetRow().id != m.currentID() || m.pending) {
 		m.status = "Select a branch and wait for its preview before /" + id
 		return m.previewTarget()
 	}
@@ -207,6 +207,7 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		reset := m.flushSeedReset()
 		return m, tea.Batch(cmd, reset, m.previewTarget(), m.client.read())
 	case failure:
+		m.editRequest = ""
 		m.pending = false
 		m.disconnected = true
 		if !strings.HasPrefix(m.status, "Error:") {
@@ -221,6 +222,10 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		raw := msg.String()
+		if m.editRequest != "" && raw != "ctrl+c" && m.boundAction(raw, "global") != "quit" {
+			m.status = "Saving edit…"
+			return m, nil
+		}
 		key := m.navigationKey(raw)
 		if raw == "/" && !(m.dialog != nil && (strings.HasPrefix(m.dialog.kind, "setup-") || m.dialog.kind == "import")) && (m.focus != 3 || m.dialog != nil || m.searching || m.sectionFocus) && !m.keyCapture {
 			m.editor.Blur()
@@ -408,6 +413,9 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	case tea.PasteMsg:
+		if m.editRequest != "" {
+			return m, nil
+		}
 		if m.focus == 3 {
 			m.historyPosition = 0
 		}
@@ -416,6 +424,9 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case tea.MouseClickMsg:
+		if m.editRequest != "" {
+			return m, nil
+		}
 		if msg.Button != tea.MouseLeft {
 			return m, nil
 		}
@@ -521,6 +532,9 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.MouseWheelMsg:
+		if m.editRequest != "" {
+			return m, nil
+		}
 		var cmd tea.Cmd
 		if m.focus == 1 {
 			m.document, cmd = m.document.Update(msg)
