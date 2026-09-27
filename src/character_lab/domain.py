@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import uuid
 from datetime import datetime, timezone
-from difflib import SequenceMatcher
 from pathlib import Path
 
-from .persistence import StreamJournal
+from . import ancestry
+from .persistence import WorkspaceStore
 
 
 def now():
@@ -93,46 +92,12 @@ def search(passages, query="", book=0, selected=None):
     ]
 
 
-def pack_origins(labels):
-    spans = []
-    for i, kind in enumerate(labels):
-        if spans and spans[-1]["kind"] == kind:
-            spans[-1]["end"] = i + 1
-        else:
-            spans.append(dict(start=i, end=i + 1, kind=kind))
-    return spans
-
-
-def origin_labels(text, spans):
-    labels = ["edited"] * len(text)
-    for span in spans:
-        start, end = max(0, span["start"]), min(len(text), span["end"])
-        labels[start:end] = [span["kind"]] * (end - start)
-    return labels
-
-
-def remap_origins(before, after, spans):
-    """Preserve unchanged text attribution; inserted/replaced text is an edit."""
-    if before == after:
-        return spans
-    old = origin_labels(before, spans)
-    labels = ["edited"] * len(after)
-    for match in SequenceMatcher(
-        None, before, after, autojunk=False
-    ).get_matching_blocks():
-        labels[match.b : match.b + match.size] = old[match.a : match.a + match.size]
-    return pack_origins(labels)
-
-
 class Project:
     def __init__(self, folder: Path):
         self.folder = folder
-        folder.mkdir(parents=True, exist_ok=True)
-        self.path = folder / "project.json"
-        if self.path.exists():
-            self.data = json.loads(self.path.read_text())
-        else:
-            self.data = dict(
+        self.store = WorkspaceStore(
+            folder,
+            dict(
                 version=1,
                 title=folder.name,
                 selected=[],
@@ -140,8 +105,10 @@ class Project:
                 current=None,
                 snapshots=[],
                 created=now(),
-            )
-        self.journal = StreamJournal(folder, self.data)
+            ),
+        )
+        self.path = self.store.path
+        self.data = self.store.data
         # Interrupted continuations must never masquerade as completed output.
         for node in self.data["nodes"]:
             if node.get("status") in {"generating", "queued"}:
@@ -174,15 +141,11 @@ class Project:
 
     def stream_delta(self, target, text, trace):
         """Persist only new text/provider events; in-memory state is already updated."""
-        self.journal.append(target, text, trace)
+        self.store.append(target, text, trace)
 
     def save(self):
         assign_labels(self.data)
-        self.data["journal_sequence"] = self.journal.sequence
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.data, ensure_ascii=False, indent=2) + "\n")
-        os.replace(tmp, self.path)
-        self.journal.compact()
+        self.store.checkpoint()
 
     @property
     def selected(self):
@@ -251,46 +214,13 @@ class Project:
         )
 
     def change_offset(self, node_id):
-        """First change in this version, in Unicode code points for the preview."""
-        node = self.node(node_id)
-        if node["kind"] == "generated":
-            return min(len(node["text"]), len(node.get("prompt", "")))
-        if not node.get("parent"):
-            return 0
-        parent = self.node(node["parent"])
-        if node["text"] == parent["text"]:
-            return self.change_offset(parent["id"])
-        # Includes pure deletions, which have no inserted origin span to reveal.
-        for i, (before, after) in enumerate(zip(parent["text"], node["text"])):
-            if before != after:
-                return i
-        return min(len(parent["text"]), len(node["text"]))
+        return ancestry.first_change(self._node_index(), node_id)
 
     def origins(self, node_id):
-        node = self.node(node_id)
-        if "origins" in node:
-            return node["origins"]
-        text = node["text"]
-        if node["kind"] == "source":
-            return [dict(start=0, end=len(text), kind="source")] if text else []
-        if node["parent"]:
-            parent = self.node(node["parent"])
-            inherited = self.origins(parent["id"])
-            if node["kind"] == "generated":
-                prefix = node.get(
-                    "prompt", parent["text"][: node.get("fork_offset") or 0]
-                )
-                labels = (
-                    origin_labels(parent["text"], inherited)[: len(prefix)]
-                    if parent["text"].startswith(prefix)
-                    else origin_labels(
-                        prefix, remap_origins(parent["text"], prefix, inherited)
-                    )
-                )
-                labels += ["ai"] * max(0, len(text) - len(prefix))
-                return pack_origins(labels[: len(text)])
-            return remap_origins(parent["text"], text, inherited)
-        return [dict(start=0, end=len(text), kind="edited")] if text else []
+        return ancestry.origins(self._node_index(), node_id)
+
+    def _node_index(self):
+        return {n["id"]: n for n in self.data["nodes"]}
 
     def edit(self, node_id, text):
         original = self.node(node_id)
@@ -301,7 +231,9 @@ class Project:
             parent=node_id,
             kind="edit",
             edited_from=node_id,
-            origins=remap_origins(original["text"], text, self.origins(node_id)),
+            origins=ancestry.remap_origins(
+                original["text"], text, self.origins(node_id)
+            ),
         )
 
     def keep(self, node_id):
