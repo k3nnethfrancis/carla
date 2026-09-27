@@ -310,7 +310,11 @@ async def generate(project, config, runtime_factory, emit, seed=None):
                     runtime.stream(prompt, settings, turn["trace"])
                 ) as stream:
                     first_chunk = True
-                    async for chunk in stream:
+                    while True:
+                        try:
+                            chunk = await watcher.next_chunk(stream)
+                        except StopAsyncIteration:
+                            break
                         if first_chunk:
                             await emit(
                                 "simulation.progress",

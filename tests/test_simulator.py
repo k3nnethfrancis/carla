@@ -581,3 +581,61 @@ async def test_slow_monitor_does_not_block_sibling_progress(setup, monkeypatch):
     finally:
         release.set()
         await task
+
+
+@pytest.mark.asyncio
+async def test_policy_stop_interrupts_stalled_read_without_stopping_sibling(
+    setup, monkeypatch
+):
+    from character_lab import monitor
+
+    project, config, emit, events = setup
+    config.update(
+        conversations=2, turns=2, monitor_mode="jev", monitor_interval_tokens=1
+    )
+    config["monitor_dimensions"][0]["action"] = "stop"
+    stalled, closed = asyncio.Event(), asyncio.Event()
+    calls = 0
+
+    class Streaming(Runtime):
+        async def stream(self, prompt, settings, trace):
+            nonlocal calls
+            calls += 1
+            first = calls == 1
+            try:
+                trace["generated_tokens"] = 1
+                yield "partial" if first else "sibling reply"
+                if first:
+                    stalled.set()
+                    await asyncio.Event().wait()
+            finally:
+                if first:
+                    closed.set()
+
+    async def scan(cfg, conversation, turn):
+        if conversation["index"] == 0:
+            await stalled.wait()
+        scores = {"looping": 0.99 if conversation["index"] == 0 else 0}
+        turn["monitor"] = dict(
+            status="complete", scores=scores, detections=monitor.detections(cfg, scores)
+        )
+
+    monkeypatch.setattr(monitor, "scan", scan)
+    run = await asyncio.wait_for(
+        simulator.generate(project, config, Streaming, emit), 1
+    )
+    assert closed.is_set()
+    stopped, sibling = run["conversations"]
+    assert run["status"] == "complete"
+    assert stopped["status"] == "policy_stopped"
+    assert len(stopped["turns"]) == 2
+    assert stopped["turns"][-1]["text"] == "partial"
+    assert stopped["turns"][-1]["status"] == "policy_stopped"
+    assert sibling["status"] == "complete"
+    assert len(sibling["turns"]) == 4
+    assert (
+        Project(project.folder).data["simulation_runs"][0]["conversations"][0]["turns"][
+            -1
+        ]["text"]
+        == "partial"
+    )

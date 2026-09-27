@@ -65,6 +65,12 @@ and checks slot limits and available host memory. It never reduces a budget to
 increase parallelism. Host memory is only a heuristic; discrete GPU VRAM and
 optimal throughput are not modeled. `Max` commonly serializes requests.
 
+Both raw generation and policy selection resolve capacity from the loaded server's
+`/props`; configured `0` means native context. Neither truncates a prompt to fit.
+Raw streams require a terminal `stop: true` event or `[DONE]` marker. EOF without
+one fails the operation, preserving partial text and provider events. Trace stream
+status distinguishes completion, interruption, provider failure and cancellation.
+
 `simulator.py` groups adjacent speaker roles by model alias. Within one segment,
 each conversation advances independently, including its own monitor wait.
 Model changes are barriers: finish the current segment, unload its model, then
@@ -81,7 +87,9 @@ is never added to the character context.
 It permits one in-flight check per conversation, coalesces additional tokens,
 and keeps exact request/response evidence. Final checks are awaited before that
 conversation advances; other conversations can proceed. Explicit Stop actions
-interrupt the affected stream, while Warn and provider errors do not stop it.
+signal only the affected conversation. Each provider read races that signal;
+cancellation drains the pending read and closes the stream before releasing its
+capacity reservation. Warn and monitor-provider errors do not stop generation.
 
 ## Frontend
 
