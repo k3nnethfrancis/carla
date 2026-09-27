@@ -220,7 +220,7 @@ func (m *model) saveConversationEdit(text string) tea.Cmd {
 	} else {
 		args["turn"] = m.conversationEdit
 	}
-	return m.send("simulator.fork", args)
+	return m.submitEditor("simulator.fork", args)
 }
 func speakerName(role string) string {
 	if role == "character" {

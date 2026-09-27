@@ -15,7 +15,7 @@ import (
 )
 
 func fixture() *model {
-	m := newModel(nil)
+	m := newModel(&client{})
 	m.data = state{Workspace: workspace{"Gunkel exploration", "/workspace/gunkel"}, Settings: settings{3, 256, 1, .98, 1}, Models: []localModel{{"Qwen3-14B Base", "base"}}, ModelAlias: "base"}
 	m.sources = []source{{Key: "gunkel", Title: "Gunkel · Paths", Passages: []passage{{ID: "paths", Text: "Paths that lead toward a beginning."}}}, {Key: "meditations", Title: "Meditations"}, {Key: "tractatus", Title: "Tractatus"}}
 	m.expanded["gunkel"] = true

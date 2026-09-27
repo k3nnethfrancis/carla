@@ -201,11 +201,17 @@ func (m *model) openGridTile(index int) tea.Cmd {
 		m.status = "This branch is queued"
 		return nil
 	}
+	if m.section == 1 && m.pending {
+		m.status = "Wait for the current preview"
+		return nil
+	}
 	m.loomGrid = false
 	m.conversationOpen = m.section == 3
 	m.focus = 1
 	m.gridSelection = index
 	if m.section == 1 {
+		m.notesOpen = false
+		m.selectDocument(items[index].ID)
 		return m.send("node.open", map[string]any{"node": items[index].ID})
 	}
 	m.selectConversationRow()

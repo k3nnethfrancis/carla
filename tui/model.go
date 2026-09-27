@@ -118,6 +118,7 @@ type dialog struct {
 type loomTile struct{ ID, Title, Text, Status string }
 
 type model struct {
+	editRequest            string // A draft stays owned by the editor until this request succeeds.
 	setupReturn            *dialog
 	conversationOpen       bool
 	conversationEdit       int
@@ -208,15 +209,19 @@ func newModel(c *client) *model {
 }
 func (m *model) Init() tea.Cmd { return tea.Batch(m.client.read(), tea.RequestBackgroundColor) }
 func (m *model) send(command string, args map[string]any) tea.Cmd {
+	_, cmd := m.dispatch(command, args)
+	return cmd
+}
+func (m *model) dispatch(command string, args map[string]any) (string, tea.Cmd) {
 	if m.disconnected {
 		m.status = "Backend disconnected. Quit and reopen Carla."
-		return nil
+		return "", nil
 	}
 	if m.pending {
-		return nil
+		return "", nil
 	}
 	m.pending = true
-	return m.client.send(command, args)
+	return m.client.request(command, args)
 }
 func (m *model) currentID() string {
 	if m.data.Current != nil {
@@ -376,23 +381,26 @@ func (m *model) saveEditor() tea.Cmd {
 		m.status = "Write a message before saving"
 		return nil
 	}
-	m.dialog, m.editReturn = m.editReturn, nil
-	m.editing = ""
-	m.editor.Blur()
 	if kind == "conversation" {
 		return m.saveConversationEdit(text)
 	}
 	if kind == "document" {
-		cmd := m.send("node.edit", map[string]any{"node": m.editNode, "text": text})
-		if cmd != nil {
-			m.enterLoom = true
-		}
-		return cmd
+		return m.submitEditor("node.edit", map[string]any{"node": m.editNode, "text": text})
 	}
 	if kind == "character_template" || kind == "visitor_template" || kind == "visitor_brief" || kind == "opening_prompt" {
-		return m.send("simulator.configure", map[string]any{kind: text})
+		return m.submitEditor("simulator.configure", map[string]any{kind: text})
 	}
-	return m.send("configure", map[string]any{kind: text})
+	return m.submitEditor("configure", map[string]any{kind: text})
+}
+
+// Do not discard or blur the draft on dispatch. Only its correlated state reply
+// commits the UI transition; errors and disconnects leave text/cursor intact.
+func (m *model) submitEditor(command string, args map[string]any) tea.Cmd {
+	id, cmd := m.dispatch(command, args)
+	if cmd != nil {
+		m.editRequest = id
+	}
+	return cmd
 }
 
 // Python offsets are Unicode code points. Never send display cells or UTF-8 byte
@@ -526,7 +534,7 @@ func (m *model) apply(e event) tea.Cmd {
 		json.Unmarshal(e.Data, &imported)
 		m.dialog = nil
 		m.pending = false
-		m.switchSection(0)
+		cmd := m.switchSection(0)
 		m.filter = ""
 		m.focus = 0
 		m.expanded[imported.Key] = true
@@ -538,6 +546,7 @@ func (m *model) apply(e event) tea.Cmd {
 		}
 		m.status = "Added " + imported.Title + " to Library"
 		m.reflow()
+		return cmd
 	case "library":
 		if err := json.Unmarshal(e.Data, &m.sources); err != nil {
 			return func() tea.Msg { return failure{err} }
@@ -549,6 +558,16 @@ func (m *model) apply(e event) tea.Cmd {
 			return func() tea.Msg { return failure{err} }
 		}
 		m.pending = false
+		if m.editRequest != "" {
+			if e.ID == m.editRequest {
+				m.enterLoom = m.editing == "document"
+				m.editRequest, m.editing = "", ""
+				m.dialog, m.editReturn = m.editReturn, nil
+				m.editor.Blur()
+			} else {
+				m.pending = true
+			}
+		}
 		if !m.data.Busy {
 			m.capacityStatus = ""
 		}
@@ -717,6 +736,10 @@ func (m *model) apply(e event) tea.Cmd {
 		m.reflow()
 		m.inspector.GotoTop()
 	case "error":
+		if m.editRequest != "" && e.ID != "" && e.ID != m.editRequest {
+			return nil
+		}
+		m.editRequest = ""
 		m.notePending = false
 		m.enterLoom = false
 		m.keySaving = false

@@ -191,3 +191,31 @@ func (m *model) collectionAction() string {
 	}
 	return "keep"
 }
+
+// The displayed action and the mutation must use the same visible selection.
+// Notes hides batch selection, so only its open document is an action target.
+func (m *model) actionNodeIDs() []string {
+	if m.selectionVisible() {
+		return m.selectedBranches()
+	}
+	if r := m.targetRow(); r.kind == "node" {
+		return []string{r.id}
+	}
+	return nil
+}
+
+func (m *model) selectDocument(id string) {
+	parents := map[string]string{}
+	for _, n := range m.data.Nodes {
+		parents[n.ID] = n.Parent
+	}
+	for parent := parents[id]; parent != ""; parent = parents[parent] {
+		delete(m.collapsed, parent)
+	}
+	for i, r := range m.rows() {
+		if r.kind == "node" && r.id == id {
+			m.selected = i
+			break
+		}
+	}
+}

@@ -169,8 +169,8 @@ class Session:
             active_node=self.active_node,
         )
 
-    async def snapshot(self):
-        await self.emit("state", self.state())
+    async def snapshot(self, request_id=None):
+        await self.emit("state", self.state(), request_id)
 
     async def execute(self, command, args, request_id):
         """Short mutations are serialized by the socket reader; jobs run separately."""
@@ -203,7 +203,7 @@ class Session:
             )
             self.sources = library()
             await self.emit("library", self.sources, request_id)
-            await self.snapshot()
+            await self.snapshot(request_id)
             await self.emit(
                 "library.imported",
                 {"key": source["key"], "title": source["title"]},
@@ -253,12 +253,12 @@ class Session:
             simulator.validate(config, p, self.validate_settings)
             p.data["simulator_config"] = config
             p.save()
-            await self.snapshot()
+            await self.snapshot(request_id)
             return
         if command == "simulator.fork":
             seed = simulator.conversation_seed(p, args["run"], args["conversation"])
             run = simulator.fork_conversation(p, seed, args)
-            await self.snapshot()
+            await self.snapshot(request_id)
             await self.emit(
                 "simulation",
                 simulator.view(run) | {"opened": True, "open_conversation": 0},
@@ -325,12 +325,12 @@ class Session:
             self.runtime.close()
             self.job_id = request_id
             self.job = asyncio.create_task(self.simulate(config, seed))
-            await self.snapshot()
+            await self.snapshot(request_id)
             return
         if command == "grow.selector":
             if args["alias"] != self.policy_model["alias"]:
                 raise ValueError("Selector model is not configured")
-            await self.snapshot()
+            await self.snapshot(request_id)
             return
         if command == "grow.configure":
             settings = {
@@ -342,7 +342,7 @@ class Session:
             self.validate_settings(settings)
             p.data["grow_settings"] = settings
             p.save()
-            await self.snapshot()
+            await self.snapshot(request_id)
             return
         if command == "cancel":
             if self.busy:
@@ -353,7 +353,7 @@ class Session:
                 except asyncio.CancelledError:
                     # Cancellation can arrive before the task's first instruction.
                     self.job = None
-                    await self.snapshot()
+                    await self.snapshot(request_id)
                     await self.emit("operation", {"stage": "stopped"}, self.job_id)
             return
         if command == "quit":
@@ -595,7 +595,7 @@ class Session:
             )
         else:
             raise ValueError("Unknown command: " + command)
-        await self.snapshot()
+        await self.snapshot(request_id)
 
     @staticmethod
     def validate_settings(s):

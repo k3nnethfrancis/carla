@@ -86,15 +86,24 @@ func (c *client) read() tea.Cmd {
 	}
 }
 func (c *client) send(command string, args map[string]any) tea.Cmd {
-	return func() tea.Msg {
+	_, cmd := c.request(command, args)
+	return cmd
+}
+
+// Reserve the ID before scheduling I/O so the editor can match its save reply.
+func (c *client) request(command string, args map[string]any) (string, tea.Cmd) {
+	c.mu.Lock()
+	c.serial++
+	id := fmt.Sprint(c.serial)
+	c.mu.Unlock()
+	return id, func() tea.Msg {
 		c.mu.Lock()
 		defer c.mu.Unlock()
-		c.serial++
 		if args == nil {
 			args = map[string]any{}
 		}
 		c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		err := json.NewEncoder(c.conn).Encode(map[string]any{"v": 1, "id": fmt.Sprint(c.serial), "command": command, "args": args})
+		err := json.NewEncoder(c.conn).Encode(map[string]any{"v": 1, "id": id, "command": command, "args": args})
 		if err != nil {
 			return failure{err}
 		}

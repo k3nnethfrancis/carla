@@ -25,7 +25,9 @@ This is an internal local protocol, not a stable public API.
 {"v":1,"seq":41,"type":"token","id":"12","data":{"node":"branch-id","text":" A path"}}
 ```
 
-Events have a monotonic connection sequence and a correlated request ID.
+Events have a monotonic connection sequence. Replies to short mutations carry
+the request ID; background updates may have no request ID. The editor retains
+its draft until the state reply for its own save arrives.
 A single writer lock and awaited socket drain preserve ordering and apply
 backpressure. Text offsets are Unicode code points, not bytes or terminal cells.
 Python emits data, not ANSI or layout instructions. Go never writes workspace JSON.
