@@ -108,6 +108,18 @@ class Runtime:
                     pass
         raise ValueError("Model loading timed out; see model-server.log.")
 
+    async def context(self, client):
+        """Read the loaded capacity; a configured zero means native, not zero tokens."""
+        response = await client.get(self.model["url"] + "/props")
+        response.raise_for_status()
+        props = response.json()
+        capacity = props.get("default_generation_settings", {}).get(
+            "n_ctx", self.model["context"]
+        )
+        if type(capacity) is not int or capacity < 1:
+            raise ValueError("Model server did not report a usable context capacity")
+        return capacity, props
+
     async def stream(self, prompt, settings, trace):
         await self.ensure()
         async with httpx.AsyncClient(
@@ -119,13 +131,7 @@ class Runtime:
             )
             tokenized.raise_for_status()
             count = len(tokenized.json()["tokens"])
-            props = await client.get(self.model["url"] + "/props")
-            props.raise_for_status()
-            capacity = (
-                props.json()
-                .get("default_generation_settings", {})
-                .get("n_ctx", self.model["context"])
-            )
+            capacity, props = await self.context(client)
             trace["prompt_tokens"] = count
             trace["context_capacity"] = capacity
             output = (
@@ -155,31 +161,48 @@ class Runtime:
             trace["request"] = request
             trace["model"] = self.model.copy()
             trace["events"] = []
-            slots = (
-                min(MAX_WORKERS, props.json().get("total_slots", 1))
-                if self.process
-                else 1
-            )
+            slots = min(MAX_WORKERS, props.get("total_slots", 1)) if self.process else 1
             async with self.admission.reserve(
                 count + output, capacity, slots, trace, self.on_schedule
             ):
-                async with client.stream(
-                    "POST", self.model["url"] + "/completion", json=request
-                ) as response:
-                    response.raise_for_status()
-                    async for line in response.aiter_lines():
-                        if not line.startswith("data: "):
-                            continue
-                        raw = line[6:]
-                        if raw == "[DONE]":
-                            break
-                        event = json.loads(raw)
-                        if "error" in event:
-                            raise ValueError(str(event["error"]))
-                        trace["events"].append(event)
-                        if type(event.get("tokens_predicted")) is int:
-                            trace["generated_tokens"] = event["tokens_predicted"]
-                        yield event.get("content", "")
+                trace["stream_status"] = "streaming"
+                try:
+                    async with client.stream(
+                        "POST", self.model["url"] + "/completion", json=request
+                    ) as response:
+                        response.raise_for_status()
+                        async for line in response.aiter_lines():
+                            if not line.startswith("data: "):
+                                continue
+                            raw = line[6:]
+                            if raw == "[DONE]":
+                                trace["stream_status"] = "complete"
+                                trace["terminal"] = "[DONE]"
+                                return
+                            event = json.loads(raw)
+                            trace["events"].append(event)
+                            if "error" in event:
+                                raise ValueError(str(event["error"]))
+                            if type(event.get("tokens_predicted")) is int:
+                                trace["generated_tokens"] = event["tokens_predicted"]
+                            if event.get("stop") is True:
+                                trace["stream_status"] = "complete"
+                                trace["terminal"] = "stop"
+                            yield event.get("content", "")
+                            if event.get("stop") is True:
+                                return
+                        trace["stream_status"] = "interrupted"
+                        raise ValueError(
+                            "Model stream ended without a completion event; partial output was preserved"
+                        )
+                except (asyncio.CancelledError, GeneratorExit):
+                    if trace["stream_status"] != "complete":
+                        trace["stream_status"] = "cancelled"
+                    raise
+                except Exception:
+                    if trace["stream_status"] != "interrupted":
+                        trace["stream_status"] = "failed"
+                    raise
 
     def close(self):
         if self.process and self.process.poll() is None:
@@ -226,7 +249,9 @@ class Runtime:
             )
             tokens.raise_for_status()
             trace["prompt_tokens"] = len(tokens.json()["tokens"])
-            if trace["prompt_tokens"] + request["max_tokens"] > self.model["context"]:
+            capacity, _ = await self.context(client)
+            trace["context_capacity"] = capacity
+            if trace["prompt_tokens"] + request["max_tokens"] > capacity:
                 raise ValueError(
                     "Policy context overflow; reduce branch count or length. Nothing was truncated."
                 )

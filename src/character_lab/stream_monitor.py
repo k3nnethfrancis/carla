@@ -14,6 +14,7 @@ class TurnMonitor:
         self.interval = config.get("monitor_interval_tokens", 512)
         self.next_tokens = self.interval
         self.task = None
+        self.stop = asyncio.Event()
 
     async def __aenter__(self):
         return self
@@ -28,6 +29,29 @@ class TurnMonitor:
     @property
     def stopped(self):
         return self.conversation["status"] == "policy_stopped"
+
+    async def next_chunk(self, stream):
+        """Race the provider read against this conversation's explicit Stop signal.
+
+        Drain the read before closing its generator, releasing the HTTP connection
+        and admission reservation even when no more tokens arrive.
+        """
+        if self.stopped:
+            raise StopAsyncIteration
+        if not self.enabled:
+            return await anext(stream)
+        read = asyncio.create_task(anext(stream))
+        stop = asyncio.create_task(self.stop.wait())
+        try:
+            await asyncio.wait((read, stop), return_when=asyncio.FIRST_COMPLETED)
+            if read.done():
+                return read.result()
+            raise StopAsyncIteration
+        finally:
+            for task in (read, stop):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(read, stop, return_exceptions=True)
 
     def checkpoint(self):
         """Use llama.cpp's actual output-token counter, never characters or chunks."""
@@ -75,6 +99,7 @@ class TurnMonitor:
             for detection in record.get("detections", []):
                 if detection["action"] == "stop":
                     self.conversation["status"] = "policy_stopped"
+                    self.stop.set()
                 await self.emit(
                     "policy.detection",
                     dict(
