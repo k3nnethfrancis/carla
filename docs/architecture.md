@@ -84,6 +84,10 @@ Raw streams require a terminal `stop: true` event or `[DONE]` marker. EOF withou
 one fails the operation, preserving partial text and provider events. Trace stream
 status distinguishes completion, interruption, provider failure and cancellation.
 
+`simulator_commands.py` interprets Simulator configuration, monitor policy,
+conversation view/fork and run commands. `Session` keeps workspace locking and
+active-job ownership; `simulator.py` owns the actual conversation generation.
+
 `simulator.py` groups adjacent speaker roles by model alias. Within one segment,
 each conversation advances independently, including its own monitor wait.
 Model changes are barriers: finish the current segment, unload its model, then

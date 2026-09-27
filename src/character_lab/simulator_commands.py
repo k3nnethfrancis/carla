@@ -1,0 +1,116 @@
+"""Simulator commands: configuration, monitor dimensions and conversation views.
+
+Session retains workspace locking and job ownership; this module handles the
+Simulator's command arguments and emits its domain events through that session.
+"""
+
+import copy
+from uuid import uuid4
+
+from . import monitor, simulator
+
+
+async def dispatch(session, command, args, request_id):
+    p = session.project
+    if command.startswith("loom-policy."):
+        config = simulator.configuration(p, session.runtime.model["alias"])
+        items = monitor.dimensions(config)
+        if command == "loom-policy.add":
+            items.append(
+                dict(
+                    id="custom_" + uuid4().hex,
+                    name=args["name"],
+                    spec=args["spec"],
+                    enabled=True,
+                    action="warn",
+                    color="amber",
+                    decision="most_likely",
+                    threshold=0.8,
+                )
+            )
+        else:
+            item = next((d for d in items if d["id"] == args["id"]), None)
+            if item is None:
+                raise ValueError("Dimension not found")
+            if command == "loom-policy.delete":
+                if item["id"] in monitor.BUILTINS:
+                    raise ValueError("Default dimensions cannot be deleted")
+                items.remove(item)
+            elif command == "loom-policy.update":
+                item.update({k: v for k, v in args.items() if k != "id"})
+            else:
+                raise ValueError("Unknown policy operation")
+        args = {"monitor_dimensions": items}
+        command = "simulator.configure"
+    if command == "simulator.configure":
+        config = {**simulator.configuration(p, session.runtime.model["alias"]), **args}
+        simulator.validate(config, p, session.validate_settings)
+        p.data["simulator_config"] = config
+        p.save()
+        await session.snapshot(request_id)
+        return
+    if command == "simulator.fork":
+        seed = simulator.conversation_seed(p, args["run"], args["conversation"])
+        run = simulator.fork_conversation(p, seed, args)
+        await session.snapshot(request_id)
+        await session.emit(
+            "simulation",
+            simulator.view(run) | {"opened": True, "open_conversation": 0},
+            request_id,
+        )
+        return
+    if command == "simulator.open":
+        run = next(
+            (r for r in p.data.get("simulation_runs", []) if r["id"] == args["run"]),
+            None,
+        )
+        if run is None:
+            raise ValueError("Simulation run not found")
+        index = args.get("conversation")
+        if index is not None and (
+            type(index) is not int or not 0 <= index < len(run["conversations"])
+        ):
+            raise ValueError("Conversation not found")
+        await session.emit(
+            "simulation",
+            simulator.view(run)
+            | {"opened": True, "open_conversation": args.get("conversation")},
+            request_id,
+        )
+        return
+    if command == "simulator.inspect":
+        run = next(
+            r for r in p.data.get("simulation_runs", []) if r["id"] == args["run"]
+        )
+        await session.emit("inspection", run, request_id)
+        return
+    if command in {"simulator.run", "simulator.preview"}:
+        config = copy.deepcopy(
+            simulator.configuration(p, session.runtime.model["alias"])
+        )
+        seed = None
+        if command == "simulator.run" and "run" in args:
+            seed = simulator.conversation_seed(p, args["run"], args["conversation"])
+            config[
+                "documents"
+            ] = []  # The frozen ancestor anthology is carried by seed.
+        if command == "simulator.preview":
+            config.update(
+                preview=True,
+                opening_mode="generated",
+                conversations=3,
+                documents=[],
+            )
+        if "count" in args:
+            config["conversations"] = args["count"]
+        if "turns" in args:
+            config["turns"] = args["turns"]
+        if "n_predict" in args:
+            for role in ("character", "visitor"):
+                config[role + "_settings"]["n_predict"] = args["n_predict"]
+        simulator.validate(config, p, session.validate_settings)
+        if not config["documents"] and not config.get("preview") and not seed:
+            raise ValueError("Select at least one anthology document in Simulator")
+        await session.start_simulation(config, seed, request_id)
+        return
+    raise ValueError("Unknown simulator command: " + command)
