@@ -145,7 +145,10 @@ See [data and monitoring](docs/configuration.md#optional-monitoring) before enab
 ## Develop and contribute
 
 Track bugs and features in [GitHub Issues](https://github.com/k3nnethfrancis/carla/issues)
-and submit changes through PRs. See [development and releases](docs/development.md)
+and submit feature/fix PRs to `dev`. Reviewed changes reach `main` through promotion PRs.
+Our current focus is [data-generation stabilization](https://github.com/k3nnethfrancis/carla/milestone/1):
+UX, functional reliability and focused code review. Later stages are on hold.
+See [development and releases](docs/development.md)
 and the [Carla TUI design skill](skills/tui-design/SKILL.md).
 Run `carla --version` when reporting a problem.
 

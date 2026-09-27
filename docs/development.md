@@ -8,24 +8,55 @@ canonical bug and feature backlog; access follows repository permissions.
 1. Open or find a focused issue describing the problem, desired behavior and
    acceptance criteria. Include reproduction steps for a bug. Small documentation
    corrections can go straight to a PR.
-2. Create a short-lived branch from `main`. Keep unrelated changes in separate PRs.
+2. Create a short-lived feature/fix branch from current `origin/dev`. Keep unrelated
+   changes in separate PRs; explicitly target `dev` when opening them.
 3. Read [architecture](architecture.md) and [AGENTS.md](../AGENTS.md). For terminal
    work, use the repository's [TUI design skill](../skills/tui-design/SKILL.md).
 4. Run the relevant checks while iterating, then `make test lint build`. UI changes
    also need the affected keyboard journey exercised in a real terminal. Use
    disposable data, not a collaborator's active workspace.
-5. Open a PR linking the issue, explaining the resulting behavior and verification.
+5. Open a PR into `dev` linking the issue, explaining the resulting behavior and verification.
    Wait for passing GitHub checks and maintainer review before merging. Squash merge
-   keeps one logical change per PR; delete the branch afterward.
+   keeps one logical change per feature PR; delete the feature branch afterward.
 
-Routine changes go through PRs rather than direct pushes to `main`. This is the
+```sh
+git fetch origin
+git switch -c feat/short-description origin/dev
+# Commit and push the focused change, then:
+gh pr create --base dev
+```
+
+`dev` is the integration branch. `main` is the reviewed installation/release branch
+and remains GitHub's default, so new clones start with the reviewed version. Checks
+run on PRs and pushes to both branches. Promote a tested set of work with a separate
+`dev` → `main` PR, using a merge commit to retain integration ancestry. Keep both
+long-lived branches; branch deletion applies only to feature/fix branches. Releases
+still run only from `main`, after promotion.
+
+Routine changes go through PRs rather than direct pushes to `main` or `dev`. This is the
 collaborator workflow, not a claim that branch protection is enabled: the current
 private repository's plan does not support the requested ruleset API. Revisit
 mechanical enforcement if the plan or repository visibility changes.
 
 Use `bug`, `enhancement` and `documentation` labels for work type. Add `ready` when
 an issue is actionable and `blocked` only with a concrete dependency described in
-its body. Milestones can group agreed outcomes; no roadmap is imposed by this setup.
+its body. The current milestone is
+[Data generation stabilization](https://github.com/k3nnethfrancis/carla/milestone/1).
+
+## Current scope
+
+Make the existing data-generation stage dependable: Library/source selection,
+branching and continuation, editing/notes, anthology curation and simulated
+conversations. Tighten the UX, resolve reproducible bugs, and verify persistence,
+long-running work and installation before expanding the pipeline.
+
+Review the discovery-driven implementation before deciding what needs refactoring.
+Accepted findings should become focused issues and small PRs with behavior evidence;
+a broad rewrite is not the default. The milestone links UX, architecture and
+reliability reviews so collaborators can make those decisions together.
+
+Later training and research phases are on hold pending collaborator discussion.
+A public launch is a separate decision, not a scheduled consequence of this work.
 
 ## Repository structure
 
