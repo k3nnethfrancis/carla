@@ -277,6 +277,7 @@ func (m *model) rows() []row {
 				rows = append(rows, row{id: ref, label: mark + p.ID + " " + strings.Join(strings.Fields(label), " "), kind: "passage", preview: p.Text, depth: 1})
 			}
 		}
+		rows = append(rows, row{id: "import", label: "+ Add document", kind: "library-import"})
 	case 1, 2:
 		rows = m.branchRows()
 
@@ -302,6 +303,8 @@ func (m *model) activate() tea.Cmd {
 	m.selected = min(m.selected, len(rows)-1)
 	r := rows[m.selected]
 	switch r.kind {
+	case "library-import":
+		return m.perform("import")
 	case "sim-config":
 		return m.perform("sim-config")
 	case "sim-run":
@@ -518,6 +521,23 @@ func (m *model) apply(e event) tea.Cmd {
 		}
 		json.Unmarshal(e.Data, &p)
 		m.backgroundStatus = fmt.Sprintf("Conversation %d/%d · %s · %s · /active · /stop", p.Conversation, p.Total, p.Role, p.Stage)
+	case "library.imported":
+		var imported struct{ Key, Title string }
+		json.Unmarshal(e.Data, &imported)
+		m.dialog = nil
+		m.pending = false
+		m.switchSection(0)
+		m.filter = ""
+		m.focus = 0
+		m.expanded[imported.Key] = true
+		for i, r := range m.rows() {
+			if r.id == imported.Key {
+				m.selected = i
+				break
+			}
+		}
+		m.status = "Added " + imported.Title + " to Library"
+		m.reflow()
 	case "library":
 		if err := json.Unmarshal(e.Data, &m.sources); err != nil {
 			return func() tea.Msg { return failure{err} }
@@ -704,6 +724,9 @@ func (m *model) apply(e event) tea.Cmd {
 		json.Unmarshal(e.Data, &err)
 		m.pending = false
 		m.status = "Error: " + err.Message
+		if m.dialog != nil && m.dialog.kind == "import" {
+			m.dialog.args["error"] = err.Message
+		}
 	case "result":
 		var r struct{ Path string }
 		json.Unmarshal(e.Data, &r)

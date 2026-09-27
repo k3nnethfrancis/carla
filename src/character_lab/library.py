@@ -49,11 +49,55 @@ def load_library(folder=None):
     return list(sources.values())
 
 
+def import_document(file, title="", author="", source_url="", key=None):
+    """Import exact UTF-8 text once; never overwrite another library entry."""
+    import hashlib
+    import re
+    from uuid import uuid4
+
+    path = Path(file).expanduser()
+    if not path.is_file():
+        raise ValueError("Choose an existing text file")
+    raw = path.read_bytes()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ValueError("The document must be UTF-8 plain text (.txt or .md)") from exc
+    if not text.strip() or "\x00" in text:
+        raise ValueError("Choose a non-empty plain-text document")
+    title = title.strip() or path.stem
+    existing = {s["key"] for s in load_library()}
+    if key is None:
+        base = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:48] or "document"
+        key = base
+        while key in existing:
+            key = f"{base}-{uuid4().hex[:8]}"
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", key):
+        raise ValueError(
+            "Key must use lowercase letters, digits, underscores or hyphens"
+        )
+    if key in existing:
+        raise ValueError("That library key already exists; choose a new key")
+    source = dict(
+        key=key,
+        title=title,
+        author=author.strip(),
+        url=source_url.strip(),
+        source_sha256=hashlib.sha256(raw).hexdigest(),
+        normalization="UTF-8 decoded without reflow or paraphrase.",
+        passages=[dict(id="1", label=title, text=text)],
+    )
+    folder = HOME / "library"
+    folder.mkdir(parents=True, exist_ok=True)
+    output = folder / f"{key}.json"
+    with output.open("x", encoding="utf-8") as stream:
+        stream.write(json.dumps(source, ensure_ascii=False, indent=2) + "\n")
+    return source
+
+
 def main():
     """Import a UTF-8 document without editing application source or workspace data."""
     import argparse
-    import hashlib
-    import re
 
     parser = argparse.ArgumentParser(
         description="Import a plain-text seed into Carla's shared library"
@@ -64,30 +108,13 @@ def main():
     parser.add_argument("--author", default="")
     parser.add_argument("--source-url", default="")
     args = parser.parse_args()
-    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", args.key):
-        parser.error("Key must use lowercase letters, digits, underscores or hyphens")
-    folder = HOME / "library"
-    if any(s["key"] == args.key for s in load_library(folder)) and list(
-        folder.glob("*.json")
-    ):
-        parser.error(
-            "That key already exists; choose a new key to preserve existing provenance"
+    try:
+        source = import_document(
+            args.file, args.title, args.author, args.source_url, args.key
         )
-    raw = args.file.read_bytes()
-    source = dict(
-        key=args.key,
-        title=args.title,
-        author=args.author,
-        url=args.source_url,
-        source_sha256=hashlib.sha256(raw).hexdigest(),
-        normalization="UTF-8 decoded without reflow or paraphrase.",
-        passages=[dict(id="1", label=args.title, text=raw.decode("utf-8"))],
-    )
-    folder.mkdir(parents=True, exist_ok=True)
-    output = folder / f"{args.key}.json"
-    with output.open("x", encoding="utf-8") as stream:
-        stream.write(json.dumps(source, ensure_ascii=False, indent=2) + "\n")
-    print(output)
+    except (ValueError, OSError) as exc:
+        parser.error(str(exc))
+    print(HOME / "library" / f"{source['key']}.json")
 
 
 if __name__ == "__main__":

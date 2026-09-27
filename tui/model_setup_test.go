@@ -70,3 +70,22 @@ func TestSetupConfirmationAndNarrowLayout(t *testing.T) {
 		t.Fatal("Escape should return source picker")
 	}
 }
+
+func TestImportDialogKeepsSlashesAndRefreshesLibrarySelection(t *testing.T) {
+	m := fixture()
+	m.width, m.height, m.section = 110, 32, 0
+	m.perform("import")
+	m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
+	if m.dialog == nil || m.dialog.fields[0].input.Value() != "/" {
+		t.Fatal("slash must be literal inside file path")
+	}
+	m.apply(event{Type: "error", Data: json.RawMessage(`{"message":"Choose an existing text file"}`)})
+	if m.dialog == nil || m.dialog.fields[0].input.Value() != "/" {
+		t.Fatal("failed import should retain fields for correction")
+	}
+	m.sources = append(m.sources, source{Key: "new-doc", Title: "New document"})
+	m.apply(event{Type: "library.imported", Data: json.RawMessage(`{"key":"new-doc","title":"New document"}`)})
+	if m.dialog != nil || m.section != 0 || m.targetRow().id != "new-doc" {
+		t.Fatal("import should reveal its new library entry")
+	}
+}

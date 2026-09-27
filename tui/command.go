@@ -410,7 +410,7 @@ func (m *model) prioritizePageCommands(actions []action) {
 	var preferred []string
 	switch m.section {
 	case 0:
-		preferred = []string{"add", "remove", "clear", "continue", "generate", "branches"}
+		preferred = []string{"import", "add", "remove", "clear", "continue", "generate", "branches"}
 	case 1:
 		preferred = []string{"continue", "loom", "branch", "keep", "delete", "clear", "grow", "grow-config", "edit", "notes", "inspect", "review", "models", "settings"}
 	case 2:

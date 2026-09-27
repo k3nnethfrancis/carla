@@ -627,7 +627,7 @@ func TestCollapsedSourceSelectionIsVisible(t *testing.T) {
 	m.sources = append(m.sources, source{Key: "tract", Title: "Tractatus", Passages: []passage{{ID: "1", Text: "The world is everything that is the case."}}})
 	m.data.Selected = []string{"gunkel:paths", "tract:1"}
 	rows := m.rows()
-	if !strings.Contains(rows[0].label, "✓") || !strings.Contains(rows[len(rows)-1].label, "1 selected") {
+	if !strings.Contains(rows[0].label, "✓") || !strings.Contains(rows[len(rows)-2].label, "1 selected") {
 		t.Fatal("collapsed selections hidden")
 	}
 	if !strings.Contains(m.seedSummary(), "Gunkel") || !strings.Contains(m.seedSummary(), "Tractatus") {

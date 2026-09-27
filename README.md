@@ -57,6 +57,7 @@ suggestion, and press Enter. Commands relevant to the current page appear first.
 
 | Command | What it does |
 | --- | --- |
+| `/import` | Add a local text or Markdown seed to the shared Library. |
 | `/help` · `/keys` | Browse all commands or customize keyboard bindings. |
 | `/workspace` · `/model` | Choose a workspace or local model. |
 | `/configure` | Open settings for the current page. |

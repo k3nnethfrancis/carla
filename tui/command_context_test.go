@@ -9,7 +9,7 @@ func TestPageCommandsComeFirst(t *testing.T) {
 	for _, tc := range []struct {
 		section int
 		first   string
-	}{{0, "add"}, {1, "continue"}, {2, "snapshot"}, {3, "run"}} {
+	}{{0, "import"}, {1, "continue"}, {2, "snapshot"}, {3, "run"}} {
 		m := fixture()
 		m.section = tc.section
 		m.focus = 3
