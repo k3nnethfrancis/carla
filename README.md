@@ -49,6 +49,8 @@ Use `/model` → `+ Add model`, or run `carla --setup-model`, to add another mod
 Once inside Carla, select a passage with Space, open it with Enter, and explore the
 panes with Tab / Shift+Tab. Type `/help` for commands or `/keys` for editable
 bindings. `/` focuses the command bar, including from the document editor.
+The Keys dialog covers listed actions and navigation; its own capture, reset,
+save and cancel controls stay fixed so you can always recover a binding.
 
 ## Commands at a glance
 

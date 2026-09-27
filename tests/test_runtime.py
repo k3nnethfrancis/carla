@@ -222,3 +222,87 @@ async def test_truncated_simulation_preserves_partial_and_does_not_advance(
     assert turns[-1]["text"] == "partial reply"
     assert turns[-1]["status"] == "failed"
     assert turns[-1]["trace"]["stream_status"] == "interrupted"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", ["ready", "timeout", "wrong_model"])
+async def test_managed_server_startup_and_cleanup(tmp_path, monkeypatch, outcome):
+    """A failed startup must not strand model weights or the sleep guard."""
+    import asyncio
+
+    from character_lab import runtime as runtime_module
+
+    model_path = tmp_path / "synthetic.gguf"
+    model_path.touch()
+    model = {
+        **runtime_module.DEFAULT_MODEL,
+        "path": str(model_path),
+        "alias": "synthetic",
+        "context": 0,
+    }
+    spawned = []
+
+    class Process:
+        def __init__(self, command):
+            self.command = command
+            self.pid = 1234
+            self.terminated = False
+            self.waited = False
+            spawned.append(self)
+
+        def poll(self):
+            return 0 if self.terminated else None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout=None):
+            self.waited = True
+            return 0
+
+        def kill(self):
+            self.terminated = True
+
+    monkeypatch.setattr(
+        runtime_module.subprocess, "Popen", lambda cmd, **kw: Process(cmd)
+    )
+    monkeypatch.setattr(
+        runtime_module.shutil,
+        "which",
+        lambda name: "/synthetic/" + name,
+    )
+    real_client = httpx.AsyncClient
+
+    def handle(request):
+        if request.url.path == "/health":
+            running = any(p.command[0].endswith("llama-server") for p in spawned)
+            return httpx.Response(200 if outcome != "timeout" and running else 503)
+        assert request.url.path == "/v1/models"
+        alias = "other" if outcome == "wrong_model" else "synthetic"
+        return httpx.Response(200, json={"data": [{"id": alias}]})
+
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(handle), **kwargs),
+    )
+
+    async def no_delay(_seconds):
+        pass
+
+    monkeypatch.setattr(asyncio, "sleep", no_delay)
+    runtime = Runtime(tmp_path, model)
+    if outcome == "ready":
+        await asyncio.gather(runtime.ensure(), runtime.ensure())
+    else:
+        message = "timed out" if outcome == "timeout" else "different model"
+        with pytest.raises(ValueError, match=message):
+            await runtime.ensure()
+    assert [p.command[0] for p in spawned].count("/synthetic/llama-server") == 1
+    assert [p.command[0] for p in spawned].count("caffeinate") == 1
+    assert "--ctx-size" in spawned[0].command
+    assert spawned[0].command[spawned[0].command.index("--ctx-size") + 1] == "0"
+    if outcome == "ready":
+        runtime.close()
+    assert all(p.terminated for p in spawned)
+    assert all(p.waited for p in spawned)
