@@ -66,6 +66,7 @@ type simulationRun struct {
 	Parent            *conversationParent
 	ID, Status, Error string
 	Opened            bool
+	Forked            bool
 	Preview           bool
 	Conversations     []simulationConversation
 }
@@ -524,7 +525,7 @@ func (m *model) apply(e event) tea.Cmd {
 			m.focus = 1
 		}
 		if run.Opened {
-			if run.OpenConversation != nil {
+			if run.Forked && run.OpenConversation != nil {
 				m.loomConversation = &conversationParent{Run: run.ID, Conversation: *run.OpenConversation}
 			}
 			m.pending = false

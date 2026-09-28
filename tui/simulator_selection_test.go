@@ -161,3 +161,19 @@ func TestCompletedPolicyFlagsLeaveSidebarButRemainInHeader(t *testing.T) {
 		t.Fatal("header warning lost on scroll")
 	}
 }
+
+func TestDelayedOpenDoesNotRestoreClearedLoomSelection(t *testing.T) {
+	m := simulatorFixture()
+	m.loomConversation = &conversationParent{Run: "batch", Conversation: 1}
+	m.perform("clear")
+	data := json.RawMessage(`{"id":"batch","status":"complete","opened":true,"open_conversation":1,"conversations":[{"index":0,"turns":[]},{"index":1,"turns":[]}]}`)
+	m.apply(event{Type: "simulation", Data: data})
+	if m.loomConversation != nil {
+		t.Fatal("late preview restored cleared selection")
+	}
+	data = json.RawMessage(`{"id":"fork","status":"draft","opened":true,"forked":true,"open_conversation":0,"conversations":[{"index":0,"turns":[]}]}`)
+	m.apply(event{Type: "simulation", Data: data})
+	if m.loomConversation == nil || m.loomConversation.Run != "fork" {
+		t.Fatal("explicit fork must become next Loom parent")
+	}
+}

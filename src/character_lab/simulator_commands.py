@@ -56,7 +56,7 @@ async def dispatch(session, command, args, request_id):
         await session.snapshot(request_id)
         await session.emit(
             "simulation",
-            simulator.view(run) | {"opened": True, "open_conversation": 0},
+            simulator.view(run) | {"opened": True, "forked": True, "open_conversation": 0},
             request_id,
         )
         return
