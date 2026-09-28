@@ -31,9 +31,14 @@ func commandName(a action) string {
 func (m *model) commandChoices() []action {
 	value := strings.ToLower(strings.TrimSpace(m.command.Value()))
 	if fields := strings.Fields(value); len(fields) > 1 {
-		switch fields[0] {
-		case "/eval", "/policy", "/continue", "/generate", "/loom", "/branch", "/model", "/configure", "/config", "/fork", "/run", "/grow":
-			value = fields[0]
+		// Exact commands own their arguments; free-text intent searches keep
+		// every word (for example /character sampling).
+		for _, a := range allActions {
+			for _, alias := range m.commandAliases(m.canonicalCommand(a.id)) {
+				if fields[0] == "/"+alias {
+					value = fields[0]
+				}
+			}
 		}
 	}
 	if m.focus != 3 || !strings.HasPrefix(value, "/") {
@@ -118,6 +123,19 @@ func (m *model) commandChoices() []action {
 			continue
 		}
 		seen[a.id] = true
+		switch a.id {
+		case "policy":
+			a.label = "Monitoring, selection and judge configurations"
+		case "eval":
+			a.label = "Run active or named evaluation on selected items"
+		case "evaluations":
+			a.label = "Named collections, judgments and training items"
+		case "snapshot":
+			a.label = "Export anthology documents and provenance"
+			if m.section == 4 {
+				a.label = "Export training items and judgment history"
+			}
+		}
 		if a.id == "models" && m.section == 3 {
 			a.label = "Choose character or visitor model"
 		}
@@ -139,14 +157,11 @@ func (m *model) commandChoices() []action {
 		if m.section == 3 && a.id == "edit" {
 			a.label = "Edit a message in a new conversation fork"
 		}
-		if a.id == "settings" {
-			a.label = "Loom temperature, top-p, output tokens and context"
-		}
 		if a.id == "configure" {
 			a.label = "Generation models, prompts and sampling"
-		}
-		if a.id == "continue" && m.section > 0 {
-			a.label = "Continue current document at cursor"
+			if m.section == 4 {
+				a.label = "Configure the opened evaluation and its judges"
+			}
 		}
 		if a.id == "remove" && m.section == 1 {
 			a.label = fmt.Sprintf("Remove %d versions and descendants…", m.collectionCount())
@@ -211,7 +226,7 @@ func (m *model) commandChoices() []action {
 	return matches
 }
 func (m *model) suggestionCount() int {
-	return min(4, max(0, m.height-16-len(m.commandHints())), len(m.commandChoices()))
+	return min(4, max(1, m.height-14-len(m.commandHints())), len(m.commandChoices()))
 }
 func (m *model) focusCommand(slash bool) tea.Cmd {
 	if m.focus == 1 && m.gridVisible() {
@@ -265,6 +280,7 @@ func (m *model) commandKey(msg tea.KeyPressMsg) tea.Cmd {
 				delta = -1
 			}
 			m.commandIndex = (m.commandIndex + delta + len(choices)) % len(choices)
+			m.reflow()
 		}
 		return nil
 	case "nav.enter":

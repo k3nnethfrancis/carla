@@ -543,6 +543,20 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.MouseWheelMsg:
+		if m.dialog != nil {
+			delta := 3
+			if msg.Button == tea.MouseWheelUp {
+				delta = -3
+			}
+			if m.dialog.kind == "help-detail" {
+				m.scrollHelp(delta)
+			}
+			if m.dialog.kind == "help" {
+				m.dialog.index = max(0, min(m.dialog.index+delta, len(m.dialog.rows)-1))
+			}
+			// Modal input must never move the underlying document or selection.
+			return m, nil
+		}
 		if m.editing != "" && m.focus == 1 && m.dialog == nil && m.editRequest == "" {
 			code := tea.KeyDown
 			if msg.Button == tea.MouseWheelUp {

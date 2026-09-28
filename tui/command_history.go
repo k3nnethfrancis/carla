@@ -56,22 +56,3 @@ func (m *model) browseCommandHistory(step int) {
 	m.commandIndex = 0
 	m.reflow()
 }
-func (m *model) commandHints() []string {
-	if m.focus != 3 {
-		return nil
-	}
-	fields := strings.Fields(m.command.Value())
-	if len(fields) == 0 {
-		return nil
-	}
-	switch fields[0] {
-	case "/eval":
-		return []string{"Run the active or named evaluation on selected items", "[evaluation-name] · --train-on-pass true|false"}
-	case "/loom", "/continue", "/generate", "/run", "/grow", "/simulate":
-		if m.section == 3 {
-			return []string{"[alternatives] · --tokens N|Max · --turns N · --msg \"text\" · --eval name · --loops N", "Checked conversation or fresh setup · /clear starts fresh"}
-		}
-		return []string{"[alternatives] · --tokens N|Max · --eval name · --loops N", "Selected document → Branches · bare /loom = one continuation"}
-	}
-	return nil
-}

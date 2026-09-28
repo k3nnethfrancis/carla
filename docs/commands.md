@@ -42,23 +42,26 @@ The Branches tab keeps its name. “Fork” names the action; “Branches” nam
 ## Loom: configure one set, then repeat
 
 ```text
-/loom [alternatives] [--tokens N] [--turns N] [--msg "opening"] [--loops N]
-       one set       generation settings       repetition
+/loom [alternatives] [--tokens N|Max] [--turns N] [--msg "opening"] [--eval "name"] [--loops N]
+       one set       generation settings / evaluation                       repetition
 ```
 
-Examples and autocomplete place `--loops` last. The parser accepts flags in any order.
+Examples and autocomplete place `--loops` last. The parser accepts flags in any order, including `--flag=value`. Count also accepts `--count N` or `-n N`.
+
+While typing `/lo`, the highlighted `/loom` completion already shows its arguments. Arrow keys change the highlighted command and its preview. Arguments wrap to remain visible; `/help` provides their full descriptions; Enter opens scrollable details and Escape returns to the list. Quotes preserve spaces in evaluation names and messages.
 
 | Parameter | Meaning | Availability |
 |---|---|---|
-| Alternatives | Number of alternatives generated from the same starting point. | All views |
-| `--tokens N` | Maximum new tokens per generation; not a required length or total conversation budget. | All views |
+| Alternatives | Number of alternatives generated from the same starting point. | Library, Branches, Anthology, Simulator |
+| `--tokens N\|Max` | Maximum new tokens per generation; not a required length or total conversation budget. | Library, Branches, Anthology, Simulator |
 | `--turns N` | New Character replies per conversation alternative per loop, with Visitor messages as needed. | Simulator only |
 | `--msg "text"` / `--message "text"` | Override the first Visitor message for this fresh run; preserves the saved opener. | Simulator only, no conversation selected |
-| `--loops N` | Total generate-and-select cycles, including the first cycle. | All views |
+| `--eval "name"` | Judge completed outputs using that named evaluation after generation; does not change generation prompts. | Library, Branches, Anthology, Simulator |
+| `--loops N` | Total generate-and-select cycles, including the first cycle. | Library, Branches, Anthology, Simulator |
 
 **Bare `/loom` is the small, predictable action:** one alternative, one loop, and in Simulator one new Character reply. Model, sampling, token ceilings and monitoring settings still come from configuration. Explicit parameters expand the run.
 
-Do not silently ignore incompatible parameters. `--turns` outside Simulator should explain that turns apply only to conversations. There are no mode flags.
+`--turns` and `--msg` outside Simulator are rejected with an explanation. There are no mode flags. `--loops` greater than one requires a configured selection policy; a single loop does not select a winner.
 
 ### Documents
 
@@ -68,6 +71,9 @@ Do not silently ignore incompatible parameters. `--turns` outside Simulator shou
 
 /loom 4 --tokens 512
     Four alternatives of that same prefix, each up to 512 new tokens.
+
+/loom 4 --tokens 512 --eval "Voice"
+    Generate four alternatives, then run the Voice evaluation on their saved text.
 
 /loom 3 --tokens 512 --loops 4
     Three alternatives per loop, four loops total.
@@ -88,9 +94,10 @@ If all four loops complete, the last example creates twelve continuations. The a
 /loom 3 --tokens 512 --turns 2
     Three alternative conversation extensions, each adding two Character replies.
 
-/loom 3 --tokens 512 --turns 2 --loops 4
+/loom 3 --tokens 512 --turns 2 --eval "Voice" --loops 4
     Three alternatives per loop, two Character replies per alternative,
     repeated for four loops, advancing one selected path.
+    Then judge completed conversation outputs with Voice.
 ```
 
 If all loops complete, the last example produces twelve candidate extensions. The final path gains eight Character replies, plus the required Visitor messages. The token ceiling applies to individual generations, not the whole eight-reply path. An explicit `--tokens` overrides both Character and Visitor for this run; omitting it preserves their individual saved ceilings.
