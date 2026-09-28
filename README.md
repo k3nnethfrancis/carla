@@ -5,6 +5,10 @@ base models. Supply seed documents, explore alternative continuations, curate
 an anthology, simulate conversations from it, and evaluate the results to decide
 what belongs in a training set.
 
+![Four conversations generating concurrently in Carla’s Simulator](docs/assets/carla-loom-4.gif)
+
+*Local Qwen3-30B-A3B Base · four-conversation Loom · playback at 1.5× speed.*
+
 A *Loom* lets you explore branching model-generated text: continue a passage,
 compare alternatives, edit or fork a version, and follow the paths worth keeping.
 Carla brings that workflow into the terminal with local inference and inspectable
