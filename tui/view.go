@@ -29,7 +29,7 @@ type layout struct {
 // All panels, hit targets and viewports derive from the same geometry. At narrow
 // widths the focused pane takes the body, rather than squeezing unreadable text.
 func (m *model) layout() layout {
-	height := max(6, m.height-10-m.suggestionCount()-len(m.commandHints()))
+	height := max(4, m.height-10-m.suggestionCount()-len(m.commandHints()))
 	l := layout{bodyHeight: height, actionY: 4 + height}
 	width := max(1, m.width-2)
 	if (m.editing != "" && m.editing != "document") || m.width < 90 {
@@ -274,6 +274,17 @@ func (m *model) renderDialog() string {
 	d := m.dialog
 	r := m.dialogRect()
 	var body []string
+	if d.kind == "help-detail" {
+		lines := m.helpLines()
+		height := r.h - 5
+		start := min(d.index, max(0, len(lines)-height))
+		body = append(body, lines[start:min(len(lines), start+height)]...)
+		for len(body) < height {
+			body = append(body, "")
+		}
+		body = append(body, "↑↓ / PGUP/PGDN scroll · "+m.keyLabel("nav.back")+" back")
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box(d.title, strings.Join(body, "\n"), r, true))
+	}
 	if len(d.rows) > 0 || d.allRows != nil {
 		visible := m.dialogVisibleRows()
 		start := m.dialogStart(visible)
@@ -308,7 +319,7 @@ func (m *model) renderDialog() string {
 			footer = "ESC cancel"
 		}
 		if d.kind == "help" {
-			footer = m.keyLabel("nav.up") + "/" + m.keyLabel("nav.down") + " commands · " + m.keyLabel("nav.back") + " return"
+			footer = m.keyLabel("nav.up") + "/" + m.keyLabel("nav.down") + " · ENTER details · " + m.keyLabel("nav.back") + " return"
 		}
 		if d.kind == "keys" {
 			footer = "ENTER bind · CTRL+S save · ESC cancel"
@@ -335,7 +346,9 @@ func (m *model) renderDialog() string {
 		if d.query != "" {
 			footer = "Filter: " + d.query + " · " + footer
 		} else if d.kind != "keys" && d.kind != "delete" && d.kind != "loom-policy-timing" && !strings.HasPrefix(d.kind, "setup-") {
-			footer = "Type to filter · " + footer
+			if d.kind != "help" {
+				footer = "Type to filter · " + footer
+			}
 		}
 		body = append(body, footer)
 	} else {
