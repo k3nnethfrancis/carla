@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // Definitions and result snapshots belong to Python; these structs only render
@@ -26,6 +25,9 @@ type evaluationSummary struct {
 type evaluationRecord struct {
 	GenerationModels                           []string `json:"generation_models"`
 	ID, Title, Kind, Text, Status, Note, Error string
+	Passed                                     *bool
+	Judgments                                  []evaluationRecord
+	Evidence                                   []json.RawMessage
 	Training                                   bool
 	Definition                                 evaluator
 	Result                                     struct {
@@ -52,22 +54,22 @@ func (m *model) openPolicy() tea.Cmd {
 	m.dialog = &dialog{kind: "policy", title: "Policy", rows: []row{
 		{id: "monitor", label: "Monitoring", preview: "Evaluate during generation; warn or explicitly stop."},
 		{id: "selection", label: "Selection", preview: "Evaluate alternatives against criteria and choose which to continue."},
-		{id: "evaluators", label: "Evaluations", preview: "Saved judges and criteria for /eval on whole documents or conversations."},
+		{id: "evaluators", label: "Judge configurations", preview: "Reusable specs and judge models. Named evaluations and their items live in Evaluate."},
 	}}
 	return nil
 }
 func (m *model) openEvaluators() tea.Cmd {
-	d := &dialog{kind: "eval-definitions", title: "Evaluations"}
+	d := &dialog{kind: "eval-definitions", title: "Judge configurations"}
 	for _, e := range m.data.Evaluators {
 		d.rows = append(d.rows, row{id: e.ID, label: e.Name + " · " + e.Kind, preview: e.Spec})
 	}
-	d.rows = append(d.rows, row{id: "new", label: "+ New evaluation"})
+	d.rows = append(d.rows, row{id: "new", label: "+ New judge"})
 	m.dialog = d
 	return nil
 }
 func (m *model) openEvaluator(id string) tea.Cmd {
 	e := m.evaluator(id)
-	rows := []row{{id: "name", label: e.Name, preview: "Rename evaluation"}, {id: "kind", label: "Judge · " + e.Kind}, {id: "model", label: "Model · " + e.Model}, {id: "spec", label: "Criteria", preview: e.Spec}}
+	rows := []row{{id: "name", label: e.Name, preview: "Rename judge"}, {id: "kind", label: "Judge · " + e.Kind}, {id: "model", label: "Model · " + e.Model}, {id: "spec", label: "Criteria", preview: e.Spec}}
 	if e.Kind == "llm" {
 		rows = append(rows, row{id: "prompt", label: "Judge prompt", preview: e.Prompt})
 	} else {
@@ -79,7 +81,7 @@ func (m *model) openEvaluator(id string) tea.Cmd {
 }
 func (m *model) evaluationIDs() []string {
 	var ids []string
-	for _, e := range m.data.Evaluations {
+	for _, e := range m.collectionItems() {
 		if m.evalSelection[e.ID] {
 			ids = append(ids, e.ID)
 		}
@@ -97,17 +99,8 @@ func (m *model) evaluationTargets() []map[string]any {
 			targets = append(targets, map[string]any{"node": id})
 		}
 	case 3:
-		if args, ok := m.conversationTarget(); ok {
+		if args, ok := m.loomConversationTarget(); ok {
 			return []map[string]any{args}
-		}
-		if r := m.targetRow(); r.kind == "simulation" {
-			for _, run := range m.data.SimulationRuns {
-				if run.ID == r.id {
-					for i := 0; i < run.Count; i++ {
-						targets = append(targets, map[string]any{"run": r.id, "conversation": i})
-					}
-				}
-			}
 		}
 	case 4:
 		for _, id := range m.evaluationIDs() {
@@ -116,40 +109,93 @@ func (m *model) evaluationTargets() []map[string]any {
 	}
 	return targets
 }
-func parseEvalOptions(input string) (bool, error) {
-	fields := strings.Fields(input)
-	if len(fields) == 1 {
-		return false, nil
+func parseEvalOptions(input string) (string, bool, error) {
+	words, err := generationWords(input)
+	if err != nil {
+		return "", false, err
 	}
-	if len(fields) == 3 && fields[1] == "--train-on-pass" && (fields[2] == "true" || fields[2] == "false") {
-		return fields[2] == "true", nil
+	name := ""
+	auto := false
+	for i := 1; i < len(words); i++ {
+		key, value, inline := strings.Cut(words[i], "=")
+		if key == "--train-on-pass" {
+			if !inline {
+				i++
+				if i >= len(words) {
+					return "", false, fmt.Errorf("--train-on-pass needs true or false")
+				}
+				value = words[i]
+			}
+			if value != "true" && value != "false" {
+				return "", false, fmt.Errorf("--train-on-pass needs true or false")
+			}
+			auto = value == "true"
+		} else if !strings.HasPrefix(key, "-") && name == "" {
+			name = words[i]
+		} else {
+			return "", false, fmt.Errorf("use /eval [name] [--train-on-pass true|false]")
+		}
 	}
-	if len(fields) == 2 && (fields[1] == "--train-on-pass=true" || fields[1] == "--train-on-pass=false") {
-		return strings.HasSuffix(fields[1], "=true"), nil
-	}
-	return false, fmt.Errorf("use /eval [--train-on-pass true|false]")
+	return name, auto, nil
 }
 func (m *model) openEval(input string) tea.Cmd {
-	auto, err := parseEvalOptions(input)
+	name, auto, err := parseEvalOptions(input)
 	if err != nil {
-		m.status = "Error: " + err.Error()
+		m.status = err.Error()
 		return nil
 	}
-	targets := m.evaluationTargets()
-	if len(targets) == 0 {
-		m.status = "Select saved documents or conversations to evaluate"
+	if name == "" {
+		name = m.data.ActiveEvaluation
+		if m.section == 4 && m.evalCollection != "" {
+			name = m.evalCollection
+		}
+	}
+	var group *evaluationCollection
+	for i := range m.data.EvaluationSets {
+		c := &m.data.EvaluationSets[i]
+		if c.ID == name || c.Name == name {
+			group = c
+			break
+		}
+	}
+	if group == nil {
+		m.status = "Choose an active evaluation in Evaluate, or use /eval name"
 		return nil
 	}
-	if len(m.data.Evaluators) == 0 {
-		m.status = "Create an evaluation in /policy, then run /eval"
-		return m.openEvaluators()
+	args := map[string]any{"collection": group.ID, "train_on_pass": auto}
+	if m.section == 4 {
+		ids := m.evaluationIDs()
+		if len(ids) == 0 {
+			for _, item := range m.collectionItems() {
+				if item.Status != "complete" {
+					ids = append(ids, item.ID)
+				}
+			}
+		}
+		if len(ids) == 0 {
+			m.status = "Select items or add material to this evaluation first"
+			return nil
+		}
+		if m.evalCollection != group.ID {
+			m.status = "Open that evaluation and add the items first"
+			return nil
+		}
+		args["items"] = ids
+	} else {
+		targets := m.evaluationTargets()
+		if len(targets) == 0 {
+			m.status = "Select a document or conversation first"
+			return nil
+		}
+		args["targets"] = targets
 	}
-	d := &dialog{kind: "eval-run", title: fmt.Sprintf("%d selected · train on pass: %t", len(targets), auto), args: map[string]any{"targets": targets, "train_on_pass": auto}}
-	for _, e := range m.data.Evaluators {
-		d.rows = append(d.rows, row{id: e.ID, label: e.Name + " · " + e.Kind, preview: e.Spec})
+	cmd := m.send("evaluation.collection.run", args)
+	if cmd != nil {
+		m.dialog = nil
+		m.section = 4
+		m.enterCollection(group.ID)
 	}
-	m.dialog = d
-	return nil
+	return cmd
 }
 func evaluationStatus(e evaluationSummary) string {
 	if e.Status == "failed" {
@@ -158,77 +204,25 @@ func evaluationStatus(e evaluationSummary) string {
 	if e.Status != "complete" {
 		return e.Status
 	}
+	if e.Passed == nil {
+		return "EVIDENCE"
+	}
 	if e.Passed != nil && *e.Passed {
 		return "PASS"
 	}
 	return "FAIL"
 }
-func (m *model) evaluationRows() []row {
-	filter := m.evalFilter
-	if filter == "" {
-		filter = "all"
-	}
-	rows := []row{{id: "filter", kind: "eval-filter", label: "Filter · " + filter}, {id: "definitions", kind: "eval-definitions", label: "Evaluation definitions · /policy"}}
-	for i := len(m.data.Evaluations) - 1; i >= 0; i-- {
-		e := m.data.Evaluations[i]
-		status := evaluationStatus(e)
-		if filter == "training" && !e.Training || filter == "pass" && status != "PASS" || filter == "fail" && status != "FAIL" || filter == "unfinished" && e.Status == "complete" {
-			continue
-		}
-		mark := "  "
-		if m.evalSelection[e.ID] {
-			mark = "✓ "
-		}
-		train := ""
-		if e.Training {
-			train = " ★"
-		}
-		rows = append(rows, row{id: e.ID, kind: "evaluation", label: mark + status + train + " · " + e.Title, preview: e.Evaluator + " · " + e.Kind + " · " + e.Created})
-	}
-	return rows
-}
+func (m *model) evaluationRows() []row { return m.collectionRows() }
 func (m *model) evaluationView(width int) string {
 	if m.evaluation == nil || m.evaluation.ID != m.targetRow().id {
-		return "Evaluate saved documents or conversations with /eval.\n\nConfigure judges and criteria in /policy.\n\nSPACE selects items · ENTER actions\n/keep marks for training · /remove unmarks\n/snapshot exports marked items with metadata."
-	}
-	e := m.evaluation
-	status := e.Status
-	if status == "failed" {
-		status = "ERROR"
-	}
-	if e.Status == "complete" {
-		status = "FAIL"
-		if e.Result.Passed {
-			status = "PASS"
+		if c := m.currentEvaluation(); c != nil {
+			return c.Name + "\n\nAdd saved documents, conversations or existing judgments. Adding does not run inference.\n\nRun selected or pending items with /eval. Configure this evaluation with /config.\nSPACE selects · ENTER opens · /keep marks for training"
 		}
+		return "Evaluations\n\nOpen a named collection to see its items and judgments, or create one.\nThe active evaluation is used by /eval from documents and conversations."
 	}
-	header := bold.Render(status)
-	if e.Status == "failed" || status == "FAIL" {
-		header = m.accent("#A84F39", "#DB937C").Render(status)
-	}
-	if e.Training {
-		header += " · ★ Training"
-	}
-	text := header + "\n" + safe(e.Definition.Name) + fmt.Sprintf(" · %s · revision %d", e.Definition.Kind, e.Definition.Revision) + "\nJudge: " + safe(e.Definition.Model) + "\n\n"
-	if len(e.GenerationModels) > 0 {
-		text += "Generated by: " + safe(strings.Join(e.GenerationModels, " · ")) + "\n\n"
-	}
-	text += "Criteria\n" + safe(e.Definition.Spec) + "\n\n"
-	if e.Error != "" {
-		text += m.accent("#A84F39", "#DB937C").Render(safe(e.Error)) + "\n\n"
-	}
-	if e.Result.Reason != "" {
-		text += "Result\n" + safe(e.Result.Reason) + "\n\n"
-	}
-	if e.Result.Evidence != "" {
-		text += "Evidence\n" + m.humanStyle().Render(safe(e.Result.Evidence)) + "\n\n"
-	}
-	if e.Note != "" {
-		text += "Notes\n" + safe(e.Note) + "\n\n"
-	}
-	text += "Evaluated text\n\n" + safe(e.Text)
-	return ansi.Wrap(text, width, "")
+	return m.collectionItemView(m.evaluation, width)
 }
+
 func (m *model) evaluationActions() tea.Cmd {
 	if len(m.evaluationIDs()) == 0 {
 		return nil
@@ -242,9 +236,9 @@ func (m *model) evalAction(id string) tea.Cmd {
 	ids := m.evaluationIDs()
 	switch id {
 	case "keep", "remove":
-		return m.send("evaluation.annotate", map[string]any{"ids": ids, "training": id == "keep"})
+		return m.send("evaluation.item.annotate", map[string]any{"collection": m.evalCollection, "ids": ids, "training": id == "keep"})
 	case "snapshot":
-		return m.send("evaluation.export", nil)
+		return m.send("evaluation.collection.export", map[string]any{"collection": m.evalCollection})
 	case "notes":
 		if m.evaluation == nil || m.evaluation.ID != m.targetRow().id {
 			return m.previewTarget()
@@ -274,6 +268,9 @@ func (m *model) evalAction(id string) tea.Cmd {
 
 // All forms reuse Carla's existing parent/back stack and correlated saves.
 func (m *model) submitEvaluation(d *dialog) tea.Cmd {
+	if strings.HasPrefix(d.kind, "eval-collection") || d.kind == "eval-judges" || d.kind == "eval-add-items" {
+		return m.submitCollection(d)
+	}
 	if len(d.fields) > 0 {
 		if d.kind == "eval-new" {
 			if strings.TrimSpace(d.fields[0].input.Value()) == "" {
@@ -330,7 +327,7 @@ func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 		}
 		return parent(m.openEvaluator(r.id))
 	case "eval-new-kind":
-		n := &dialog{kind: "eval-new", title: "New evaluation", parent: d.parent, args: map[string]any{"kind": r.id}}
+		n := &dialog{kind: "eval-new", title: "New judge", parent: d.parent, args: map[string]any{"kind": r.id}}
 		n.add("Name", "")
 		m.dialog = n
 		return n.fields[0].input.Focus()
@@ -403,20 +400,6 @@ func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 		}
 		m.dialog = d.parent.parent
 		return m.send("evaluation.definition.delete", d.args)
-	case "eval-run":
-		args := d.args
-		args["definition"] = r.id
-		// Claim the request before navigation can request a preview. Otherwise
-		// the preview's pending flag can silently drop a same-tab rerun.
-		cmd := m.send("evaluation.run", args)
-		if cmd != nil {
-			m.dialog = nil
-			m.switchSection(4)
-			m.evalStarting = true
-			m.evalFilter, m.filter = "", ""
-			m.evalSelection = map[string]bool{}
-		}
-		return cmd
 	case "eval-filter":
 		m.evalFilter = r.id
 		m.evalSelection = map[string]bool{}

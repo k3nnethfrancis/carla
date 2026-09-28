@@ -229,7 +229,7 @@ func (m *model) navigation(r rect) string {
 					count++
 				}
 			}
-			footer = fmt.Sprintf("%d selected · ENTER actions", count)
+			footer = fmt.Sprintf("%d selected · ENTER opens", count)
 		}
 		if m.section == 1 || m.section == 2 {
 			footer = fmt.Sprintf("%d selected · %s actions", len(m.selectedBranches()), m.keyLabel("nav.enter"))
@@ -329,7 +329,7 @@ func (m *model) renderDialog() string {
 		if d.choicePicker() {
 			footer = "←→ choose · SPACE / ENTER apply · ESC back"
 		}
-		if d.kind == "sim-documents" {
+		if d.kind == "sim-documents" || d.kind == "eval-judges" || d.kind == "eval-add-items" {
 			footer = "SPACE select · CTRL+S save · ESC cancel"
 		}
 		if d.query != "" {
@@ -392,7 +392,7 @@ func (m *model) renderDialog() string {
 		if d.choicePicker() {
 			footer = "←→ choose · SPACE / ENTER apply · ESC back"
 		}
-		if d.kind == "sim-documents" {
+		if d.kind == "sim-documents" || d.kind == "eval-judges" || d.kind == "eval-add-items" {
 			footer = "No anthology documents. Keep a branch first. ESC close"
 		}
 		body = append(body, line(footer, r.w-4))
@@ -480,14 +480,21 @@ func (m *model) View() tea.View {
 		modelName = "Next: " + modelName
 	}
 	if m.section == 4 {
-		training := 0
-		for _, e := range m.data.Evaluations {
-			if e.Training {
-				training++
+		items, training := 0, 0
+		for _, group := range m.data.EvaluationSets {
+			if m.evalCollection != "" && group.ID != m.evalCollection {
+				continue
+			}
+			for _, item := range group.Items {
+				items++
+				if item.Training {
+					training++
+				}
 			}
 		}
-		modelName = fmt.Sprintf("%d evaluations · %d training", len(m.data.Evaluations), training)
+		modelName = fmt.Sprintf("%d collections · %d items · %d training", len(m.data.EvaluationSets), items, training)
 	}
+
 	header := line(bold.Render(heading), max(20, m.width/2)) + dim.Render(line(safe(modelName), max(1, m.width-2-max(20, m.width/2))))
 	lines := []string{"", " " + header, m.sectionBar(), lipgloss.NewStyle().PaddingLeft(1).Render(lipgloss.JoinHorizontal(lipgloss.Top, joinPanels(parts)...)), " " + dim.Render(line(m.targetLabel(), m.width-2))}
 	if m.section == 0 && m.editing == "" {
@@ -520,7 +527,7 @@ func (m *model) View() tea.View {
 		if m.section == 0 {
 			legend = m.keyLabel("select") + " select · " + m.keyLabel("nav.enter") + " to Branches · " + m.keyLabel("nav.next") + " next"
 		} else if m.section == 4 {
-			legend = m.keyLabel("select") + " select · " + m.keyLabel("nav.enter") + " actions · /eval · /policy"
+			legend = m.keyLabel("select") + " select · " + m.keyLabel("nav.enter") + " opens · /eval · /config"
 			if m.focus == 1 {
 				legend = "↑↓ scroll · TAB next · /inspect · /notes"
 			}

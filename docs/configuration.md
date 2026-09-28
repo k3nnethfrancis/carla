@@ -153,7 +153,7 @@ configs, traces or dataset exports. Saving a key does not make a paid request or
 verify provider authentication; provider errors remain visible when used.
 
 Checks apply to character replies and document continuations. In `/policy` →
-Monitoring → When to check, toggle after-reply and during-reply checks separately.
+Monitoring → Heartbeat, toggle after-reply and during-reply checks separately.
 Both default to on, with a 512-output-token interval when monitoring is enabled.
 Turning during-reply checks off preserves the interval. Legacy interval 0 still
 disables mid-reply checks. Only one check per
@@ -165,11 +165,13 @@ not a locally calibrated guarantee. A Stop affects only the flagged conversation
 
 ## Policy and evaluation configuration
 
-Use `/policy` for monitoring, selection, and saved evaluations. `/config` now
-contains only generation settings. Each saved evaluation chooses a local LLM or
-Jev judge, criteria, and (for Jev) a pass-probability threshold. Local judging also
-exposes its complete system prompt. Definitions are workspace-local and revisioned;
-existing results keep the definition used at execution time. See
+Use `/policy` for monitoring, selection and reusable judge configurations.
+Each judge chooses a local LLM or Jev, criteria, and (for Jev) a probability
+threshold. Local judging exposes its complete system prompt. Definitions are
+workspace-local and revisioned; results keep the definition used at execution.
+In Evaluate, `/config` configures the opened collection: its name, judges and
+active status. Elsewhere it configures generation. Adding collection items and
+running judges are separate actions. See
 [commands](commands.md#policies-and-evaluated-datasets) for targeting and exports.
 
 Choice rows in policy configuration support Space to cycle forward and Left/Right
@@ -190,6 +192,6 @@ Disabling a behavior skips it while retaining its settings.
 
 Long specs, criteria and prompts use the full document editor. Text wraps and
 scrolls with the cursor; use arrows, Page Up/Page Down or the mouse wheel to
-navigate. The heading shows the current line and total lines. New evaluations
+navigate. The heading shows the current line and total lines. New judges
 ask for a name first, then open this editor for criteria. Saving preserves the
 complete multiline text, including content outside the visible window.

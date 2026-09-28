@@ -256,6 +256,10 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if m.dialog != nil {
 			return m, m.dialogKey(msg)
 		}
+		if key == "nav.back" && m.section == 4 && m.evalCollection != "" && m.focus == 0 && !m.sectionFocus {
+			m.enterCollection("")
+			return m, nil
+		}
 		if m.sectionFocus {
 			if m.boundAction(raw, "panels") == "commands" {
 				return m, m.focusCommand(true)

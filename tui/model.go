@@ -71,7 +71,9 @@ type simulationRun struct {
 	Conversations     []simulationConversation
 }
 type state struct {
-	MonitorKeySource string `json:"monitor_key_source"`
+	EvaluationSets   []evaluationCollection `json:"evaluation_sets"`
+	ActiveEvaluation string                 `json:"active_evaluation"`
+	MonitorKeySource string                 `json:"monitor_key_source"`
 	Evaluators       []evaluator
 	Evaluations      []evaluationSummary
 	EvaluationPrompt string `json:"evaluation_prompt"`
@@ -123,11 +125,12 @@ type dialog struct {
 type loomTile struct{ ID, Title, Text, Status string }
 
 type model struct {
+	evalCollection         string
+	evalCreating           bool
 	behaviorDraft          *loomDimension
 	behaviorEditID         string
 	behaviorCreating       string
 	evalViewedID           string
-	evalStarting           bool
 	evaluation             *evaluationRecord
 	evaluationRaw          json.RawMessage
 	evalSelection          map[string]bool
@@ -327,8 +330,11 @@ func (m *model) activate() tea.Cmd {
 	m.selected = min(m.selected, len(rows)-1)
 	r := rows[m.selected]
 	switch r.kind {
+	case "eval-collection", "eval-create", "eval-back", "eval-config", "eval-add", "eval-execute":
+		return m.evaluationCollectionAction(r.kind, r.id)
 	case "evaluation":
-		return m.evaluationActions()
+		m.focus = 1
+		return m.previewTarget()
 	case "eval-definitions":
 		return m.openEvaluators()
 	case "eval-filter":
@@ -439,7 +445,7 @@ func (m *model) saveEditor() tea.Cmd {
 	}
 	if strings.HasPrefix(kind, "evaluation-") {
 		if kind == "evaluation-note" {
-			return m.submitEditor("evaluation.annotate", map[string]any{"ids": []string{m.evalEditingID}, "note": text})
+			return m.submitEditor("evaluation.item.annotate", map[string]any{"collection": m.evalCollection, "ids": []string{m.evalEditingID}, "note": text})
 		}
 		args := m.evaluator(m.evalEditingID).args()
 		args[strings.TrimPrefix(kind, "evaluation-")] = text
@@ -680,6 +686,10 @@ func (m *model) apply(e event) tea.Cmd {
 			m.behaviorDraft = nil
 		}
 		m.refreshConfig()
+		if m.evalCreating {
+			m.evalCreating = false
+			m.enterCollection(m.data.ActiveEvaluation)
+		}
 		if createdBehavior != "" && m.dialog != nil && m.dialog.kind == "loom-policy-behaviors" {
 			for i, r := range m.dialog.rows {
 				if r.id == createdBehavior {
@@ -699,7 +709,7 @@ func (m *model) apply(e event) tea.Cmd {
 		if oldWorkspace != m.data.Workspace.Path {
 			m.behaviorDraft = nil
 			m.behaviorCreating = ""
-			m.evalStarting = false
+			m.evalCollection = ""
 			m.evaluation = nil
 			m.evalViewedID = ""
 			m.evaluationRaw = nil
@@ -788,11 +798,7 @@ func (m *model) apply(e event) tea.Cmd {
 				delete(m.branchSelection, id)
 			}
 		}
-		if m.evalStarting && len(m.data.Evaluations) > 0 && m.section == 4 {
-			m.selected = 2
-			m.evalStarting = false
-			m.focus = 0
-		}
+
 		m.selected = max(0, min(m.selected, len(m.rows())-1))
 		if oldID != m.currentID() {
 			m.previewChangePending = (m.section == 1 || m.section == 2) && !m.data.Busy && m.editing == ""
@@ -869,7 +875,6 @@ func (m *model) apply(e event) tea.Cmd {
 		m.reflow()
 		m.inspector.GotoTop()
 	case "error":
-		m.evalStarting = false
 		if m.editRequest != "" && e.ID != "" && e.ID != m.editRequest {
 			return nil
 		}

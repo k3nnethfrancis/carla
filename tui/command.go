@@ -41,13 +41,13 @@ func (m *model) commandChoices() []action {
 	}
 	actions := m.contextualActions()
 	for _, a := range allActions {
-		if a.id == "eval" && len(m.evaluationTargets()) == 0 {
+		if a.id == "eval" && len(m.evaluationTargets()) == 0 && !(m.section == 4 && len(m.collectionItems()) > 0) {
 			continue
 		}
 		if m.section == 4 {
 			canonical := m.canonicalCommand(a.id)
 			switch canonical {
-			case "loom", "branch", "configure", "models", "rename", "review", "clear", "grid", "import":
+			case "loom", "branch", "models", "rename", "review", "clear", "grid", "import":
 				continue
 			}
 			if a.id == "inspect" || a.id == "notes" || a.id == "keep" || a.id == "remove" {
@@ -410,7 +410,7 @@ func (m *model) prioritizePageCommands(actions []action) {
 	case 2:
 		preferred = []string{"snapshot", "remove", "inspect", "notes", "edit", "simulator", "continue", "loom", "branch"}
 	case 4:
-		preferred = []string{"eval", "keep", "remove", "notes", "inspect", "snapshot", "policy", "find"}
+		preferred = []string{"eval", "configure", "keep", "remove", "notes", "inspect", "snapshot", "policy", "find"}
 	case 3:
 		preferred = []string{"loom", "configure", "clear", "branch", "edit", "visitor", "inspect", "anthology"}
 	}

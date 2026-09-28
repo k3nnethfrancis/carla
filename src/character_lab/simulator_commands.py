@@ -7,7 +7,7 @@ Simulator's command arguments and emits its domain events through that session.
 import copy
 from uuid import uuid4
 
-from . import credentials, monitor, simulator
+from . import credentials, evaluation_sets, monitor, simulator
 from .exploration import require_selector
 
 
@@ -148,6 +148,11 @@ async def dispatch(session, command, args, request_id):
         simulator.validate(config, p, session.validate_settings)
         if not config["documents"] and not config.get("preview") and not seed:
             raise ValueError("Select at least one anthology document in Simulator")
-        await session.start_simulation(config, seed, request_id)
+        await session.start_simulation(
+            config,
+            seed,
+            request_id,
+            evaluation_sets.plan(session, args["eval"]) if args.get("eval") else None,
+        )
         return
     raise ValueError("Unknown simulator command: " + command)

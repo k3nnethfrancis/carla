@@ -177,14 +177,14 @@ def interrupt_pending(project):
         project.save()
 
 
-async def evaluate(session, records):
+async def evaluate(session, records, *, manage_job=True):
     project = session.project
     judge = None
     try:
-        definition = records[0]["definition"]
-        if definition["kind"] == "llm":
-            judge = session.runtime_factory(project.folder, session.policy_model)
         for index, record in enumerate(records):
+            definition = record["definition"]
+            if definition["kind"] == "llm" and judge is None:
+                judge = session.runtime_factory(project.folder, session.policy_model)
             record["status"] = "running"
             project.save()
             await session.snapshot()
@@ -264,7 +264,8 @@ async def evaluate(session, records):
         if judge:
             judge.close()
         project.save()
-        session.job = None
+        if manage_job:
+            session.job = None
         await session.snapshot()
         passed = sum(r.get("passed") is True for r in records)
         failed = sum(r.get("passed") is False for r in records)
@@ -281,6 +282,11 @@ async def evaluate(session, records):
 
 async def dispatch(session, command, args, request_id):
     p = session.project
+    if command.startswith(("evaluation.collection.", "evaluation.item.")):
+        from .evaluation_sets import dispatch as dispatch_collection
+
+        await dispatch_collection(session, command, args, request_id)
+        return
     if command == "evaluation.configure":
         save_definition(p, args)
     elif command == "evaluation.definition.delete":

@@ -84,7 +84,8 @@ func TestWorkspaceViewPersistsNavigationAndHandlesStaleFile(t *testing.T) {
 func TestWorkspaceViewRestoresEvaluation(t *testing.T) {
 	m := fixture()
 	m.data.Workspace.Path = t.TempDir()
-	m.data.Evaluations = []evaluationSummary{{ID: "review", Title: "Reviewed trace"}}
+	m.evalCollection = "set"
+	m.data.EvaluationSets = []evaluationCollection{{ID: "set", Items: []evaluationSummary{{ID: "review", Title: "Reviewed trace"}}}}
 	m.section = 4
 	for i, r := range m.rows() {
 		if r.id == "review" {

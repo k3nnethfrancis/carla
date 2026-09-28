@@ -10,10 +10,13 @@ import (
 // The tab defines what the positional count produces. Tokens are always a cap.
 type generationOptions struct {
 	Count, Tokens, Turns, Loops int
-	Message                     string
+	Message, Evaluation         string
 }
 
 func (o generationOptions) apply(args map[string]any) {
+	if o.Evaluation != "" {
+		args["eval"] = o.Evaluation
+	}
 	if o.Message != "" {
 		args["message"] = o.Message
 	}
@@ -53,7 +56,7 @@ func parseGenerationOptions(input, id string) (generationOptions, error) {
 				key = "--count"
 			}
 		}
-		if key != "--tokens" && (id != "loom" || (key != "--count" && key != "-n" && key != "--turns" && key != "--loops" && key != "--msg" && key != "--message")) {
+		if key != "--tokens" && (id != "loom" || (key != "--count" && key != "-n" && key != "--turns" && key != "--loops" && key != "--msg" && key != "--message" && key != "--eval")) {
 			return fail()
 		}
 		if key == "--msg" {
@@ -72,6 +75,13 @@ func parseGenerationOptions(input, id string) (generationOptions, error) {
 				return fail()
 			}
 			value = fields[i]
+		}
+		if key == "--eval" {
+			if strings.TrimSpace(value) == "" {
+				return fail()
+			}
+			out.Evaluation = value
+			continue
 		}
 		if key == "--message" {
 			if strings.TrimSpace(value) == "" {

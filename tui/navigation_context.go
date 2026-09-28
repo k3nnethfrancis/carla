@@ -93,6 +93,8 @@ func (m *model) refreshConfig() {
 		return
 	}
 	switch d.kind {
+	case "eval-collection-config":
+		m.openCollectionConfig()
 	case "eval-definitions":
 		m.openEvaluators()
 	case "eval-definition":
