@@ -629,6 +629,9 @@ func (m *model) nodeTitle() string {
 	case "visitor_brief":
 		return "Visitor brief"
 	}
+	if m.editing == "monitor_spec" {
+		return "Behavior spec · " + m.dimension(m.behaviorEditID).Name
+	}
 	if m.editing == "policy_spec" {
 		return "Selection spec"
 	}

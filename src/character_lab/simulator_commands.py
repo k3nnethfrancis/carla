@@ -30,11 +30,11 @@ async def dispatch(session, command, args, request_id):
                     id="custom_" + uuid4().hex,
                     name=args["name"],
                     spec=args["spec"],
-                    enabled=True,
-                    action="warn",
-                    color="amber",
-                    decision="most_likely",
-                    threshold=0.8,
+                    enabled=args.get("enabled", True),
+                    action=args.get("action", "warn"),
+                    color=args.get("color", "amber"),
+                    decision=args.get("decision", "most_likely"),
+                    threshold=args.get("threshold", 0.8),
                 )
             )
         else:

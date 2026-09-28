@@ -24,6 +24,9 @@ func (m *model) dimensions() []loomDimension {
 	return out
 }
 func (m *model) dimension(id string) loomDimension {
+	if id == "draft" && m.behaviorDraft != nil {
+		return *m.behaviorDraft
+	}
 	for _, d := range m.dimensions() {
 		if d.ID == id {
 			return d
@@ -51,19 +54,10 @@ func (m *model) openLoomPolicy() tea.Cmd {
 		row{id: "model", label: "Model · " + m.simString("monitor_model")},
 		row{id: "timing", label: "Heartbeat · " + m.monitorTimingSummary(), preview: "Shared with document continuations; Visitor messages are not checked."},
 	)
-	for _, item := range m.dimensions() {
-		status := "Off"
-		if item.Enabled {
-			status = strings.Title(item.Action)
-		}
-		origin := "custom"
-		if item.builtin() {
-			origin = "default"
-		}
-		d.rows = append(d.rows, row{id: item.ID, label: item.Name + " · " + status, preview: origin + " · " + item.Spec})
-	}
-	d.rows = append(d.rows, row{id: "key", label: "API key · " + m.data.MonitorKeySource, preview: "Replace the saved key. Keys stay outside workspaces and exported traces."})
-	d.rows = append(d.rows, row{id: "new", label: "+ New dimension"})
+	d.rows = append(d.rows,
+		row{id: "behaviors", label: "Behaviors", preview: "Define what to detect and what happens when it is detected."},
+		row{id: "key", label: "API key · " + m.data.MonitorKeySource, preview: "Replace the saved key. Keys stay outside workspaces and exported traces."},
+	)
 	m.dialog = d
 	return nil
 }
@@ -74,10 +68,10 @@ func (m *model) openDimension(id string) tea.Cmd {
 		decision = fmt.Sprintf("Probability ≥ %.0f%%", item.Threshold*100)
 	}
 	d := &dialog{kind: "loom-policy-dimension", title: item.Name, args: map[string]any{"id": id}, rows: []row{
-		{id: "enabled", label: fmt.Sprintf("Enabled · %t", item.Enabled)},
+		{id: "enabled", label: "Enabled · " + map[bool]string{true: "On", false: "Off"}[item.Enabled], preview: "Off skips this behavior entirely; its detection and action settings remain saved."},
 		{id: "name", label: "Name · " + item.Name}, {id: "spec", label: "Behavior spec", preview: item.Spec},
 		{id: "action", label: "Action · " + item.Action, preview: "Warn highlights a detection. Stop interrupts this conversation, including an in-progress reply."},
-		{id: "decision", label: "Decision · " + decision, preview: "Most likely: P(yes) > 50%. Threshold: P(yes) ≥ your cutoff. These are model estimates, not calibrated certainty."},
+		{id: "decision", label: "Detection rule · " + decision, preview: "Determines when the behavior counts as detected. Most likely: estimated probability > 50%. Threshold: probability ≥ your cutoff. Action then decides Warn or Stop; probabilities are not calibrated confidence."},
 	}}
 	if item.Decision == "threshold" {
 		d.rows = append(d.rows, row{id: "threshold", label: fmt.Sprintf("Threshold · %.0f%%", item.Threshold*100)})
@@ -85,8 +79,11 @@ func (m *model) openDimension(id string) tea.Cmd {
 	if item.Action == "warn" {
 		d.rows = append(d.rows, row{id: "color", label: "Warning color · " + item.Color})
 	}
-	if !item.builtin() {
-		d.rows = append(d.rows, row{id: "delete", label: "Delete dimension"})
+	if id == "draft" {
+		d.title = "New behavior"
+		d.rows = append(d.rows, row{id: "create", label: "Create behavior", preview: "Save the name, full spec and all settings shown here."})
+	} else if !item.builtin() {
+		d.rows = append(d.rows, row{id: "delete", label: "Delete behavior"})
 	}
 	m.dialog = d
 	return nil
@@ -107,10 +104,7 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 		for k, v := range d.args {
 			args[k] = v
 		}
-		if d.kind == "loom-policy-new" {
-			args["name"], args["spec"] = d.fields[0].input.Value(), d.fields[1].input.Value()
-			return m.saveDialog(d, "loom-policy.add", args)
-		}
+
 		field := args["field"].(string)
 		delete(args, "field")
 		args[field] = d.fields[0].input.Value()
@@ -154,10 +148,23 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 		}
 		return m.send("simulator.configure", args)
 	}
+	if d.kind == "loom-policy-behaviors" {
+		if r.id == "new" {
+			m.behaviorDraft = &loomDimension{ID: "draft", Enabled: true, Action: "warn", Color: "amber", Decision: "most_likely", Threshold: .8}
+			m.openDimension("draft")
+		} else {
+			m.openDimension(r.id)
+		}
+		m.dialog.parent = d
+		return nil
+	}
 	if d.kind == "loom-policy" {
 		switch r.id {
 		case "key":
 			return m.openMonitorKey(d)
+		case "behaviors":
+			m.openBehaviors()
+			m.dialog.parent = d
 		case "timing":
 			m.openMonitorTiming()
 			m.dialog.parent = d
@@ -165,15 +172,7 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 			m.policyPicker(d, "", "monitor_mode", []string{"off", "jev"})
 		case "model":
 			m.policyForm(d, "", "monitor_model", m.simString("monitor_model"))
-		case "new":
-			n := &dialog{kind: "loom-policy-new", title: "New dimension", parent: d, args: map[string]any{}}
-			n.add("Name", "")
-			n.add("Brief behavior spec", "")
-			m.dialog = n
-			return n.fields[0].input.Focus()
-		default:
-			m.openDimension(r.id)
-			m.dialog.parent = d
+
 		}
 		if m.dialog != nil && len(m.dialog.fields) > 0 {
 			return m.dialog.fields[0].input.Focus()
@@ -184,11 +183,26 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 	item := m.dimension(id)
 	switch r.id {
 	case "enabled":
-		return m.send("loom-policy.update", map[string]any{"id": id, "enabled": !item.Enabled})
+		return m.updateBehavior(map[string]any{"id": id, "enabled": !item.Enabled})
 	case "name":
 		m.policyForm(d, id, r.id, item.Name)
 	case "spec":
-		m.policyForm(d, id, r.id, item.Spec)
+		m.behaviorEditID = id
+		cmd := m.beginEdit("monitor_spec")
+		m.editReturn, m.dialog = d, nil
+		m.reflow()
+		return cmd
+	case "create":
+		if strings.TrimSpace(item.Name) == "" || strings.TrimSpace(item.Spec) == "" {
+			m.status = "Add a name and behavior spec before creating"
+			d.rows[d.index].preview = m.status
+			return nil
+		}
+		request, cmd := m.dispatch("loom-policy.add", item.args())
+		if cmd != nil {
+			m.behaviorCreating = request
+		}
+		return cmd
 	case "threshold":
 		m.numberConfig("loom-policy", "threshold", item.Threshold*100, id)
 		m.dialog.title = "Probability threshold · ↑↓ 1% · ←→ 10%"
@@ -217,7 +231,16 @@ func (m *model) policyPicker(parent *dialog, id, field string, values []string) 
 	d := &dialog{kind: "loom-policy-pick", title: strings.Title(field), parent: parent, args: map[string]any{"id": id, "field": field}}
 	for _, v := range values {
 		label := strings.Title(strings.ReplaceAll(v, "_", " "))
-		d.rows = append(d.rows, row{id: v, label: label})
+		preview := ""
+		if field == "decision" {
+			d.title = "Detection rule"
+			if v == "most_likely" {
+				preview = "Detected when the judge estimates probability above 50%. The configured action then runs."
+			} else {
+				preview = "Detected at or above your probability cutoff. The configured action then runs."
+			}
+		}
+		d.rows = append(d.rows, row{id: v, label: label, preview: preview})
 	}
 	m.dialog = d
 }

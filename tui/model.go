@@ -123,6 +123,9 @@ type dialog struct {
 type loomTile struct{ ID, Title, Text, Status string }
 
 type model struct {
+	behaviorDraft          *loomDimension
+	behaviorEditID         string
+	behaviorCreating       string
 	evalViewedID           string
 	evalStarting           bool
 	evaluation             *evaluationRecord
@@ -388,6 +391,8 @@ func (m *model) beginEdit(kind string) tea.Cmd {
 	text := m.currentText()
 	if kind == "character_template" || kind == "visitor_template" || kind == "visitor_brief" || kind == "opening_prompt" {
 		text = m.simString(kind)
+	} else if kind == "monitor_spec" {
+		text = m.dimension(m.behaviorEditID).Spec
 	} else if kind == "policy_spec" {
 		text = m.data.PolicySpec
 	} else if kind == "policy_prompt" {
@@ -408,6 +413,18 @@ func (m *model) saveEditor() tea.Cmd {
 		return nil
 	}
 	kind, text := m.editing, m.editor.Value()
+	if kind == "monitor_spec" {
+		args := map[string]any{"id": m.behaviorEditID, "spec": text}
+		if m.behaviorEditID == "draft" {
+			m.behaviorDraft.Spec = text
+			m.editing = ""
+			m.editor.Blur()
+			m.dialog, m.editReturn = m.editReturn, nil
+			m.refreshConfig()
+			return nil
+		}
+		return m.submitEditor("loom-policy.update", args)
+	}
 	if strings.HasPrefix(kind, "evaluation-") {
 		if kind == "evaluation-note" {
 			return m.submitEditor("evaluation.annotate", map[string]any{"ids": []string{m.evalEditingID}, "note": text})
@@ -632,7 +649,29 @@ func (m *model) apply(e event) tea.Cmd {
 		if !m.data.Busy {
 			m.capacityStatus = ""
 		}
+		createdBehavior := ""
+		if m.behaviorCreating != "" && e.ID == m.behaviorCreating {
+			if items := m.dimensions(); len(items) > 0 {
+				createdBehavior = items[len(items)-1].ID
+			}
+			m.behaviorCreating = ""
+			for d := m.dialog; d != nil; d = d.parent {
+				if d.kind == "loom-policy-dimension" && d.args["id"] == "draft" {
+					m.dialog = d.parent
+					break
+				}
+			}
+			m.behaviorDraft = nil
+		}
 		m.refreshConfig()
+		if createdBehavior != "" && m.dialog != nil && m.dialog.kind == "loom-policy-behaviors" {
+			for i, r := range m.dialog.rows {
+				if r.id == createdBehavior {
+					m.dialog.index = i
+					break
+				}
+			}
+		}
 		if m.dialog != nil && m.dialog.kind == "keys" && m.keySaving && m.keyDraft != nil {
 			if reflect.DeepEqual(m.keyDraft, m.data.Bindings) {
 				m.dialog = nil
@@ -642,6 +681,8 @@ func (m *model) apply(e event) tea.Cmd {
 			}
 		}
 		if oldWorkspace != m.data.Workspace.Path {
+			m.behaviorDraft = nil
+			m.behaviorCreating = ""
 			m.evalStarting = false
 			m.evaluation = nil
 			m.evalViewedID = ""
@@ -821,6 +862,7 @@ func (m *model) apply(e event) tea.Cmd {
 		m.enterLoom = false
 		m.keySaving = false
 		m.restoringView = false
+		m.behaviorCreating = ""
 		var err struct{ Message string }
 		json.Unmarshal(e.Data, &err)
 		m.pending = false

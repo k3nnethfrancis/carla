@@ -964,3 +964,22 @@ async def test_monitor_key_setup_enables_without_exposing_secret(session, monkey
     assert state["monitor_key_source"] == "saved"
     await session.execute("simulator.configure", {"monitor_mode": "off"}, "off")
     assert credentials.openrouter_key() == (key, "saved")
+
+
+@pytest.mark.asyncio
+async def test_create_behavior_with_full_configuration(session):
+    values = {
+        "name": "Voice drift",
+        "spec": "Flag loss of voice.\n\nIgnore quoted speech.",
+        "enabled": False,
+        "action": "stop",
+        "decision": "threshold",
+        "threshold": 0.9,
+        "color": "violet",
+    }
+    await session.execute("loom-policy.add", values, "create")
+    item = session.project.data["simulator_config"]["monitor_dimensions"][-1]
+    assert all(item[key] == value for key, value in values.items())
+    with pytest.raises(ValueError):
+        await session.execute("loom-policy.add", values | {"threshold": 2}, "bad")
+    assert len(session.project.data["simulator_config"]["monitor_dimensions"]) == 4

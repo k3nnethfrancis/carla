@@ -97,6 +97,8 @@ func (m *model) refreshConfig() {
 		m.openEvaluators()
 	case "eval-definition":
 		m.openEvaluator(d.args["id"].(string))
+	case "loom-policy-behaviors":
+		m.openBehaviors()
 	case "loom-policy":
 		m.openLoomPolicy()
 	case "loom-policy-timing":
@@ -139,6 +141,9 @@ func (m *model) refreshConfig() {
 }
 func (m *model) saveDialog(d *dialog, command string, args map[string]any) tea.Cmd {
 	m.dialog = d.parent
+	if command == "loom-policy.update" {
+		return m.updateBehavior(args)
+	}
 	return m.send(command, args)
 }
 func (m *model) speakerPicker() tea.Cmd {
@@ -290,6 +295,9 @@ func (m *model) filterDialog(msg tea.KeyPressMsg) bool {
 // Closing an auxiliary command such as Help restores a suspended picker/editor.
 func (m *model) closeDialog() tea.Cmd {
 	d := m.dialog
+	if d != nil && d.kind == "loom-policy-dimension" && d.args["id"] == "draft" {
+		m.behaviorDraft = nil
+	}
 	if d != nil && d.kind == "setup-busy" {
 		m.dialog = d.parent
 		m.pending = false
@@ -297,7 +305,7 @@ func (m *model) closeDialog() tea.Cmd {
 	}
 	if d != nil && d.parent != nil {
 		m.dialog = d.parent
-		if d.kind == "loom-policy-timing" {
+		if d.kind == "loom-policy-timing" || d.kind == "loom-policy-dimension" {
 			m.refreshConfig()
 		}
 		return nil

@@ -24,7 +24,12 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 	root := m.dialog
 	root.index = 3
 	m.submitDialog()
-	if m.dialog.kind != "loom-policy-dimension" || m.dialog.parent != root {
+	if m.dialog.kind != "loom-policy-behaviors" {
+		t.Fatal("missing behaviors page")
+	}
+	behaviors := m.dialog
+	m.submitDialog()
+	if m.dialog.kind != "loom-policy-dimension" || m.dialog.parent != behaviors {
 		t.Fatal("dimension lost parent")
 	}
 	for _, r := range m.dialog.rows {
@@ -42,10 +47,10 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 		t.Fatal("Escape skipped dimension")
 	}
 	m.closeDialog()
-	if m.dialog != root {
-		t.Fatal("Escape skipped policy")
+	if m.dialog.kind != "loom-policy-behaviors" {
+		t.Fatal("Escape skipped behaviors")
 	}
-	root.index = 4
+	m.dialog.index = 1
 	m.submitDialog()
 	found := false
 	for _, r := range m.dialog.rows {
@@ -63,9 +68,11 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 		t.Fatal("model field not focused")
 	}
 	m.closeDialog()
+	m.dialog.index = 3
+	m.submitDialog()
 	m.dialog.index = len(m.dialog.rows) - 1
 	m.submitDialog()
-	if len(m.dialog.fields) != 2 || m.dialog.kind != "loom-policy-new" {
+	if m.behaviorDraft == nil || m.dialog.kind != "loom-policy-dimension" {
 		t.Fatal("missing creation form")
 	}
 	for _, size := range [][2]int{{80, 24}, {120, 36}, {60, 18}} {

@@ -536,8 +536,11 @@ func (m *model) View() tea.View {
 			legend = "Arrows browse · " + m.keyLabel("select") + " select/clear · " + m.keyLabel("nav.enter") + " open · ESC list"
 		}
 	}
-	if m.section == 3 && m.conversationOpen && m.focus == 1 {
+	if m.section == 3 && m.conversationOpen && m.focus == 1 && m.editing == "" {
 		legend = "ESC grid/list · SPACE select/clear · /loom · /fork · /edit · /visitor"
+	}
+	if m.editing == "monitor_spec" {
+		legend = "/save · " + m.keyLabel("save") + " save · ESC cancel"
 	}
 	if m.notesOpen && m.focus == 0 {
 		legend = "↑↓ notes · ENTER edit note · + new · PGUP/PGDN scroll · TAB document"

@@ -176,3 +176,14 @@ Choice rows in policy configuration support Space to cycle forward and Left/Righ
 to cycle backward/forward, without opening a picker. Enter still opens the full
 picker. Heartbeat toggles use the same keys; Interval opens its numeric control.
 Typing filters the list, and the filter is retained after a setting changes.
+
+Monitoring's **Behaviors** panel lists each behavior's enabled state and action.
+**New behavior** shows the complete configuration before creation; edits stay in
+an unsaved draft until **Create behavior**. Specs use the multiline document
+editor (`/save` or the configured save binding; Escape cancels the text edit).
+Leaving the new-behavior panel discards its unsaved draft.
+
+The **Detection rule** determines whether a behavior is flagged: **Most likely**
+requires estimated probability above 50%; **Threshold** uses your chosen cutoff.
+The separate **Action** determines what follows a detection: warn or stop.
+Disabling a behavior skips it while retaining its settings.
