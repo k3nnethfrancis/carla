@@ -22,8 +22,8 @@ claims of affiliation or faithful replication:
   seed sources. Consider source-author imitation and edition/territory rights
   before using or redistributing derived datasets.
 
-A local smaller base model, a manually curated anthology, an automated Grow
-selector and raw alternating conversation templates are separate experimental
+A local smaller base model, a manually curated anthology, an automated selection-policy
+model and raw alternating conversation templates are separate experimental
 choices. Keep their effects distinct when reporting results. Preserve model
 revision/quantization, seed extraction, exact prompt, sampling, selections and
 rejected alternatives. Conversational appearance alone is not evidence of

@@ -141,12 +141,14 @@ Select conversation → /fork    → new version, no generated text
 
 ```text
 /config
-  Generation     models, prompts, sampling and source selection
+  Documents      model, sampling and context (input is the document prefix)
+  Simulator      anthology, models, prompts, opening and sampling
+  Evaluate       collection name, judges and active status
 
 /policy
   Monitoring     conditions, thresholds and warn/stop actions
   Selection      evaluator, criteria and candidate advancement
-  Evaluations    named whole-item judges, criteria and pass rules
+  Judges         reusable whole-item criteria, local prompts or Jev thresholds
 ```
 
 Configuration edits persist. Explicit command arguments override settings for that run only. Bare Loom retains the one-alternative / one-loop / one-reply behavior defined above. Saved legacy batch fields remain compatible with existing workspaces; use explicit command parameters to run batches.
@@ -165,7 +167,7 @@ Selection is classification. The criteria describe which results qualify for fur
 
 The advancement rule advances **one candidate per loop**, retaining the other alternatives. On the last loop, a verdict can identify a preferred result, but it cannot trigger an extra loop or keep a document automatically.
 
-A multi-loop run needs a configured selection policy. Missing configuration should lead to that configuration before the run begins. Single-loop runs finish for human review without requiring automatic selection.
+A multi-loop run needs a configured selection policy. Missing configuration produces an error; open `/policy` → Selection before retrying. Single-loop runs finish for human review without requiring automatic selection.
 
 ### Monitoring: what is happening during generation
 
