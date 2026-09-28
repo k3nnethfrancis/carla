@@ -56,19 +56,22 @@ save and cancel controls stay fixed so you can always recover a binding.
 
 Type `/` anywhere to open the command bar. Start typing, use ↑/↓ to select a
 suggestion, and press Enter. Commands relevant to the current page appear first.
+The highlighted suggestion shows its available arguments below it—even while
+typing a prefix such as `/lo`. `/help` explains each option; press Enter on a command for scrollable details.
 
 | Command | What it does |
 | --- | --- |
 | `/import` | Add a local text or Markdown seed to the shared Library. |
 | `/help` · `/keys` | Browse all commands or customize keyboard bindings. |
 | `/workspace` · `/model` | Choose a workspace or local model. |
-| `/config` | Generation models, prompts and sampling for this workflow. |
+| `/config` | Generation settings; in Evaluate, the opened collection and its judges. |
 | `/policy` | Monitoring, selection and reusable judge configurations. |
 | `/eval [name] --train-on-pass true` | Run active/named evaluation on selected material; optionally mark passes for training. |
 | `/evaluations` | Manage named evaluation collections, inspect judgments and export training items. |
 | `/loom` | Generate one continuation or the next Character reply. |
 | `/loom 3 --tokens 512` | In Branches, generate three alternative continuations. |
 | `/loom 3 --turns 4 --tokens 512` | In Simulator, generate three conversations, each with four new character replies. |
+| `/loom 3 --tokens 512 --eval "Voice"` | Generate alternatives, then judge completed outputs with the saved Voice evaluation. |
 | `/fork` | Fork the selected document or conversation without generating. |
 | `/keep` · `/anthology` | Keep selected branches or browse the curated anthology. |
 | `/edit` · `/save` · `/cancel` | Edit, save a new version, or discard the draft. |
@@ -77,11 +80,37 @@ suggestion, and press Enter. Commands relevant to the current page appear first.
 | `/grid` · `/active` | View Loom outputs together or jump to active generation. |
 | `/loom 3 --tokens 512 --loops 4` | Generate three alternatives per loop; selection advances one path for four loops. |
 | `/remove` | Deselect sources, unkeep anthology entries, or confirm branch deletion. Alias: `/delete`. |
-| `/snapshot` | Export anthology documents and their provenance. |
+| `/snapshot` | Export anthology documents or training-marked evaluation items with provenance. |
 | `/stop` · `/restart` · `/exit` | Stop generation, restart Carla, or exit. |
 
 [Command system](docs/commands.md) explains the complete contract; `/help` lists commands. Generation needs a configured model; `--tokens` sets
 an output ceiling, and `--turns` counts character replies rather than both speakers.
+
+### How Loom works
+
+Library, Branches and Anthology use the same document continuation operation;
+starting from Library or Anthology takes you to Branches. New outputs must be
+kept explicitly. Simulator instead extends one explicitly selected conversation,
+or starts fresh when nothing is selected. Hovering does not select a conversation;
+Space/Enter selects it and `/clear` clears it.
+
+Bare `/loom` creates one alternative, for one loop, adding one Character reply
+in Simulator. Add a count for alternatives, `--tokens N|Max` for an output cap,
+and `--turns N` for Character replies per Simulator alternative. `--msg "text"`
+(or `--message`) sets a fresh run's Visitor opener. `--eval "name"` applies a saved
+evaluation after generation. `--loops N` repeats generation and policy selection,
+advancing one candidate between loops; configure selection under `/policy` first.
+
+```text
+/loom 3 --turns 2 --tokens 512 --msg "What does a path remember?" --eval "Voice" --loops 4
+```
+
+This Simulator run generates three alternatives per loop, each adding two
+Character replies, over four loops. Selection advances one path; the completed
+outputs are then judged by Voice. The token cap applies to each speaker's
+generation, not the whole conversation. Quote names and messages containing
+spaces. `/continue`, `/generate`, `/run`, `/simulate` and `/grow` are aliases for
+`/loom` and accept the same arguments.
 
 ## Set up generation
 
