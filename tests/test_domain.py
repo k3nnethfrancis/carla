@@ -4,7 +4,7 @@ from character_lab.domain import Project, library, search
 
 
 def corpus():
-    return library()[1]
+    return next(source for source in library() if source["key"] == "meditations")
 
 
 def test_library_reads_local_numbered_documents():
