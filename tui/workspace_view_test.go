@@ -28,7 +28,7 @@ func TestWorkspaceViewRestoresLocationWithoutActions(t *testing.T) {
 		m.section, m.selected, m.focus = 0, 0, 3
 		m.expanded = map[string]bool{}
 		m.restoreWorkspaceView()
-		if m.section != section || m.targetRow().id != rowID || !m.sectionFocus || m.focus != 0 {
+		if m.section != section || m.targetRow().id != rowID || m.sectionFocus || m.focus != 3 || !m.command.Focused() {
 			t.Fatalf("section %d restored to %d/%s focus %d", section, m.section, m.targetRow().id, m.focus)
 		}
 		if m.editing != "" || m.loomConversation != nil {
@@ -37,7 +37,7 @@ func TestWorkspaceViewRestoresLocationWithoutActions(t *testing.T) {
 	}
 }
 
-func TestWorkspaceViewRestoresConversationAtTabs(t *testing.T) {
+func TestWorkspaceViewRestoresConversationAtCommandBar(t *testing.T) {
 	m := simulatorFixture()
 	m.data.Workspace.Path = t.TempDir()
 	m.selected = 4
@@ -52,8 +52,8 @@ func TestWorkspaceViewRestoresConversationAtTabs(t *testing.T) {
 	run.OpenConversation = &index
 	data, _ := json.Marshal(run)
 	m.apply(event{Type: "simulation", Data: data})
-	if !m.sectionFocus || m.focus != 0 || m.gridSelection != 1 || !m.conversationOpen || m.loomConversation != nil {
-		t.Fatal("conversation restore must preserve tab focus without checking a Loom target")
+	if m.sectionFocus || m.focus != 3 || !m.command.Focused() || m.gridSelection != 1 || !m.conversationOpen || m.loomConversation != nil {
+		t.Fatal("conversation restore must preserve command focus without checking a Loom target")
 	}
 }
 
@@ -75,7 +75,7 @@ func TestWorkspaceViewPersistsNavigationAndHandlesStaleFile(t *testing.T) {
 	for _, content := range []string{`{"section":99}`, `broken`, `{"section":1,"row":"deleted"}`} {
 		os.WriteFile(filepath.Join(m.data.Workspace.Path, "view-state.json"), []byte(content), 0600)
 		m.restoreWorkspaceView()
-		if m.section < 0 || m.section > 4 || !m.sectionFocus {
+		if m.section < 0 || m.section > 4 || m.sectionFocus || !m.command.Focused() {
 			t.Fatal("invalid startup location")
 		}
 	}
@@ -93,7 +93,7 @@ func TestWorkspaceViewRestoresEvaluation(t *testing.T) {
 	}
 	m.saveWorkspaceView()
 	m.section, m.selected = 0, 0
-	if m.restoreWorkspaceView() == nil || m.targetRow().id != "review" || !m.sectionFocus {
+	if m.restoreWorkspaceView() == nil || m.targetRow().id != "review" || m.sectionFocus || !m.command.Focused() {
 		t.Fatal("evaluation was not restored")
 	}
 }

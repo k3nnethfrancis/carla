@@ -545,7 +545,8 @@ func (m *model) apply(e event) tea.Cmd {
 		}
 		if run.Opened && m.restoringView {
 			m.restoringView = false
-			m.focus, m.sectionFocus = 0, true
+			m.focus, m.sectionFocus = 3, false
+			m.command.Focus()
 		}
 		if run.Opened {
 			if run.Forked && run.OpenConversation != nil {

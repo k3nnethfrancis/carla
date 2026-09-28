@@ -155,6 +155,6 @@ focus, editor-save acknowledgement and parent/back mechanisms as the other pages
 
 The frontend saves the last tab and document/trace row in each workspace's
 `view-state.json`, separately from project data. Startup restores that location
-with keyboard focus on the tab bar. It does not restore checked Loom targets,
+with keyboard focus in the command bar. It does not restore checked Loom targets,
 editing, dialogs, or command input. Missing/deleted rows fall back to the tab's
 first item. Navigation writes are atomic and occur only when the location changes.

@@ -44,8 +44,8 @@ func (m *model) saveWorkspaceView() {
 
 func (m *model) restoreWorkspaceView() tea.Cmd {
 	defer m.reflow()
-	m.focus, m.sectionFocus = 0, true
-	m.command.Blur()
+	m.focus, m.sectionFocus = 3, false
+	m.command.Focus()
 	var saved workspaceView
 	data, err := os.ReadFile(filepath.Join(m.data.Workspace.Path, "view-state.json"))
 	if err != nil || json.Unmarshal(data, &saved) != nil || saved.Section < 0 || saved.Section > 4 {
