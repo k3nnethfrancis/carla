@@ -1,15 +1,26 @@
 # Carla
 
-Carla (character lab) is a TUI for developing AI characters from base models inspired by [Computer-10](https://x.com/parafactual/status/2102611793369821277?s=20)
+Carla is a **Loom TUI and Character Lab** for developing new AI characters from
+base models. Supply seed documents, explore alternative continuations, curate
+an anthology, simulate conversations from it, and evaluate the results to decide
+what belongs in a training set.
 
-Select from seed documents to generate base-model continuations, branch, edit, and curate an anthology of generations and explore how it behaves in simulated conversations. Prompts, model settings, source provenance and alternative branches remain inspectable.
+A *Loom* lets you explore branching model-generated text: continue a passage,
+compare alternatives, edit or fork a version, and follow the paths worth keeping.
+Carla brings that workflow into the terminal with local inference and inspectable
+prompts, model settings, ancestry and judge results.
 
 ```text
-Library → Branches → Anthology → Simulator → Evaluate
-             │                      │
-         fork / Loom           fork / Loom
-             └── inspect, edit, compare ──┘
+Seed documents → Continuations → Anthology → Conversations → Evaluation → Training data
+   Library          Branches      Anthology     Simulator     Evaluate       Export
+                       ↳ fork / loom               ↳ fork / loom
 ```
+
+Carla currently implements **data generation, curation, evaluation and export**.
+An anthology conditions the conversation model through its prompt; it does not
+change model weights. Training support is a future stage. The project is inspired
+by [Computer's document-grown character work](docs/resources.md), without claiming
+to reproduce its training protocol or results.
 
 ## Quick start
 
@@ -140,17 +151,84 @@ or downloaded automatically. A missing model does not prevent source browsing.
   `/loom 3 --turns 4 --tokens 512` produces three conversations with four new
   character replies each. A visitor replies between character turns. Selecting
   an existing conversation resumes its frozen document context and history.
-  Select the fresh-run row to start a new conversation; a selected batch asks you to choose a conversation. Multi-output runs stream into a selectable grid.
+  Use `/clear` to start fresh; hovering over a conversation or batch does not select it. Multi-output runs stream into a selectable grid.
+- **Evaluate:** create a named collection, choose judges, add frozen documents or
+  conversations, and run judgments. Review evidence, add notes and mark items for
+  training. Existing judgments can be attached without another model call.
+  `/snapshot` exports training-marked items with their evidence and provenance.
 
 `/loom 3 --tokens 512 --loops 4` repeats candidate generation and local selection.
 The selection policy lives under `/policy`; no policy instructions enter base-model
 prompts. It never automatically keeps documents. Configure a selector before
 starting repeated loops; see [configuration](docs/configuration.md).
 
-Optional monitoring under `/policy` sends document context or conversation history
-to Jev through OpenRouter. It is **off by default**. Warn and Stop actions are explicit
-per condition. Monitoring and selection have separate roles and specs.
-See [data and monitoring](docs/configuration.md#optional-monitoring) before enabling it.
+## Policies and evaluations
+
+These use criteria to judge text, but serve different purposes:
+
+| Mechanism | When it runs | What the result does |
+| --- | --- | --- |
+| Monitoring | During generation and/or after replies | Flags conditions such as looping; warns or stops only as configured. Off by default. |
+| Selection | During multi-loop Loom runs | Reviews candidates and chooses one path to develop. Does not automatically keep or mark it for training. |
+| Evaluation | On saved items, or after `/loom --eval "name"` | Records whole-item judgments in a named collection for review and dataset curation. |
+
+Use `/policy` to configure monitoring, selection and reusable judges. Selection
+uses a local instruct model. Monitoring uses optional Jev through OpenRouter;
+evaluation judges can use either the configured local instruct model or Jev.
+Hosted classification sends the assessed text to an external service and can
+incur charges. Local generation itself uses llama.cpp.
+
+In **Evaluate**, `/config` sets the collection's name, judges and active status.
+Adding items does not run judges. `/eval` runs the active evaluation on selected
+material; `/eval "Voice"` chooses a particular collection. An item passes when
+all its currently configured judge revisions pass. You can mark training items
+manually or use `/eval --train-on-pass true` to mark successful passes.
+
+Changing a prompt, model or setting can be evaluated with the same collection
+and criteria; evaluation is not limited to training decisions. Saved source
+snapshots and judgment histories remain intact. Attached monitoring or selection
+evidence keeps its original scope rather than becoming a whole-item pass.
+Read the [policy and evaluation guide](docs/evaluations.md) for the complete flow.
+
+## Prompts and templates
+
+You can inspect the actual inputs behind generated text with `/inspect`.
+Configuration exposes these authoring surfaces:
+
+| Input | Where to change it |
+| --- | --- |
+| Continuation input | Edit/fork the document and place the cursor; the exact prefix is sent to the base model. |
+| Character and Visitor templates | Simulator → `/config` → Character prompt / Visitor prompt |
+| Visitor brief | Simulator → `/config` → Visitor brief |
+| Fixed or generated opening | Simulator → `/config` → Opening; generated mode has its own prompt, model and sampling. |
+| Selection criteria and routing prompt | `/policy` → Selection |
+| Monitoring behavior specs | `/policy` → Monitoring → Behaviors |
+| Evaluation criteria and local judge prompt | `/policy` → Judge configurations |
+
+Document Loom has no separate system-message wrapper. Conversation templates are
+explicit raw-completion prompts with anthology/history placeholders; there are
+no hidden memory or reflection steps. [Prompt configuration](docs/configuration.md#prompts-and-templates)
+shows the defaults, allowed fields and inspection behavior.
+
+## Documentation
+
+- [User guide](docs/user-guide.md): first experiment, editing, comparison, data storage and recovery.
+- [Commands](docs/commands.md): all commands, flags, targeting and keyboard behavior.
+- [Configuration](docs/configuration.md): models, sampling, prompts, source imports and credentials.
+- [Policies and evaluations](docs/evaluations.md): monitoring, selection, judging and training exports.
+- [Architecture](docs/architecture.md), [development](docs/development.md) and
+  [research references](docs/resources.md): implementation and contributor context.
+
+## Toward training
+
+The next research stage is to connect curated data to training and evaluate the
+resulting models. Candidate features include dataset preparation with explicit
+splits and loss masks, supervised character/conversation fine-tuning, preference
+training from reviewed feedback, and loading trained checkpoints back into Carla
+for comparison. These are directions, not shipped features or a fixed schedule.
+A pass label alone is not a preference pair, and an exported trace is not yet a
+trainer-specific dataset. The immediate priority remains a dependable generation
+and evaluation workflow, developed with collaborator feedback.
 
 ## What to expect
 
@@ -181,7 +259,8 @@ See [data and monitoring](docs/configuration.md#optional-monitoring) before enab
 Track bugs and features in [GitHub Issues](https://github.com/k3nnethfrancis/carla/issues)
 and submit feature/fix PRs to `dev`. Reviewed changes reach `main` through promotion PRs.
 Our current focus is [data-generation stabilization](https://github.com/k3nnethfrancis/carla/milestone/1):
-UX, functional reliability and focused code review. Later stages are on hold.
+UX, functional reliability and focused code review. Training work follows validation
+of this stage with collaborators.
 See [development and releases](docs/development.md)
 and the [Carla TUI design skill](skills/tui-design/SKILL.md).
 Run `carla --version` when reporting a problem.

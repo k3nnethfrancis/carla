@@ -12,7 +12,8 @@ Python / asyncio Session
        ├─ library: shared source documents
        ├─ Runtime + Admission: local llama.cpp, bounded requests
        ├─ exploration: shared generate → unload → classify → advance loops
-       └─ simulator + TurnMonitor: conversations and optional classification
+       ├─ simulator + TurnMonitor: conversations and optional classification
+       └─ evaluation + evaluation_sets: judges, frozen collections and exports
 ```
 
 ## Boundaries and protocol

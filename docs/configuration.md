@@ -24,7 +24,7 @@ cached progress. For gated/private repositories, authenticate with Hugging Face 
 set `HF_TOKEN`; credentials are not saved in Carla's model configuration. A local
 GGUF is used in place. GGUF headers and shard presence are checked; custom model
 training type must be identified by the user. Base models go into `models.json`;
-an instruct model can be configured as the separate Grow selector. An existing
+an instruct model can be configured as the separate selection-policy model. An existing
 policy model is not silently replaced.
 
 Metadata checks and downloads run in the background. Download progress appears
@@ -65,6 +65,108 @@ Repeated Loom loops need a separate instruct selection model. `--policy-model FI
 with the same fields and `kind: "instruct"`. Setup saves the persistent default at `$CARLA_DATA_DIR/policy-model.json`. Selection unloads
 the generator before loading the selector. Selection instructions never enter
 raw generation context. Without a configured policy model, multi-loop Loom cannot run.
+
+## Prompts and templates
+
+Carla uses llama.cpp raw completions for document and conversation generation.
+It does not apply a hidden assistant system prompt or the model's chat template.
+Selection and local evaluation are separate instruct-model judge calls.
+
+| Input | Editor | How it is used |
+| --- | --- | --- |
+| Document continuation | Branches → `/edit`, save, position cursor | Exact document prefix up to the cursor; no separate wrapper/template setting. |
+| Character template | Simulator → `/config` → Character prompt | Formatted with frozen anthology text and conversation history. |
+| Visitor template | Simulator → `/config` → Visitor prompt | Formatted with Visitor brief and conversation history by default. |
+| Visitor brief | Simulator → `/config` → Visitor brief | Text substituted into `{visitor_brief}`. |
+| Fixed opener | Simulator → `/config` → Opening → Fixed → Message | First Visitor message for fresh conversations; `--msg` overrides it for one run. |
+| Generated opener | Simulator → `/config` → Opening → Generated → Generation prompt | Raw completion using its selected model/sampling, once per fresh conversation. |
+| Selection | `/policy` → Selection | Criteria and system prompt for candidate classification; never injected into generator text. |
+| Monitoring | `/policy` → Monitoring → Behaviors | Named behavior specs sent to Jev with context. The provider envelope is managed by Carla. |
+| Evaluation | `/policy` → Judge configurations | Criteria and local judge system prompt, or Jev behavior spec/threshold. |
+
+### Document continuations
+
+The input is exactly the selected document's text before the cursor. Editing or
+forking that text changes the next input; moving the cursor changes where the
+continuation begins. There is no separate continuation-template editor today.
+This preserves raw base-model exploration. `/inspect` exposes the saved prefix,
+sampling settings, model and generation trace. Source text and human/AI edits
+remain attributable through ancestry.
+
+### Conversation templates
+
+Current defaults are:
+
+Character:
+
+```text
+{anthology}
+
+Full conversation with Model C:
+
+{history}
+
+**Model C:**
+```
+
+Visitor:
+
+```text
+{visitor_brief}
+
+Full conversation with Model C:
+
+{history}
+
+**User:**
+```
+
+Both accept `{anthology}`, `{history}` and `{visitor_brief}`. `{history}` is
+required in both; `{anthology}` is required in the Character template. Unknown
+fields or invalid formatting are rejected. Use doubled braces `{{` and `}}` for
+literal braces. These are Python string-format fields, not executable templates.
+
+History is rendered as `**User:**` and `**Model C:**` turns. Speaker-boundary stop
+strings use those labels too. They are not separately configurable: preserve
+this convention when editing templates. A template can change surrounding prose
+and where the available fields appear, but it cannot redefine the history renderer
+or add arbitrary new variables through configuration.
+
+The default Visitor brief is `A curious visitor talks with Model C.` The default
+fixed opener is `What would you like to talk about?`. Generated openings have an
+editable prompt and sampling; **Preview 3 openings** tests just that stage. The
+opening generator does not receive anthology text automatically. A blank opening
+model selection follows the configured Visitor model.
+
+Fresh runs freeze selected anthology versions and effective configuration. A
+continuation of an existing conversation keeps its frozen document context and
+history; later settings affect new generation without rewriting prior prompts.
+Use `/inspect` to examine the fully rendered input rather than inferring it from
+the template alone. No RAG recall, reflection pass or hidden character memory is
+added. Configuration changes do not alter saved traces.
+
+### Judge prompts
+
+The selection prompt must preserve its JSON contract: review each candidate once,
+include valid evidence, and return an eligible candidate ID or null. The local
+evaluation prompt must return `passed` (boolean), `reason` and `evidence`. Full
+contracts/defaults are visible in their editors and in saved judge requests.
+Monitoring allows behavior specs, thresholds and actions; its transport envelope
+is not a free-form prompt editor. See [policies and evaluations](evaluations.md).
+
+### Sampling and overrides
+
+Document `/config` exposes model and shared sampling/context settings. Simulator
+has separate Character, Visitor and generated-opening sampling. Explicit Loom
+flags override one run; they do not rewrite saved configuration. Bare Loom always
+uses one alternative and one loop, plus one Character reply in Simulator.
+
+`--tokens N` caps new output tokens; it is not a minimum length. `Max` uses the
+remaining available context. EOS and speaker boundaries may end output sooner.
+Simulator `--tokens` overrides both Character and Visitor ceilings, while the
+opening generator keeps its own settings. `--turns` counts Character replies per
+alternative per loop. `--loops` enables selection-driven repetition. See the
+[complete syntax](commands.md#loom-configure-one-set-then-repeat).
 
 ## Storage and launch
 
