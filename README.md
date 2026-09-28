@@ -5,7 +5,7 @@ Carla (character lab) is a TUI for developing AI characters from base models ins
 Select from seed documents to generate base-model continuations, branch, edit, and curate an anthology of generations and explore how it behaves in simulated conversations. Prompts, model settings, source provenance and alternative branches remain inspectable.
 
 ```text
-Library → Branches → Anthology → Simulator → Evaluation
+Library → Branches → Anthology → Simulator → Evaluate
              │                      │
          fork / Loom           fork / Loom
              └── inspect, edit, compare ──┘

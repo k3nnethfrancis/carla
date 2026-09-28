@@ -6,9 +6,9 @@ This is the command contract for the unified Loom interface. Legacy command name
 
 ## The organizing idea
 
-Carla has five views: **Library, Branches, Anthology, Simulator and Evaluation**. Commands operate on the selected object. The view supplies context, rather than introducing a different command vocabulary.
+Carla has five views: **Library, Branches, Anthology, Simulator and Evaluate**. Commands operate on the selected object. The view supplies context, rather than introducing a different command vocabulary.
 
-Library supplies source passages. Branches holds document versions and their ancestry. Anthology is the kept subset of those versions. Simulator holds conversations and batches of alternative conversations. Evaluation holds judged material and training selections.
+Library supplies source passages. Branches holds document versions and their ancestry. Anthology is the kept subset of those versions. Simulator holds conversations and batches of alternative conversations. Evaluate holds judged material and training selections.
 
 There are two generation workflows behind one command:
 
@@ -42,7 +42,7 @@ The Branches tab keeps its name. “Fork” names the action; “Branches” nam
 ## Loom: configure one set, then repeat
 
 ```text
-/loom [alternatives] [--tokens N] [--turns N] [--loops N]
+/loom [alternatives] [--tokens N] [--turns N] [--msg "opening"] [--loops N]
        one set       generation settings       repetition
 ```
 
@@ -53,6 +53,7 @@ Examples and autocomplete place `--loops` last. The parser accepts flags in any 
 | Alternatives | Number of alternatives generated from the same starting point. | All views |
 | `--tokens N` | Maximum new tokens per generation; not a required length or total conversation budget. | All views |
 | `--turns N` | New Character replies per conversation alternative per loop, with Visitor messages as needed. | Simulator only |
+| `--msg "text"` / `--message "text"` | Override the first Visitor message for this fresh run; preserves the saved opener. | Simulator only, no conversation selected |
 | `--loops N` | Total generate-and-select cycles, including the first cycle. | All views |
 
 **Bare `/loom` is the small, predictable action:** one alternative, one loop, and in Simulator one new Character reply. Model, sampling, token ceilings and monitoring settings still come from configuration. Explicit parameters expand the run.
@@ -94,17 +95,17 @@ If all four loops complete, the last example creates twelve continuations. The a
 
 If all loops complete, the last example produces twelve candidate extensions. The final path gains eight Character replies, plus the required Visitor messages. The token ceiling applies to individual generations, not the whole eight-reply path. An explicit `--tokens` overrides both Character and Visitor for this run; omitting it preserves their individual saved ceilings.
 
-If the conversation ends with a Visitor message, Loom generates the Character response directly. It must not invent another Visitor message first. If the conversation needs a Visitor message before the next Character reply, the configured Visitor supplies it. Fresh runs use the configured opening.
+If the conversation ends with a Visitor message, Loom generates the Character response directly. It must not invent another Visitor message first. If the conversation needs a Visitor message before the next Character reply, the configured Visitor supplies it. Fresh runs use the configured opening unless `--msg` or `--message` supplies a quoted opener. For example, `/loom 4 --msg "What does a path remember?" --turns 2 --tokens 512` starts four conversations with that message. Single or double quotes preserve spaces; nothing is expanded or executed as shell code. An opener with a selected conversation is rejected: use `/clear` for a fresh run, or `/visitor` to add a message to an existing conversation.
 
 ## Selection determines the input
 
-A batch is a collection of alternatives, not itself a conversation.
+A batch is a collection of alternatives, not itself a conversation. In Simulator, highlighting previews a target but does not select it for Loom. **Space** selects or deselects one conversation; **Enter** selects and opens it, including from the grid. Choosing a different conversation replaces the prior checkmark. `/clear` clears the target without deleting anything. The checked conversation stays the Loom target while browsing other items. Starting a Loom consumes that selection; displaying its output does not implicitly select a new target.
 
 | Selected context | `/loom` | `/loom 4` |
 |---|---|---|
 | One document version | One continuation | Four continuations of that version |
-| One conversation | One new Character reply | Four alternative extensions of that conversation |
-| Completed conversation batch | Open the grid and ask which conversation to use | Open the grid and ask which conversation to use |
+| Explicitly checked conversation | One new Character reply | Four alternative extensions of that conversation |
+| Browsed conversation or batch, nothing checked | Start one fresh conversation | Start four fresh conversations |
 | Fresh Simulator setup | Start one conversation | Start four alternatives from the setup |
 
 Never silently pick a batch winner, continue every member, or reuse the original batch input. Automatic policy selection is part of an explicitly configured multi-loop run.
@@ -183,7 +184,7 @@ Commands requiring a selected object are available only when that target exists.
 | Branches | `/keep`, `/remove`, `/clear` | Keep versions, delete versions, clear checked rows. |
 | Anthology | `/remove`, `/snapshot` | Unkeep versions or export the kept collection with provenance. |
 | Anthology | `/loom`, `/config`, `/fork` | Explore kept versions using the document workflow. New versions appear in Branches. |
-| Simulator | `/loom`, `/config`, `/fork`, `/visitor` | Generate conversations, configure them, fork one, or add a Visitor message. |
+| Simulator | `/loom`, `/clear`, `/config`, `/fork`, `/visitor` | Generate conversations, configure them, fork one, or add a Visitor message. |
 | Shared: navigate | `/library`, `/branches`, `/anthology`, `/simulator`, `/workspace` | Switch views or open/create a workspace. |
 | Shared: model | `/model` | Shortcut to the relevant model settings. |
 | Shared: edit | `/edit`, `/save`, `/cancel`, `/rename` | Change selected content, save/cancel a draft, or change a document title. |
@@ -241,6 +242,8 @@ The interface replaces separate user-facing `/continue`, `/grow`, `/run` and con
 - No saved batch-preset UI is introduced. Bare Loom always creates one alternative in one loop and, in Simulator, one Character reply.
 - Training is not implemented. Keeping and exporting remain explicit human curation actions.
 
+A sidebar `!` indicates detected policy behavior only while that conversation is running; it is never a selection marker. Completed detections remain in the conversation header at the right and in the per-turn policy evidence.
+
 ## Policies and evaluated datasets
 
 `/config` contains generation models, prompts and sampling. `/policy` opens three
@@ -274,7 +277,7 @@ The command opens a picker for the saved evaluation definition. It does not star
 new conversations. `--train-on-pass` defaults to `false`; `true` marks only
 successfully evaluated passing items for training.
 
-**Evaluation** is the fifth tab. Its rows are evaluation results, so the same
+**Evaluate** is the fifth tab. Its rows are evaluation results, so the same
 source can appear more than once when evaluated again or against different
 criteria. Each result freezes the original content and source provenance, criteria
 revision, judge input/output, and pass result. Changing a definition or deleting

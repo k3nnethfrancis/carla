@@ -125,7 +125,7 @@ func TestEvaluationSelectionFilteringAndNavigation(t *testing.T) {
 		m.focus = 1
 		m.reflow()
 		frame := ansi.Strip(m.View().Content)
-		if !strings.Contains(frame, "Evaluation") {
+		if !strings.Contains(frame, "Evaluate") {
 			t.Fatal(frame)
 		}
 		if len(strings.Split(frame, "\n")) > size[1] {

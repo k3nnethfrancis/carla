@@ -149,7 +149,10 @@ func (m *model) openSampling(group string) tea.Cmd {
 	m.dialog = d
 	return nil
 }
-func readOnlyAction(id string) bool {
+func (m *model) readOnlyAction(id string) bool {
+	if m.section == 3 && (id == "select" || id == "clear") {
+		return true
+	}
 	switch id {
 	case "evaluations", "grid", "library", "branches", "kept", "simulator", "inspect", "notes", "active", "find", "help", "keys", "cancel", "restart", "quit", "exit":
 		return true

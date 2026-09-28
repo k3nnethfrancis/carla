@@ -5,8 +5,8 @@ import tea "charm.land/bubbletea/v2"
 // One command, with its target fixed by the current tab rather than a stale
 // document selection. Simulator runs start fresh from its configured opening.
 func (m *model) loom(options generationOptions) tea.Cmd {
-	if m.section != 3 && options.Turns > 0 {
-		m.status = "Error: --turns applies only to Simulator conversations"
+	if m.section != 3 && (options.Turns > 0 || options.Message != "") {
+		m.status = "Error: --turns and --message apply only to Simulator conversations"
 		return nil
 	}
 	if m.pending || m.data.Busy {
@@ -28,13 +28,13 @@ func (m *model) loom(options generationOptions) tea.Cmd {
 		options.Loops = 1
 	}
 	if m.section == 3 {
-		if _, ok := m.conversationTarget(); !ok && m.targetRow().kind == "simulation" {
-			m.status = "Select a conversation in the grid, then /loom"
-			return m.send("simulator.open", map[string]any{"run": m.targetRow().id})
+		if options.Message != "" && m.loomConversation != nil {
+			m.status = "Clear the conversation selection with /clear before using --message for a fresh opening"
+			return nil
 		}
 		args := map[string]any{}
 		options.apply(args)
-		if target, ok := m.conversationTarget(); ok {
+		if target, ok := m.loomConversationTarget(); ok {
 			for k, v := range target {
 				args[k] = v
 			}
@@ -42,7 +42,11 @@ func (m *model) loom(options generationOptions) tea.Cmd {
 		m.conversationOpen = false
 		m.simulation = nil
 		m.activeSimulation = nil
-		return m.send("simulator.run", args)
+		cmd := m.send("simulator.run", args)
+		if cmd != nil {
+			m.loomConversation = nil
+		}
+		return cmd
 	}
 	if m.section == 0 {
 		args := map[string]any{"refs": m.targetRefs()}

@@ -80,6 +80,12 @@ func (m *model) contextualActions() []action {
 	return actions
 }
 func (m *model) targetLabel() string {
+	if m.section == 3 && m.editing == "" {
+		if target := m.loomConversation; target != nil {
+			return fmt.Sprintf("Loom target · Conversation %d · %s · /clear for fresh", target.Conversation+1, target.Run)
+		}
+		return "Loom · new conversation · SPACE selects a continuation target"
+	}
 	if m.notesOpen && m.editing == "" {
 		return "Document · " + m.nodeTitle()
 	}

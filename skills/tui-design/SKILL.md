@@ -29,7 +29,7 @@ Keep effects in commands/update handling and rendering free of file/network writ
 
 ## Interaction contract
 
-- The main places are Library, Branches, Anthology, Simulator and Evaluation. Each pane has
+- The main places are Library, Branches, Anthology, Simulator and Evaluate. Each pane has
   an explicit focus and selected target. Opening a document must not accidentally
   operate on the item that was selected on another page.
 - Arrows move within the focused area; Tab/Shift+Tab move forward/backward between

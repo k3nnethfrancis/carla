@@ -630,10 +630,21 @@ async def test_simulator_run_overrides_are_recorded_not_saved(session):
     doc = s.project.add("Paths", kind="source")
     doc["kept"] = True
     await s.execute(
-        "simulator.configure", {"documents": [doc["id"]], "turns": 2}, "config"
+        "simulator.configure",
+        {"documents": [doc["id"]], "turns": 2, "opening_mode": "generated"},
+        "config",
     )
     saved = json.loads(json.dumps(s.project.data["simulator_config"]))
-    await s.execute("simulator.run", {"count": 3, "n_predict": 32, "turns": 3}, "loom")
+    await s.execute(
+        "simulator.run",
+        {
+            "count": 3,
+            "n_predict": 32,
+            "turns": 3,
+            "message": "What makes a path yours?",
+        },
+        "loom",
+    )
     await s.job
     run = s.project.data["simulation_runs"][-1]
     assert len(run["conversations"]) == 3
@@ -641,11 +652,15 @@ async def test_simulator_run_overrides_are_recorded_not_saved(session):
     assert s.project.data["simulator_config"] == saved
     for conversation in run["conversations"]:
         assert len(conversation["turns"]) == 6
+        assert conversation["turns"][0]["text"] == "What makes a path yours?"
+        assert run["config"]["opening_mode"] == "fixed"
         for turn in conversation["turns"][1:]:
             assert turn["settings"]["n_predict"] == 32
             assert "token_range" not in turn["settings"]
     for overrides in [
         {"count": 0},
+        {"message": " "},
+        {"message": 3},
         {"turns": 0},
         {"n_predict": 0},
         {"token_range": [40, 10]},
@@ -752,6 +767,15 @@ async def test_simulator_fork_and_resume_commands(session):
     assert len(run["conversations"][0]["turns"]) == 6
     assert run["documents"][0]["text"] == "Frozen anthology."
     assert source["conversations"][0]["turns"] == fork["conversations"][0]["turns"]
+    before = len(s.project.data["simulation_runs"])
+    with pytest.raises(ValueError, match="Clear the conversation selection"):
+        await s.execute(
+            "simulator.run",
+            {"run": fork["id"], "conversation": 0, "message": "Replace history?"},
+            "invalid-message",
+        )
+    assert len(s.project.data["simulation_runs"]) == before
+
     with pytest.raises(ValueError, match="Conversation not found"):
         await s.execute(
             "simulator.open", {"run": source["id"], "conversation": 100}, "invalid"

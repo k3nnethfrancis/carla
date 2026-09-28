@@ -197,7 +197,7 @@ func (m *model) navigation(r rect) string {
 		if i == mIndex {
 			label = selectedStyle.Render(label)
 		}
-		if item.kind == "conversation" {
+		if item.kind == "conversation" && strings.Contains(item.label, "! ") {
 			label = m.pulseLabel(item.id, label)
 		}
 		lines = append(lines, label)
@@ -211,6 +211,13 @@ func (m *model) navigation(r rect) string {
 	footer := fmt.Sprintf("%d selected · CTRL+F filter", len(m.data.Selected))
 	if m.section != 0 {
 		footer = fmt.Sprintf("%d items", len(rows))
+		if m.section == 3 {
+			count := 0
+			if m.loomConversation != nil {
+				count = 1
+			}
+			footer = fmt.Sprintf("%d selected · /clear", count)
+		}
 		if m.section == 4 {
 			count := 0
 			for _, selected := range m.evalSelection {
@@ -374,7 +381,7 @@ func (m *model) View() tea.View {
 	}
 	l := m.layout()
 	parts := []string{}
-	sections := []string{"Library", "Branches", "Anthology", "Simulator", "Evaluation"}
+	sections := []string{"Library", "Branches", "Anthology", "Simulator", "Evaluate"}
 	for _, p := range l.panels {
 		title, body := "", ""
 		switch p.kind {
@@ -393,7 +400,7 @@ func (m *model) View() tea.View {
 			if m.section == 3 && m.editing == "" {
 				title = "Simulator"
 				if m.conversationOpen {
-					title = fmt.Sprintf("Conversation %d", m.gridSelection+1)
+					title = m.conversationHeading(p.box.w - 6)
 				}
 			}
 			body = m.document.View() + "\n" + "Source · " + m.aiStyle().Render("AI") + " · " + m.humanStyle().Render("Human edits")
@@ -485,6 +492,8 @@ func (m *model) View() tea.View {
 			if m.focus == 1 {
 				legend = "↑↓ scroll · TAB next · /inspect · /notes"
 			}
+		} else if m.section == 3 {
+			legend = m.keyLabel("select") + " select/clear · " + m.keyLabel("nav.enter") + " select & open · /clear"
 		} else if m.section == 1 || m.section == 2 {
 			legend = m.keyLabel("select") + " select · " + m.keyLabel("nav.enter") + " open/actions · " + m.keyLabel("nav.next") + " next"
 			if m.focus == 1 {
@@ -495,9 +504,12 @@ func (m *model) View() tea.View {
 
 	if m.gridVisible() && m.focus == 1 && !m.sectionFocus {
 		legend = "Arrows select · " + m.keyLabel("nav.enter") + " open · /grid return · " + m.keyLabel("nav.next") + " next"
+		if m.section == 3 {
+			legend = "Arrows browse · " + m.keyLabel("select") + " select/clear · " + m.keyLabel("nav.enter") + " open · ESC list"
+		}
 	}
 	if m.section == 3 && m.conversationOpen && m.focus == 1 {
-		legend = "ESC grid/list · /loom continue · /branch fork · /edit · /visitor"
+		legend = "ESC grid/list · SPACE select/clear · /loom · /fork · /edit · /visitor"
 	}
 	if m.notesOpen && m.focus == 0 {
 		legend = "↑↓ notes · ENTER edit note · + new · PGUP/PGDN scroll · TAB document"
@@ -532,7 +544,7 @@ func joinPanels(parts []string) []string {
 	return out
 }
 
-var sectionNames = []string{"Library", "Branches", "Anthology", "Simulator", "Evaluation"}
+var sectionNames = []string{"Library", "Branches", "Anthology", "Simulator", "Evaluate"}
 
 func (m *model) sectionLabels() []string {
 	labels := []string{}

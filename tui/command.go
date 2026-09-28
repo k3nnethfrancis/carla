@@ -63,6 +63,9 @@ func (m *model) commandChoices() []action {
 		if a.id == "active" && !m.data.Busy {
 			continue
 		}
+		if a.id == "clear" && m.section == 3 {
+			a.label = "Clear conversation selection · next Loom starts fresh"
+		}
 		if a.id == "clear" && m.selectionVisible() {
 			a.label = "Clear branch selection"
 		}
@@ -84,7 +87,7 @@ func (m *model) commandChoices() []action {
 	if m.data.Busy {
 		available := []action{{id: "cancel", label: "Stop active operation"}}
 		for _, a := range actions {
-			if readOnlyAction(a.id) {
+			if m.readOnlyAction(a.id) {
 				available = append(available, a)
 			}
 		}
@@ -121,7 +124,7 @@ func (m *model) commandChoices() []action {
 		if a.id == "loom" {
 			if m.section == 3 {
 				a.label = "Generate conversations · number = conversations"
-				if _, ok := m.conversationTarget(); ok {
+				if _, ok := m.loomConversationTarget(); ok {
 					a.label = "Continue selected conversation · number = alternatives"
 				}
 			} else if m.section == 1 {
@@ -409,7 +412,7 @@ func (m *model) prioritizePageCommands(actions []action) {
 	case 4:
 		preferred = []string{"eval", "keep", "remove", "notes", "inspect", "snapshot", "policy", "find"}
 	case 3:
-		preferred = []string{"loom", "configure", "branch", "edit", "visitor", "inspect", "anthology"}
+		preferred = []string{"loom", "configure", "clear", "branch", "edit", "visitor", "inspect", "anthology"}
 	}
 	if m.notesOpen {
 		preferred = append([]string{"notes", "edit", "inspect"}, preferred...)

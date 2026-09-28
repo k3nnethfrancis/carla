@@ -104,6 +104,15 @@ async def dispatch(session, command, args, request_id):
             config[
                 "documents"
             ] = []  # The frozen ancestor anthology is carried by seed.
+        if "message" in args:
+            message = args["message"]
+            if not isinstance(message, str) or not message.strip():
+                raise ValueError("Supply a nonempty visitor opening message")
+            if seed:
+                raise ValueError(
+                    "Clear the conversation selection before supplying an opening message"
+                )
+            config.update(opening=message, opening_mode="fixed")
         if command == "simulator.preview":
             config.update(
                 preview=True,

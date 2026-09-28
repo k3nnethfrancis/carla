@@ -21,7 +21,7 @@ var commandDescriptions = map[string]string{
 	"generate":           "Alias for /continue; uses the current saved document and cursor.",
 	"continue":           "Continue from cursor. /continue 512 sets the maximum output tokens.",
 	"branch":             "Fork the selected conversation in Simulator, or saved document in Branches, without generation. Save edits first.",
-	"loom":               "Generate one continuation or Character reply. /loom 3 --tokens 512 --loops 4 creates three alternatives per loop. Simulator also accepts --turns N. A batch requires choosing a conversation.",
+	"loom":               "Generate one continuation or Character reply. /loom 3 --tokens 512 --loops 4 creates three alternatives per loop. Simulator accepts --turns N and --msg (alias --message) with quoted opener text. Space or Enter selects one conversation to continue; browsing alone starts fresh. /clear clears that target.",
 	"add":                "Add highlighted source passages to the workspace seed set.",
 	"remove":             "Library: deselect sources. Anthology: unkeep versions. Branches: confirm deletion of versions and descendants. Alias: /delete.",
 	"delete":             "Review checked branches and descendants, then confirm deletion. Saves a recovery snapshot.",

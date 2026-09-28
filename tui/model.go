@@ -131,6 +131,7 @@ type model struct {
 	editRequest            string // A draft stays owned by the editor until this request succeeds.
 	setupReturn            *dialog
 	conversationOpen       bool
+	loomConversation       *conversationParent
 	conversationEdit       int
 	policyPulses           map[string]policyPulse
 	policySeen             map[string]bool
@@ -335,11 +336,16 @@ func (m *model) activate() tea.Cmd {
 	case "sim-config":
 		return m.perform("sim-config")
 	case "sim-run":
+		m.loomConversation = nil
 		return m.perform("simulate")
 	case "conversation":
 		args, ok := m.conversationTarget()
 		if ok {
-			return m.send("simulator.open", args)
+			cmd := m.send("simulator.open", args)
+			if cmd != nil {
+				m.selectLoomConversation(args)
+			}
+			return cmd
 		}
 		return nil
 	case "simulation":
@@ -518,6 +524,9 @@ func (m *model) apply(e event) tea.Cmd {
 			m.focus = 1
 		}
 		if run.Opened {
+			if run.OpenConversation != nil {
+				m.loomConversation = &conversationParent{Run: run.ID, Conversation: *run.OpenConversation}
+			}
 			m.pending = false
 		}
 		if !run.Opened {
@@ -637,6 +646,7 @@ func (m *model) apply(e event) tea.Cmd {
 			m.simulation = nil
 			m.conversationOpen = false
 			m.activeSimulation = nil
+			m.loomConversation = nil
 			m.pages = [5]*pagePosition{}
 			m.restorePage = nil
 			m.commandOrigin = nil

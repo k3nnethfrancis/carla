@@ -93,7 +93,7 @@ func (m *model) perform(id string) tea.Cmd {
 	if id == "cancel" {
 		return m.send("cancel", nil)
 	}
-	if m.data.Busy && !readOnlyAction(id) {
+	if m.data.Busy && !m.readOnlyAction(id) {
 		m.status = "Operation running · /stop cancels it"
 		return nil
 	}
@@ -140,6 +140,11 @@ func (m *model) perform(id string) tea.Cmd {
 	case "loom":
 		return m.loom(generationOptions{})
 	case "clear":
+		if m.section == 3 {
+			m.loomConversation = nil
+			m.reflow()
+			return nil
+		}
 		if m.selectionVisible() {
 			return m.selectionAction("clear")
 		}
@@ -600,7 +605,7 @@ func (m *model) nodeTitle() string {
 		return strings.ReplaceAll(m.editing, "-", " ")
 	}
 	if m.section == 4 {
-		return "Evaluation"
+		return "Evaluate"
 	}
 	switch m.editing {
 	case "conversation":

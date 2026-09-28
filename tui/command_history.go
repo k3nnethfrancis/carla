@@ -69,7 +69,7 @@ func (m *model) commandHints() []string {
 		return []string{"Judge selected items using a saved evaluation", "--train-on-pass true|false · default false"}
 	case "/loom", "/continue", "/generate", "/run", "/grow", "/simulate":
 		if m.section == 3 {
-			return []string{"[alternatives] · --tokens N|Max · --turns N · --loops N", "Selected conversation or fresh setup · bare /loom = one reply"}
+			return []string{"[alternatives] · --tokens N|Max · --turns N · --msg \"text\" · --loops N", "Checked conversation or fresh setup · /clear starts fresh"}
 		}
 		return []string{"[alternatives] · --tokens N|Max · --loops N", "Selected document → Branches · bare /loom = one continuation"}
 	}
