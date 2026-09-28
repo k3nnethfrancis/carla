@@ -70,28 +70,31 @@ type simulationRun struct {
 	Conversations     []simulationConversation
 }
 type state struct {
-	Workspace       workspace
-	Workspaces      []workspace
-	Selected        []string
-	Nodes           []node
-	Current         *node
-	Models          []localModel
-	ModelAlias      string `json:"model_alias"`
-	ModelContext    int    `json:"model_context"`
-	NativeContext   int    `json:"native_context"`
-	Settings        settings
-	PolicySpec      string `json:"policy_spec"`
-	PolicyPrompt    string `json:"policy_prompt"`
-	PolicyModel     string `json:"policy_model"`
-	Annotations     []annotation
-	SimulatorConfig map[string]any    `json:"simulator_config"`
-	SimulationRuns  []runSummary      `json:"simulation_runs"`
-	GrowSettings    settings          `json:"grow_settings"`
-	SelectorModels  []localModel      `json:"selector_models"`
-	PolicyRuns      []policyRun       `json:"policy_runs"`
-	Bindings        map[string]string `json:"bindings"`
-	ActiveNode      string            `json:"active_node"`
-	Busy            bool
+	Evaluators       []evaluator
+	Evaluations      []evaluationSummary
+	EvaluationPrompt string `json:"evaluation_prompt"`
+	Workspace        workspace
+	Workspaces       []workspace
+	Selected         []string
+	Nodes            []node
+	Current          *node
+	Models           []localModel
+	ModelAlias       string `json:"model_alias"`
+	ModelContext     int    `json:"model_context"`
+	NativeContext    int    `json:"native_context"`
+	Settings         settings
+	PolicySpec       string `json:"policy_spec"`
+	PolicyPrompt     string `json:"policy_prompt"`
+	PolicyModel      string `json:"policy_model"`
+	Annotations      []annotation
+	SimulatorConfig  map[string]any    `json:"simulator_config"`
+	SimulationRuns   []runSummary      `json:"simulation_runs"`
+	GrowSettings     settings          `json:"grow_settings"`
+	SelectorModels   []localModel      `json:"selector_models"`
+	PolicyRuns       []policyRun       `json:"policy_runs"`
+	Bindings         map[string]string `json:"bindings"`
+	ActiveNode       string            `json:"active_node"`
+	Busy             bool
 }
 type row struct {
 	id, label, kind, preview string
@@ -118,6 +121,13 @@ type dialog struct {
 type loomTile struct{ ID, Title, Text, Status string }
 
 type model struct {
+	evalViewedID           string
+	evalStarting           bool
+	evaluation             *evaluationRecord
+	evaluationRaw          json.RawMessage
+	evalSelection          map[string]bool
+	evalFilter             string
+	evalEditingID          string
 	editRequest            string // A draft stays owned by the editor until this request succeeds.
 	setupReturn            *dialog
 	conversationOpen       bool
@@ -129,7 +139,7 @@ type model struct {
 	gridSelection          int
 	gridPinned             bool
 	commandOrigin          *commandOrigin
-	pages                  [4]*pagePosition
+	pages                  [5]*pagePosition
 	restorePage            *pagePosition
 	activeSimulation       *simulationRun
 	backgroundStatus       string
@@ -205,7 +215,7 @@ func newModel(c *client) *model {
 	navigator.MaxHeight = 0
 	navigator.MaxWidth = 0
 	navigator.Focus()
-	return &model{branchSelection: map[string]bool{}, navigator: navigator, dark: true, collapsed: map[string]bool{}, command: command, focus: 3, client: c, expanded: map[string]bool{}, document: viewport.New(), inspector: viewport.New(), editor: area, search: input, status: "Opening workspace…"}
+	return &model{evalSelection: map[string]bool{}, branchSelection: map[string]bool{}, navigator: navigator, dark: true, collapsed: map[string]bool{}, command: command, focus: 3, client: c, expanded: map[string]bool{}, document: viewport.New(), inspector: viewport.New(), editor: area, search: input, status: "Opening workspace…"}
 }
 func (m *model) Init() tea.Cmd { return tea.Batch(m.client.read(), tea.RequestBackgroundColor) }
 func (m *model) send(command string, args map[string]any) tea.Cmd {
@@ -288,6 +298,8 @@ func (m *model) rows() []row {
 
 	case 3:
 		rows = m.simulationRows()
+	case 4:
+		rows = m.evaluationRows()
 	}
 	if m.section > 0 {
 		rows = filterRows(rows, m.filter)
@@ -308,6 +320,16 @@ func (m *model) activate() tea.Cmd {
 	m.selected = min(m.selected, len(rows)-1)
 	r := rows[m.selected]
 	switch r.kind {
+	case "evaluation":
+		return m.evaluationActions()
+	case "eval-definitions":
+		return m.openEvaluators()
+	case "eval-filter":
+		m.dialog = &dialog{kind: "eval-filter", title: "Show evaluations"}
+		for _, filter := range []string{"all", "pass", "fail", "unfinished", "training"} {
+			m.dialog.rows = append(m.dialog.rows, row{id: filter, label: filter})
+		}
+		return nil
 	case "library-import":
 		return m.perform("import")
 	case "sim-config":
@@ -377,6 +399,14 @@ func (m *model) saveEditor() tea.Cmd {
 		return nil
 	}
 	kind, text := m.editing, m.editor.Value()
+	if strings.HasPrefix(kind, "evaluation-") {
+		if kind == "evaluation-note" {
+			return m.submitEditor("evaluation.annotate", map[string]any{"ids": []string{m.evalEditingID}, "note": text})
+		}
+		args := m.evaluator(m.evalEditingID).args()
+		args[strings.TrimPrefix(kind, "evaluation-")] = text
+		return m.submitEditor("evaluation.configure", args)
+	}
 	if kind == "conversation" && strings.TrimSpace(text) == "" {
 		m.status = "Write a message before saving"
 		return nil
@@ -426,6 +456,20 @@ func (m *model) branch() tea.Cmd {
 }
 func (m *model) apply(e event) tea.Cmd {
 	switch e.Type {
+	case "evaluation":
+		var record evaluationRecord
+		if err := json.Unmarshal(e.Data, &record); err != nil {
+			return func() tea.Msg { return failure{err} }
+		}
+		m.pending = false
+		if m.evalViewedID != record.ID {
+			m.document.GotoTop()
+			m.evalViewedID = record.ID
+		}
+		m.evaluation = &record
+		m.evaluationRaw = append(json.RawMessage(nil), e.Data...)
+		m.reflow()
+		return m.previewTarget()
 	case "setup":
 		return m.setupEvent(e.Data)
 	case "policy.detection":
@@ -552,6 +596,7 @@ func (m *model) apply(e event) tea.Cmd {
 			return func() tea.Msg { return failure{err} }
 		}
 	case "state":
+		m.evaluation = nil
 		noteSaved := m.notePending
 		oldID, oldWorkspace := m.currentID(), m.data.Workspace.Path
 		if err := json.Unmarshal(e.Data, &m.data); err != nil {
@@ -581,12 +626,18 @@ func (m *model) apply(e event) tea.Cmd {
 			}
 		}
 		if oldWorkspace != m.data.Workspace.Path {
+			m.evalStarting = false
+			m.evaluation = nil
+			m.evalViewedID = ""
+			m.evaluationRaw = nil
+			m.evalSelection = map[string]bool{}
+			m.evalFilter = ""
 			m.loomTiles = nil
 			m.loomGrid = false
 			m.simulation = nil
 			m.conversationOpen = false
 			m.activeSimulation = nil
-			m.pages = [4]*pagePosition{}
+			m.pages = [5]*pagePosition{}
 			m.restorePage = nil
 			m.commandOrigin = nil
 			m.notesOpen, m.notesAfterOpen = false, false
@@ -663,6 +714,11 @@ func (m *model) apply(e event) tea.Cmd {
 				delete(m.branchSelection, id)
 			}
 		}
+		if m.evalStarting && len(m.data.Evaluations) > 0 && m.section == 4 {
+			m.selected = 2
+			m.evalStarting = false
+			m.focus = 0
+		}
 		m.selected = max(0, min(m.selected, len(m.rows())-1))
 		if oldID != m.currentID() {
 			m.previewChangePending = (m.section == 1 || m.section == 2) && !m.data.Busy && m.editing == ""
@@ -736,6 +792,7 @@ func (m *model) apply(e event) tea.Cmd {
 		m.reflow()
 		m.inspector.GotoTop()
 	case "error":
+		m.evalStarting = false
 		if m.editRequest != "" && e.ID != "" && e.ID != m.editRequest {
 			return nil
 		}

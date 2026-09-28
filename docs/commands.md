@@ -6,9 +6,9 @@ This is the command contract for the unified Loom interface. Legacy command name
 
 ## The organizing idea
 
-Carla has four views: **Library, Branches, Anthology and Simulator**. Commands operate on the selected object. The view supplies context, rather than introducing a different command vocabulary.
+Carla has five views: **Library, Branches, Anthology, Simulator and Evaluation**. Commands operate on the selected object. The view supplies context, rather than introducing a different command vocabulary.
 
-Library supplies source passages. Branches holds document versions and their ancestry. Anthology is the kept subset of those versions. Simulator holds conversations and batches of alternative conversations.
+Library supplies source passages. Branches holds document versions and their ancestry. Anthology is the kept subset of those versions. Simulator holds conversations and batches of alternative conversations. Evaluation holds judged material and training selections.
 
 There are two generation workflows behind one command:
 
@@ -27,7 +27,10 @@ Library and Anthology call the same document operation as Branches, then open it
 | Command | Meaning |
 |---|---|
 | `/loom` | Generate from the selected starting point. |
-| `/config` | Edit saved settings and policies relevant to the current workflow. |
+| `/config` | Edit generation settings relevant to the current workflow. |
+| `/policy` | Configure monitoring, selection and saved evaluations. |
+| `/eval` | Evaluate selected saved material using a named judge configuration. |
+| `/evaluations` | Browse evaluated material and assemble training selections. |
 | `/fork` | Create a new version of the selected document or conversation without generation. |
 | `/edit` | Change existing document text or a conversation message; saving creates a new version. |
 | `/remove` | Remove the selected item from its current context, with explicit consequences. |
@@ -130,12 +133,12 @@ Select conversation → /fork    → new version, no generated text
 
 ```text
 /config
-  Generation     models, sampling, token ceilings
-  Selection      criteria and advancement rules (counts use command arguments)
-  Policies
-    Selection    evaluator, criteria, labels, advancement rules
-    Monitoring   evaluator, behavior specs, thresholds, actions
-  Conversation   source documents, speakers, opening [Simulator]
+  Generation     models, prompts, sampling and source selection
+
+/policy
+  Monitoring     conditions, thresholds and warn/stop actions
+  Selection      evaluator, criteria and candidate advancement
+  Evaluations    named whole-item judges, criteria and pass rules
 ```
 
 Configuration edits persist. Explicit command arguments override settings for that run only. Bare Loom retains the one-alternative / one-loop / one-reply behavior defined above. Saved legacy batch fields remain compatible with existing workspaces; use explicit command parameters to run batches.
@@ -166,7 +169,7 @@ Observe output → classify behavior → annotate / warn / explicitly stop
 
 Monitoring runs at configured in-generation checkpoints and completion boundaries. Specs name conditions such as looping or spiraling. Each condition has its configured action and threshold. Stop behavior must be explicitly configured; a warning is not a stop.
 
-Monitoring can accompany a single-loop or multi-loop run. Enabling it never enables automatic exploration. Selection and monitoring retain separate evaluator settings, prompts and specs even though both are configured through `/config`.
+Monitoring can accompany a single-loop or multi-loop run. Enabling it never enables automatic exploration. Selection and monitoring retain separate evaluator settings, prompts and specs even though both are configured through `/policy`.
 
 ## The complete command map
 
@@ -224,7 +227,7 @@ Resolve the selected input once, then invoke either document or conversation gen
 
 Library and Anthology should only adapt their selection and choose the Branches destination. They must not duplicate the document generation pipeline. Aliases dispatch to the same action. Configuration shortcuts read and write the same settings as `/config`.
 
-The interface replaces separate user-facing `/continue`, `/grow`, `/run` and configuration/policy commands with `/loom` and `/config`. Compatibility names resolve to the canonical action; see the alias rules below.
+The interface replaces separate user-facing `/continue`, `/grow`, `/run` and configuration/policy commands with `/loom`, `/config` and `/policy`. Compatibility names resolve to the canonical action; see the alias rules below.
 
 ## Decisions and current limits
 
@@ -232,8 +235,69 @@ The interface replaces separate user-facing `/continue`, `/grow`, `/run` and con
 - Selection happens after a completed batch. A selector uses a separate resident model after generation is unloaded. Externally managed generators cannot be unloaded by Carla; stop that server before using selection loops.
 - Monitoring settings are currently shared between document and conversation workflows. It remains optional and sends the material being checked to OpenRouter when enabled. Document monitor evidence is persisted and inspectable; the conversation-specific blink UI is not reused for document tiles.
 - `/continue`, `/generate`, `/run`, `/simulate` and `/grow` are compatibility names for `/loom`. Their positional argument follows Loom’s alternatives count. Use `--tokens` explicitly for an output ceiling. `/grow` no longer silently enables repeated loops.
-- Old settings, sampling and policy command names lead to `/config`. Existing keyboard action IDs remain supported. `/model` remains a direct shortcut.
+- Old settings and sampling names lead to `/config`; policy names lead to `/policy`. Existing keyboard action IDs remain supported. `/model` remains a direct shortcut.
 - Conversation edits fork through the changed message and discard later replies in the fork, preserving the original.
 - Explicit multi-selection to continue several conversations is not implemented. Choose one conversation; a count creates alternatives of that conversation.
 - No saved batch-preset UI is introduced. Bare Loom always creates one alternative in one loop and, in Simulator, one Character reply.
 - Training is not implemented. Keeping and exporting remain explicit human curation actions.
+
+## Policies and evaluated datasets
+
+`/config` contains generation models, prompts and sampling. `/policy` opens three
+sections: **Monitoring**, **Selection**, and **Evaluations**. The first two retain
+their existing generation-time behavior. Evaluations are named, versioned judge
+configurations for saved documents and conversations. Old policy command aliases
+now lead to `/policy`, not `/config`.
+
+An evaluation can use the configured local instruct judge (an editable prompt and
+criteria) or Jev through OpenRouter (a behavior spec and probability threshold).
+Jev requires `OPENROUTER_API_KEY`. Its probabilities are model estimates, not
+calibrated confidence. Local judge calls use the same model lifecycle as selection;
+configure that model with `--policy-model` or the existing model setup. A local
+judge must return JSON with boolean `passed`, explanatory `reason`, and an exact
+`evidence` excerpt. The default prompt documents this contract and is editable.
+Empty or invalid responses and provider failures remain errors, never passes.
+
+```text
+/policy
+/eval
+/eval --train-on-pass true
+/evaluations
+```
+
+In Branches or Anthology, `/eval` targets checked document versions, or the
+highlighted version if none are checked. In Simulator it targets the selected
+conversation; selecting a Loom group evaluates every conversation in that group.
+Each document is evaluated in full, including its inherited text. Conversations
+include every saved turn. No text is silently truncated to fit a judge's context.
+The command opens a picker for the saved evaluation definition. It does not start
+new conversations. `--train-on-pass` defaults to `false`; `true` marks only
+successfully evaluated passing items for training.
+
+**Evaluation** is the fifth tab. Its rows are evaluation results, so the same
+source can appear more than once when evaluated again or against different
+criteria. Each result freezes the original content and source provenance, criteria
+revision, judge input/output, and pass result. Changing a definition or deleting
+an original branch does not rewrite a previous evaluation. Re-evaluating an entry
+uses its frozen text; evaluating a newer edited branch requires selecting that
+branch instead.
+
+- Arrow keys preview an item; Tab enters its scrollable result/text viewer.
+- Space checks items; Enter opens actions for the checked items or highlighted row.
+- `/keep` marks them for training; `/remove` (alias `/delete`) unmarks them.
+  A failed *criterion* can be marked deliberately for negative training signals;
+  an unfinished/errored evaluation cannot be marked.
+- `/notes` edits the highlighted item's note; `/inspect` shows its exact record.
+- The Filter control shows all, pass, fail, unfinished/error, or training items.
+  `/find` additionally searches visible result labels and metadata.
+- `/eval` evaluates checked results again, preserving previous results.
+- `/snapshot` exports all training-marked results as a new JSONL file under the
+  workspace's `datasets/` directory. It includes source text and all evaluation
+  metadata; it does not run training or decide loss masks. Repeated evaluations
+  are distinct records, so downstream dataset preparation must deliberately handle
+  duplicate source content (a content hash is included).
+
+Evaluation jobs use the session's existing operation lock. `/stop`, disconnect,
+and recovery preserve completed results and label unfinished ones. Items are judged
+sequentially with one resident local model; this first evaluation workflow does
+not add task generation, automatic judge calibration, or a training runner.

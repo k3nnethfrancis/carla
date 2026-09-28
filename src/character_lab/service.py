@@ -11,7 +11,7 @@ import random
 from contextlib import aclosing
 from pathlib import Path
 
-from . import simulator
+from . import evaluation, simulator
 from .domain import Project, display_title, generation_status, library, now
 from .exploration import explore, require_selector
 from .model_metadata import native_context
@@ -147,6 +147,9 @@ class Session:
             settings={**DEFAULT_SETTINGS, **p.data.get("settings", {})},
             model_context=self.runtime.model["context"],
             native_context=native_context(self.runtime.model),
+            evaluators=evaluation.definitions(p),
+            evaluations=evaluation.summaries(p),
+            evaluation_prompt=evaluation.DEFAULT_PROMPT,
             policy_spec=p.data.get("policy_spec", DEFAULT_SPEC),
             policy_prompt=p.data.get("policy_prompt", DEFAULT_PROMPT),
             policy_model=self.policy_model["name"],
@@ -184,10 +187,14 @@ class Session:
             "node.open",
             "simulator.open",
             "simulator.inspect",
+            "evaluation.open",
         }:
             raise ValueError(
                 "Stop the active operation before changing the workspace or document"
             )
+        if command.startswith("evaluation."):
+            await evaluation.dispatch(self, command, args, request_id)
+            return
         if command.startswith("setup."):
             from .setup_service import dispatch
 
@@ -248,6 +255,7 @@ class Session:
                 try:
                     await job
                 except asyncio.CancelledError:
+                    evaluation.interrupt_pending(self.project)
                     # Cancellation can arrive before the task's first instruction.
                     self.job = None
                     await self.snapshot(request_id)
@@ -769,6 +777,7 @@ class Session:
                 try:
                     await job
                 except asyncio.CancelledError:
+                    evaluation.interrupt_pending(self.project)
                     self.job = None
         finally:
             self.runtime.close()

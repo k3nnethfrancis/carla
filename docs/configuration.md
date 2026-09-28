@@ -136,7 +136,7 @@ The texts are not covered by Carla’s MIT software license.
 
 ## Optional monitoring
 
-The Monitoring policy under `/config` configures Jev via OpenRouter System One. Enable it only when you
+The Monitoring policy under `/policy` configures Jev via OpenRouter System One. Enable it only when you
 intend to send the full conversation history, including character output and
 human messages, to that external service. Its requests may incur charges.
 Set `OPENROUTER_API_KEY` in the launching environment; never put it in a workspace
@@ -149,3 +149,12 @@ conversation awaits its pending/final result before advancing so an explicit Sto
 can take effect. Sibling conversations on the same model can keep advancing.
 Provider errors fail open and remain visible. Scores are provider classifications,
 not a locally calibrated guarantee. A Stop affects only the flagged conversation.
+
+## Policy and evaluation configuration
+
+Use `/policy` for monitoring, selection, and saved evaluations. `/config` now
+contains only generation settings. Each saved evaluation chooses a local LLM or
+Jev judge, criteria, and (for Jev) a pass-probability threshold. Local judging also
+exposes its complete system prompt. Definitions are workspace-local and revisioned;
+existing results keep the definition used at execution time. See
+[commands](commands.md#policies-and-evaluated-datasets) for targeting and exports.

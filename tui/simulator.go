@@ -36,7 +36,6 @@ func (m *model) openSimulatorConfig() tea.Cmd {
 		{"openings", "Opening"}, {"visitor_brief", "Visitor brief"},
 		{"character_settings", "Character sampling"}, {"visitor_settings", "Visitor sampling"},
 		{"character_template", "Character prompt"}, {"visitor_template", "Visitor prompt"},
-		{"selection", "Selection policy"}, {"monitor", "Monitoring policy"},
 	} {
 		value := fmt.Sprint(m.data.SimulatorConfig[entry.key])
 		if entry.key == "documents" {
@@ -243,6 +242,9 @@ func (m *model) numberKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if key == "threshold" {
 		lower = 0
+		if d.args["scope"] == "evaluation" {
+			lower = 1
+		}
 	}
 	if key == "n_predict" {
 		unit = 128
@@ -278,7 +280,11 @@ func (m *model) saveNumber(d *dialog) tea.Cmd {
 	}
 	command := "simulator.configure"
 	args := map[string]any{key: setting}
-	if d.args["scope"] == "loom-policy" {
+	if d.args["scope"] == "evaluation" {
+		command = "evaluation.configure"
+		args = m.evaluator(group).args()
+		args[key] = setting
+	} else if d.args["scope"] == "loom-policy" {
 		command = "loom-policy.update"
 		args = map[string]any{"id": group, key: setting}
 	} else if d.args["scope"] == "grow" {

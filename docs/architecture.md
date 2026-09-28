@@ -132,3 +132,23 @@ metadata only; a separate command confirms the download. Local imports do not co
 weights. The transfer runs in a child process so cancellation stops the Hub's
 worker threads and leaves its partial cache reusable. Registration and model
 selection happen in the owning Session only after a successful transfer.
+
+## Evaluation records
+
+`evaluation.py` owns saved evaluator definitions, immutable input/configuration
+snapshots, judge execution, and training-selection metadata. `/eval` captures
+explicit document or conversation targets before starting a cancellable session
+job. Local judging reuses `Runtime.judge`; Jev evaluation and monitoring share
+`monitor.classify`, retaining exact requests and provider results. Evaluation
+prompts never enter generation context. Generation-time monitoring and selection
+remain in their existing owners.
+
+Workspace `evaluators` holds current definitions; `evaluations` holds append-only
+results with frozen definitions and source records. Notes and training membership
+can change and record their own metadata history. Re-evaluation appends a new
+result. Result summaries cross in normal state events; opening an item requests
+its full record separately. Interrupted jobs recover visibly. Dataset export writes
+marked records to a fresh workspace-local JSONL file; it does not train a model.
+
+`tui/evaluation.go` owns the fifth tab and its dialogs. It uses the same command,
+focus, editor-save acknowledgement and parent/back mechanisms as the other pages.

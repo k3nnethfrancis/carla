@@ -32,7 +32,7 @@ func (m *model) commandChoices() []action {
 	value := strings.ToLower(strings.TrimSpace(m.command.Value()))
 	if fields := strings.Fields(value); len(fields) > 1 {
 		switch fields[0] {
-		case "/continue", "/generate", "/loom", "/branch", "/model", "/configure", "/config", "/fork", "/run", "/grow":
+		case "/eval", "/policy", "/continue", "/generate", "/loom", "/branch", "/model", "/configure", "/config", "/fork", "/run", "/grow":
 			value = fields[0]
 		}
 	}
@@ -41,6 +41,19 @@ func (m *model) commandChoices() []action {
 	}
 	actions := m.contextualActions()
 	for _, a := range allActions {
+		if a.id == "eval" && len(m.evaluationTargets()) == 0 {
+			continue
+		}
+		if m.section == 4 {
+			canonical := m.canonicalCommand(a.id)
+			switch canonical {
+			case "loom", "branch", "configure", "models", "rename", "review", "clear", "grid", "import":
+				continue
+			}
+			if a.id == "inspect" || a.id == "notes" || a.id == "keep" || a.id == "remove" {
+				continue
+			}
+		}
 		if (a.id == "run" || a.id == "character-sampling" || a.id == "visitor-sampling") && m.section != 3 {
 			continue
 		}
@@ -63,6 +76,9 @@ func (m *model) commandChoices() []action {
 		if a.id != "generate" && a.id != "continue" && a.id != "keep" && a.id != "add" && a.id != "remove" {
 			actions = append(actions, a)
 		}
+	}
+	if m.section == 4 && len(m.evaluationIDs()) > 0 {
+		actions = append(actions, action{id: "keep", label: "Mark selected items for training"}, action{id: "remove", label: "Unmark selected items for training"}, action{id: "notes", label: "Edit evaluation note"}, action{id: "inspect", label: "Exact evaluated input and judge result"})
 	}
 	actions = append(actions, action{id: "help", label: "All commands and navigation"}, action{id: "keys", label: "Edit keybindings"}, action{id: "quit", label: "Quit Carla"}, action{id: "exit", label: "Exit Carla"}, action{id: "restart", label: "Restart Carla in this workspace"})
 	if m.data.Busy {
@@ -124,7 +140,7 @@ func (m *model) commandChoices() []action {
 			a.label = "Loom temperature, top-p, output tokens and context"
 		}
 		if a.id == "configure" {
-			a.label = "Models, sampling, selection and monitoring policies"
+			a.label = "Generation models, prompts and sampling"
 		}
 		if a.id == "continue" && m.section > 0 {
 			a.label = "Continue current document at cursor"
@@ -284,6 +300,8 @@ func (m *model) commandKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.commandIndex = 0
 		m.reflow()
 		switch a.id {
+		case "eval":
+			return m.openEval(rawInput)
 		case "branch":
 			return m.forkDocument()
 		case "loom":
@@ -388,6 +406,8 @@ func (m *model) prioritizePageCommands(actions []action) {
 		preferred = []string{"loom", "configure", "branch", "keep", "remove", "clear", "edit", "notes", "inspect", "review", "models", "settings"}
 	case 2:
 		preferred = []string{"snapshot", "remove", "inspect", "notes", "edit", "simulator", "continue", "loom", "branch"}
+	case 4:
+		preferred = []string{"eval", "keep", "remove", "notes", "inspect", "snapshot", "policy", "find"}
 	case 3:
 		preferred = []string{"loom", "configure", "branch", "edit", "visitor", "inspect", "anthology"}
 	}
@@ -420,7 +440,9 @@ func (m *model) canonicalCommand(id string) string {
 		return "branch"
 	case "quit":
 		return "exit"
-	case "settings", "config", "sim-config", "grow-config", "grow-policy", "spec", "prompt", "loom-policy", "character-sampling", "visitor-sampling":
+	case "grow-config", "grow-policy", "spec", "prompt", "loom-policy":
+		return "policy"
+	case "settings", "config", "sim-config", "character-sampling", "visitor-sampling":
 		return "configure"
 	}
 	return id
@@ -435,7 +457,9 @@ func (m *model) commandAliases(id string) []string {
 	case "remove":
 		names = append(names, "delete")
 	case "configure":
-		names = append(names, "configure", "settings", "sim-config", "grow-config", "grow-policy", "spec", "prompt", "loom-policy", "loom-control-policy", "character-sampling", "visitor-sampling")
+		names = append(names, "configure", "settings", "sim-config", "character-sampling", "visitor-sampling")
+	case "policy":
+		names = append(names, "grow-config", "grow-policy", "spec", "prompt", "loom-policy", "loom-control-policy")
 	case "exit":
 		names = append(names, "quit")
 	case "kept":

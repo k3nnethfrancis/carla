@@ -95,6 +95,9 @@ func (d *dialog) add(label, value string) {
 	d.fields = append(d.fields, field{label, i})
 }
 func (m *model) submitDialog() tea.Cmd {
+	if m.dialog != nil && (m.dialog.kind == "policy" || strings.HasPrefix(m.dialog.kind, "eval-")) {
+		return m.submitEvaluation(m.dialog)
+	}
 	if m.dialog != nil && strings.HasPrefix(m.dialog.kind, "setup-") {
 		return m.submitSetup(m.dialog)
 	}

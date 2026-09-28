@@ -5,7 +5,7 @@ Carla (character lab) is a TUI for developing AI characters from base models ins
 Select from seed documents to generate base-model continuations, branch, edit, and curate an anthology of generations and explore how it behaves in simulated conversations. Prompts, model settings, source provenance and alternative branches remain inspectable.
 
 ```text
-Library → Branches → Anthology → Simulator
+Library → Branches → Anthology → Simulator → Evaluation
              │                      │
          fork / Loom           fork / Loom
              └── inspect, edit, compare ──┘
@@ -62,7 +62,10 @@ suggestion, and press Enter. Commands relevant to the current page appear first.
 | `/import` | Add a local text or Markdown seed to the shared Library. |
 | `/help` · `/keys` | Browse all commands or customize keyboard bindings. |
 | `/workspace` · `/model` | Choose a workspace or local model. |
-| `/config` | Models, sampling, selection and monitoring policies for this workflow. |
+| `/config` | Generation models, prompts and sampling for this workflow. |
+| `/policy` | Monitoring, selection and saved evaluation judges/criteria. |
+| `/eval --train-on-pass true` | Evaluate selected material; optionally mark passing results for training. |
+| `/evaluations` | Review results, add notes and select/export training items. |
 | `/loom` | Generate one continuation or the next Character reply. |
 | `/loom 3 --tokens 512` | In Branches, generate three alternative continuations. |
 | `/loom 3 --turns 4 --tokens 512` | In Simulator, generate three conversations, each with four new character replies. |
@@ -111,11 +114,11 @@ or downloaded automatically. A missing model does not prevent source browsing.
   Select the fresh-run row to start a new conversation; a selected batch asks you to choose a conversation. Multi-output runs stream into a selectable grid.
 
 `/loom 3 --tokens 512 --loops 4` repeats candidate generation and local selection.
-The selection policy lives under `/config`; no policy instructions enter base-model
+The selection policy lives under `/policy`; no policy instructions enter base-model
 prompts. It never automatically keeps documents. Configure a selector before
 starting repeated loops; see [configuration](docs/configuration.md).
 
-Optional monitoring under `/config` sends document context or conversation history
+Optional monitoring under `/policy` sends document context or conversation history
 to Jev through OpenRouter. It is **off by default**. Warn and Stop actions are explicit
 per condition. Monitoring and selection have separate roles and specs.
 See [data and monitoring](docs/configuration.md#optional-monitoring) before enabling it.
