@@ -305,8 +305,8 @@ async def test_batch_keep_and_reviewed_subtree_delete(session):
 @pytest.mark.asyncio
 async def test_gunkel_only_does_not_include_tractatus(session):
     s = session
-    gunkel = s.sources[0]
-    tractatus = s.sources[-1]
+    gunkel = next(source for source in s.sources if source["key"] == "gunkel")
+    tractatus = next(source for source in s.sources if source["key"] == "tractatus")
     grefs = [gunkel["key"] + ":" + p["id"] for p in gunkel["passages"]]
     trefs = [tractatus["key"] + ":" + p["id"] for p in tractatus["passages"]]
     await s.execute("seed.add", {"refs": trefs + grefs}, "mixed")

@@ -10,10 +10,8 @@ claims of affiliation or faithful replication:
   context and source material.
 - [Patrick Gunkel / MIT](https://ideonomy.mit.edu/gunkel.html) and the
   [paths taxonomy](https://ideonomy.mit.edu/divisions/paths/tbl-pathdo.html): source
-  references for document-seeded exploration. Carla bundles an attributed,
-  whitespace-reflowed copy of the 65-entry Paths table; permission to redistribute
-  that text has not been independently verified. See the
-  [starter-library attribution](../src/character_lab/seeds/README.md).
+  references for document-seeded exploration. The Paths table is not bundled
+  because redistribution permission has not been verified.
 - [Moving Castles: Zero](https://movingcastles.world/posts/zero): a related character
   training approach. Carla's current pipeline does not implement Zero's memory
   system or claim equivalent training results.

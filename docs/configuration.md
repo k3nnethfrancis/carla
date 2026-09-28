@@ -230,7 +230,7 @@ For numbered books or curated excerpts, place JSON documents under
 
 Keys and passage IDs must be unique within their scope. `book`/`number` enable
 nested numbered selection; arbitrary passages can instead supply a `label`.
-The bundled library contains Gunkel’s Paths table, 487 numbered Meditations
+The bundled library contains 487 numbered Meditations
 passages and the seven main Tractatus propositions. These load offline; local
 entries with matching keys override the bundled entries. See
 [source attribution](../src/character_lab/seeds/README.md) for scope and rights.
