@@ -241,7 +241,7 @@ func (m *model) conversationDocument(width int) string {
 		return "Select a conversation to open it, or select a Loom to view its grid."
 	}
 	c := m.simulation.Conversations[m.gridSelection]
-	blocks := []string{m.helpStyle().Render(conversationStatus(c))}
+	var blocks []string
 	for i, t := range c.Turns {
 		style := m.humanStyle().Bold(false)
 		if t.Role == "character" {
@@ -368,8 +368,13 @@ func (m *model) conversationHeading(width int) string {
 	if m.simulation == nil || m.gridSelection >= len(m.simulation.Conversations) {
 		return title
 	}
-	flags := safe(conversationFlags(m.simulation.Conversations[m.gridSelection]))
-	if flags == "" {
+	conversation := m.simulation.Conversations[m.gridSelection]
+	if status := safe(conversationStatus(conversation)); status != "" {
+		title += " · " + status
+	}
+	title = ansi.Truncate(title, width, "…")
+	flags := safe(conversationFlags(conversation))
+	if flags == "" || width-ansi.StringWidth(title) < 3 {
 		return title
 	}
 	flags = ansi.Truncate(flags, max(1, width-ansi.StringWidth(title)-2), "…")
