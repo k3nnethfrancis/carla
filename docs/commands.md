@@ -6,9 +6,9 @@ This is the command contract for the unified Loom interface. Legacy command name
 
 ## The organizing idea
 
-Carla has five views: **Library, Branches, Anthology, Simulator and Evaluation**. Commands operate on the selected object. The view supplies context, rather than introducing a different command vocabulary.
+Carla has five views: **Library, Branches, Anthology, Simulator and Evaluate**. Commands operate on the selected object. The view supplies context, rather than introducing a different command vocabulary.
 
-Library supplies source passages. Branches holds document versions and their ancestry. Anthology is the kept subset of those versions. Simulator holds conversations and batches of alternative conversations. Evaluation holds judged material and training selections.
+Library supplies source passages. Branches holds document versions and their ancestry. Anthology is the kept subset of those versions. Simulator holds conversations and batches of alternative conversations. Evaluate holds judged material and training selections.
 
 There are two generation workflows behind one command:
 
@@ -28,9 +28,9 @@ Library and Anthology call the same document operation as Branches, then open it
 |---|---|
 | `/loom` | Generate from the selected starting point. |
 | `/config` | Edit generation settings relevant to the current workflow. |
-| `/policy` | Configure monitoring, selection and saved evaluations. |
-| `/eval` | Evaluate selected saved material using a named judge configuration. |
-| `/evaluations` | Browse evaluated material and assemble training selections. |
+| `/policy` | Configure monitoring, selection and reusable judge configurations. |
+| `/eval` | Run active/named evaluation on selected saved material. |
+| `/evaluations` | Manage evaluation collections, results and training selections. |
 | `/fork` | Create a new version of the selected document or conversation without generation. |
 | `/edit` | Change existing document text or a conversation message; saving creates a new version. |
 | `/remove` | Remove the selected item from its current context, with explicit consequences. |
@@ -42,7 +42,7 @@ The Branches tab keeps its name. “Fork” names the action; “Branches” nam
 ## Loom: configure one set, then repeat
 
 ```text
-/loom [alternatives] [--tokens N] [--turns N] [--loops N]
+/loom [alternatives] [--tokens N] [--turns N] [--msg "opening"] [--loops N]
        one set       generation settings       repetition
 ```
 
@@ -53,6 +53,7 @@ Examples and autocomplete place `--loops` last. The parser accepts flags in any 
 | Alternatives | Number of alternatives generated from the same starting point. | All views |
 | `--tokens N` | Maximum new tokens per generation; not a required length or total conversation budget. | All views |
 | `--turns N` | New Character replies per conversation alternative per loop, with Visitor messages as needed. | Simulator only |
+| `--msg "text"` / `--message "text"` | Override the first Visitor message for this fresh run; preserves the saved opener. | Simulator only, no conversation selected |
 | `--loops N` | Total generate-and-select cycles, including the first cycle. | All views |
 
 **Bare `/loom` is the small, predictable action:** one alternative, one loop, and in Simulator one new Character reply. Model, sampling, token ceilings and monitoring settings still come from configuration. Explicit parameters expand the run.
@@ -94,17 +95,17 @@ If all four loops complete, the last example creates twelve continuations. The a
 
 If all loops complete, the last example produces twelve candidate extensions. The final path gains eight Character replies, plus the required Visitor messages. The token ceiling applies to individual generations, not the whole eight-reply path. An explicit `--tokens` overrides both Character and Visitor for this run; omitting it preserves their individual saved ceilings.
 
-If the conversation ends with a Visitor message, Loom generates the Character response directly. It must not invent another Visitor message first. If the conversation needs a Visitor message before the next Character reply, the configured Visitor supplies it. Fresh runs use the configured opening.
+If the conversation ends with a Visitor message, Loom generates the Character response directly. It must not invent another Visitor message first. If the conversation needs a Visitor message before the next Character reply, the configured Visitor supplies it. Fresh runs use the configured opening unless `--msg` or `--message` supplies a quoted opener. For example, `/loom 4 --msg "What does a path remember?" --turns 2 --tokens 512` starts four conversations with that message. Single or double quotes preserve spaces; nothing is expanded or executed as shell code. An opener with a selected conversation is rejected: use `/clear` for a fresh run, or `/visitor` to add a message to an existing conversation.
 
 ## Selection determines the input
 
-A batch is a collection of alternatives, not itself a conversation.
+A batch is a collection of alternatives, not itself a conversation. In Simulator, highlighting previews a target but does not select it for Loom. **Space** selects or deselects one conversation; **Enter** selects and opens it, including from the grid. Choosing a different conversation replaces the prior checkmark. `/clear` clears the target without deleting anything. The checked conversation stays the Loom target while browsing other items. Starting a Loom consumes that selection; displaying its output does not implicitly select a new target.
 
 | Selected context | `/loom` | `/loom 4` |
 |---|---|---|
 | One document version | One continuation | Four continuations of that version |
-| One conversation | One new Character reply | Four alternative extensions of that conversation |
-| Completed conversation batch | Open the grid and ask which conversation to use | Open the grid and ask which conversation to use |
+| Explicitly checked conversation | One new Character reply | Four alternative extensions of that conversation |
+| Browsed conversation or batch, nothing checked | Start one fresh conversation | Start four fresh conversations |
 | Fresh Simulator setup | Start one conversation | Start four alternatives from the setup |
 
 Never silently pick a batch winner, continue every member, or reuse the original batch input. Automatic policy selection is part of an explicitly configured multi-loop run.
@@ -183,7 +184,7 @@ Commands requiring a selected object are available only when that target exists.
 | Branches | `/keep`, `/remove`, `/clear` | Keep versions, delete versions, clear checked rows. |
 | Anthology | `/remove`, `/snapshot` | Unkeep versions or export the kept collection with provenance. |
 | Anthology | `/loom`, `/config`, `/fork` | Explore kept versions using the document workflow. New versions appear in Branches. |
-| Simulator | `/loom`, `/config`, `/fork`, `/visitor` | Generate conversations, configure them, fork one, or add a Visitor message. |
+| Simulator | `/loom`, `/clear`, `/config`, `/fork`, `/visitor` | Generate conversations, configure them, fork one, or add a Visitor message. |
 | Shared: navigate | `/library`, `/branches`, `/anthology`, `/simulator`, `/workspace` | Switch views or open/create a workspace. |
 | Shared: model | `/model` | Shortcut to the relevant model settings. |
 | Shared: edit | `/edit`, `/save`, `/cancel`, `/rename` | Change selected content, save/cancel a draft, or change a document title. |
@@ -241,63 +242,109 @@ The interface replaces separate user-facing `/continue`, `/grow`, `/run` and con
 - No saved batch-preset UI is introduced. Bare Loom always creates one alternative in one loop and, in Simulator, one Character reply.
 - Training is not implemented. Keeping and exporting remain explicit human curation actions.
 
+A sidebar `!` indicates detected policy behavior only while that conversation is running; it is never a selection marker. Completed detections remain in the conversation header at the right and in the per-turn policy evidence.
+
 ## Policies and evaluated datasets
 
-`/config` contains generation models, prompts and sampling. `/policy` opens three
-sections: **Monitoring**, **Selection**, and **Evaluations**. The first two retain
-their existing generation-time behavior. Evaluations are named, versioned judge
-configurations for saved documents and conversations. Old policy command aliases
-now lead to `/policy`, not `/config`.
+`/policy` configures **Monitoring**, **Selection**, and reusable **Judge
+configurations**. Monitoring observes generation; selection chooses candidates.
+Their results can be attached to an evaluation, retaining their original scope.
+An evaluation is a named collection of saved items with configured judges.
 
-An evaluation can use the configured local instruct judge (an editable prompt and
-criteria) or Jev through OpenRouter (a behavior spec and probability threshold).
-Jev requires `OPENROUTER_API_KEY`. Its probabilities are model estimates, not
-calibrated confidence. Local judge calls use the same model lifecycle as selection;
-configure that model with `--policy-model` or the existing model setup. A local
-judge must return JSON with boolean `passed`, explanatory `reason`, and an exact
-`evidence` excerpt. The default prompt documents this contract and is editable.
-Empty or invalid responses and provider failures remain errors, never passes.
+**Evaluate** lists your collections. Create one, open it, and use **Configure**
+(or `/config`) to choose its name, judges and whether it is the active evaluation.
+**Add items / existing judgments** selects documents, conversations or completed
+judgments. Adding freezes the source and attaches available policy evidence;
+it does not run inference. Open an item with Enter to read its text and judgment
+history. Escape returns to the collection, then the collection list.
 
 ```text
-/policy
-/eval
-/eval --train-on-pass true
 /evaluations
+/config
+/eval
+/eval Voice
+/eval "Character consistency" --train-on-pass true
+/loom 3 --tokens 512 --eval Voice
+/loom 3 --turns 2 --tokens 512 --eval Voice --loops 4
 ```
 
-In Branches or Anthology, `/eval` targets checked document versions, or the
-highlighted version if none are checked. In Simulator it targets the selected
-conversation; selecting a Loom group evaluates every conversation in that group.
-Each document is evaluated in full, including its inherited text. Conversations
-include every saved turn. No text is silently truncated to fit a judge's context.
-The command opens a picker for the saved evaluation definition. It does not start
-new conversations. `--train-on-pass` defaults to `false`; `true` marks only
-successfully evaluated passing items for training.
+`/eval` runs the active collection's judges on selected material. `/eval name`
+chooses a particular collection. In Branches or Anthology, targets are checked
+versions, or the highlighted version when none are checked. In Simulator, select
+an individual conversation explicitly with Space or Enter; hovering or highlighting
+a Loom group is not a target. In Evaluate, checked items or the highlighted item
+are rerun; from an action row, Run evaluates pending items. Configuration never
+starts a run. `/loom --eval name` judges completed outputs after generation,
+using the evaluation's configuration captured when the job started.
 
-**Evaluation** is the fifth tab. Its rows are evaluation results, so the same
-source can appear more than once when evaluated again or against different
-criteria. Each result freezes the original content and source provenance, criteria
-revision, judge input/output, and pass result. Changing a definition or deleting
-an original branch does not rewrite a previous evaluation. Re-evaluating an entry
-uses its frozen text; evaluating a newer edited branch requires selecting that
-branch instead.
+Each item freezes its full text and provenance. Every judgment records the judge
+revision, request, response and result. Rerunning appends history; edits to the
+source or judge do not overwrite it. Changing judge criteria leaves old evidence
+visible, but it does not count as a pass for the new revision. An item passes when
+all currently configured judge revisions pass. Monitoring observations and
+candidate-relative selection decisions remain scoped evidence, not whole-item
+grades. Existing completed judgments can be added without another model call.
+Older flat results migrate into collections without rerunning or altering them.
 
-- Arrow keys preview an item; Tab enters its scrollable result/text viewer.
-- Space checks items; Enter opens actions for the checked items or highlighted row.
-- `/keep` marks them for training; `/remove` (alias `/delete`) unmarks them.
-  A failed *criterion* can be marked deliberately for negative training signals;
-  an unfinished/errored evaluation cannot be marked.
-- `/notes` edits the highlighted item's note; `/inspect` shows its exact record.
-- The Filter control shows all, pass, fail, unfinished/error, or training items.
-  `/find` additionally searches visible result labels and metadata.
-- `/eval` evaluates checked results again, preserving previous results.
-- `/snapshot` exports all training-marked results as a new JSONL file under the
-  workspace's `datasets/` directory. It includes source text and all evaluation
-  metadata; it does not run training or decide loss masks. Repeated evaluations
-  are distinct records, so downstream dataset preparation must deliberately handle
-  duplicate source content (a content hash is included).
+A judge uses the configured local instruct model (criteria and editable prompt)
+or Jev through OpenRouter (behavior spec and probability threshold). Jev uses
+the saved OpenRouter credential or `OPENROUTER_API_KEY`. Its probabilities are
+model estimates, not calibrated confidence. Local judges use the policy model;
+they must return JSON with boolean `passed`, `reason`, and an exact `evidence`
+excerpt. Invalid responses and provider errors remain incomplete, never passes.
+Full items are sent without silent truncation; context overflow remains an error.
 
-Evaluation jobs use the session's existing operation lock. `/stop`, disconnect,
-and recovery preserve completed results and label unfinished ones. Items are judged
-sequentially with one resident local model; this first evaluation workflow does
-not add task generation, automatic judge calibration, or a training runner.
+- Space selects items; Enter opens the result viewer.
+- `/keep` marks items for training; `/remove` (alias `/delete`) unmarks them.
+  Manual marking is deliberate and separate from judge results.
+- `/eval --train-on-pass true` marks an item only when every judge in that run
+  passes. It defaults to false; rerunning does not undo prior manual membership.
+- `/notes` edits item notes; `/inspect` shows the exact stored item and evidence.
+- **Show** filters all, pass, fail, unfinished or training items.
+- `/snapshot` exports the collection's training-marked frozen items, judgment
+  histories, attached evidence and metadata to a new workspace-local JSONL file.
+  Export does not train a model or determine loss masks. Downstream preparation
+  must handle repeated content deliberately; snapshot hashes are included.
+
+Generation and judging share the session operation lock. `/stop`, disconnect and
+recovery preserve completed work and label unfinished results. Judges run
+sequentially with one resident local model. This workflow does not add automatic
+judge calibration or a training runner.
+
+## Run status
+
+- **Complete:** the configured work finished.
+- **Stopped:** cancellation was handled while Carla was running, including closing
+  its terminal. Partial text is saved.
+- **Interrupted:** a previous process ended without completing its work; recovery
+  preserves the partial output. Older confirmed terminal-disconnect failures may
+  also be corrected to this label, preserving their error evidence.
+- **Failed:** an actual generation or infrastructure error, such as losing the
+  model connection. Inspect the error before retrying.
+- **Stopped by policy:** an enabled policy explicitly requested a stop.
+
+Losing the UI connection cancels generation; it is not an inference failure.
+Completed conversations and turns retain their status when siblings stop.
+
+### Monitoring timing
+
+In `/policy` → Monitoring → **When to check**, use Enter to toggle **After each
+reply** and **During a reply** independently. When during-reply checking is on,
+**Check interval** opens an arrow-controlled positive output-token count. Turning
+it off preserves that count. Both checks default to on with a 512-token interval;
+the separate Monitoring switch still defaults to off.
+
+These controls apply to Character replies and document continuations, not Visitor
+messages. Only one check runs at a time; a busy judge coalesces token intervals
+rather than queuing requests. Existing zero-interval settings still mean no
+mid-reply checks; turning those on starts at 512 tokens. Disabling both timings
+means no checks, even if Monitoring is on. Saved traces retain the timing used.
+
+### Enabling monitoring
+
+`/policy` → Monitoring initially shows only **Monitoring · Off**. Select Jev and
+complete the masked OpenRouter API-key step before timing, model and behavior
+settings appear. If a saved or environment key already exists, setup is already
+complete. An older workspace with Jev enabled but no available key shows only the
+provider choice and key setup. Turning monitoring off hides its controls while
+retaining the configuration. The configured-key row permits replacing a saved key.

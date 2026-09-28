@@ -9,6 +9,18 @@ import (
 )
 
 func (m *model) toggleTarget() tea.Cmd {
+	if m.section == 3 {
+		if target, ok := m.conversationTarget(); ok {
+			chosen := conversationParent{Run: target["run"].(string), Conversation: target["conversation"].(int)}
+			if m.loomConversation != nil && *m.loomConversation == chosen {
+				m.loomConversation = nil
+			} else {
+				m.loomConversation = &chosen
+			}
+		}
+		m.reflow()
+		return nil
+	}
 	if m.section == 4 && !m.data.Busy {
 		r := m.targetRow()
 		if r.kind == "evaluation" {

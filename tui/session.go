@@ -39,6 +39,7 @@ func (m *model) exitSession(restart bool) tea.Cmd {
 			return nil
 		}
 	}
+	m.saveWorkspaceView()
 	m.restarting = restart
 	return tea.Quit
 }

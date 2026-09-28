@@ -83,7 +83,7 @@ func TestDocumentEntryPointsShareOneOperation(t *testing.T) {
 	}
 }
 
-func TestBareSimulatorLoomUsesOneReplyAndBatchRequiresSelection(t *testing.T) {
+func TestBareSimulatorLoomUsesOneReplyAndHighlightDoesNotSelectBatch(t *testing.T) {
 	m := fixture()
 	m.section = 3
 	m.focus = 0
@@ -114,7 +114,7 @@ func TestBareSimulatorLoomUsesOneReplyAndBatchRequiresSelection(t *testing.T) {
 	go func() { done <- cmd() }()
 	json.NewDecoder(right).Decode(&request)
 	<-done
-	if request.Command != "simulator.open" || request.Args["run"] != "batch" {
+	if request.Command != "simulator.run" || request.Args["run"] != nil {
 		t.Fatal(request)
 	}
 }

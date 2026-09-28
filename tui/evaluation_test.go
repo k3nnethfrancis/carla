@@ -3,6 +3,7 @@ package main
 import (
 	tea "charm.land/bubbletea/v2"
 	"encoding/json"
+	"fmt"
 	"github.com/charmbracelet/x/ansi"
 	"net"
 	"strings"
@@ -14,6 +15,8 @@ func evalFixture() *model {
 	m.width, m.height = 120, 36
 	m.data.Evaluators = []evaluator{{ID: "rubric", Name: "Coherence", Kind: "llm", Revision: 1, Spec: "Coherent writing", Model: "judge", Threshold: .8}}
 	m.data.SelectorModels = []localModel{{Name: "Judge", Alias: "judge"}}
+	m.data.EvaluationSets = []evaluationCollection{{ID: "set", Name: "Coherence", Judges: []string{"rubric"}}}
+	m.data.ActiveEvaluation = "set"
 	m.data.EvaluationPrompt = "Judge criteria, return passed, reason and evidence."
 	return m
 }
@@ -62,41 +65,26 @@ func TestEvalTargetsUseSelectedVersionsAndExplicitConversationBatch(t *testing.T
 		}
 	}
 	targets := m.evaluationTargets()
-	if len(targets) != 2 || targets[1]["conversation"] != 1 {
+	if len(targets) != 0 {
+		t.Fatal(targets)
+	}
+	m.loomConversation = &conversationParent{Run: "run", Conversation: 1}
+	if targets = m.evaluationTargets(); len(targets) != 1 || targets[0]["conversation"] != 1 {
 		t.Fatal(targets)
 	}
 }
 func TestEvalCommandDispatchAndDefaults(t *testing.T) {
-	for _, input := range []string{"/eval", "/eval --train-on-pass true"} {
+	for _, input := range []string{"/eval", "/eval Coherence --train-on-pass true"} {
 		m := evalFixture()
 		m.section = 1
-		m.focus = 3
-		m.command.SetValue(input)
-		left, right := net.Pipe()
-		m.client = &client{conn: left}
-		m.commandKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-		if m.dialog == nil || m.dialog.kind != "eval-run" {
-			t.Fatal(m.status, m.commandChoices())
-		}
-		cmd := m.submitDialog()
-		done := make(chan tea.Msg, 1)
-		go func() { done <- cmd() }()
-		var request struct {
-			Command string
-			Args    map[string]any
-		}
-		if err := json.NewDecoder(right).Decode(&request); err != nil {
-			t.Fatal(err)
-		}
-		<-done
-		left.Close()
-		right.Close()
-		if request.Command != "evaluation.run" || request.Args["train_on_pass"] != strings.Contains(input, "true") || m.section != 4 {
-			t.Fatal(request, m.section)
+		m.branchSelection = map[string]bool{m.currentID(): true}
+		req := captureCommand(t, m, func() tea.Cmd { return m.openEval(input) })
+		if req.Command != "evaluation.collection.run" || string(req.Args["train_on_pass"]) != fmt.Sprint(strings.Contains(input, "true")) || m.evalCollection != "set" {
+			t.Fatal(req)
 		}
 	}
-	for _, input := range []string{"/eval true", "/eval --train-on-pass", "/eval --train-on-pass yes"} {
-		if _, err := parseEvalOptions(input); err == nil {
+	for _, input := range []string{"/eval --train-on-pass", "/eval --train-on-pass yes"} {
+		if _, _, err := parseEvalOptions(input); err == nil {
 			t.Fatal(input)
 		}
 	}
@@ -107,14 +95,15 @@ func TestEvaluationSelectionFilteringAndNavigation(t *testing.T) {
 	m.focus = 0
 	passed := true
 	failed := false
-	m.data.Evaluations = []evaluationSummary{{ID: "one", Title: "Document", Status: "complete", Passed: &passed, Training: true}, {ID: "two", Title: "Conversation", Status: "complete", Passed: &failed}}
-	m.selected = 2
+	m.evalCollection = "set"
+	m.data.EvaluationSets[0].Items = []evaluationSummary{{ID: "one", Title: "Document", Status: "complete", Passed: &passed, Training: true}, {ID: "two", Title: "Conversation", Status: "complete", Passed: &failed}}
+	m.selected = 5
 	m.toggleTarget()
 	if !m.evalSelection["two"] {
 		t.Fatal("space did not select result")
 	}
 	m.evalFilter = "training"
-	m.selected = 2
+	m.selected = 5
 	if m.targetRow().id != "one" {
 		t.Fatal(m.rows())
 	}
@@ -125,7 +114,7 @@ func TestEvaluationSelectionFilteringAndNavigation(t *testing.T) {
 		m.focus = 1
 		m.reflow()
 		frame := ansi.Strip(m.View().Content)
-		if !strings.Contains(frame, "Evaluation") {
+		if !strings.Contains(frame, "Evaluate") {
 			t.Fatal(frame)
 		}
 		if len(strings.Split(frame, "\n")) > size[1] {
@@ -145,8 +134,9 @@ func TestEvaluationSelectionFilteringAndNavigation(t *testing.T) {
 func TestEvaluationNotesSaveDoesNotEditSource(t *testing.T) {
 	m := evalFixture()
 	m.section = 4
-	m.selected = 2
-	m.data.Evaluations = []evaluationSummary{{ID: "one", Status: "complete"}}
+	m.selected = 5
+	m.evalCollection = "set"
+	m.data.EvaluationSets[0].Items = []evaluationSummary{{ID: "one", Status: "complete"}}
 	m.evaluation = &evaluationRecord{ID: "one", Note: "Original"}
 	m.evalAction("notes")
 	m.editor.SetValue("New note")
@@ -163,7 +153,7 @@ func TestEvaluationNotesSaveDoesNotEditSource(t *testing.T) {
 	}
 	json.NewDecoder(right).Decode(&request)
 	<-done
-	if request.Command != "evaluation.annotate" || request.Args["note"] != "New note" {
+	if request.Command != "evaluation.item.annotate" || request.Args["note"] != "New note" {
 		t.Fatal(request)
 	}
 	if m.editing != "evaluation-note" {
@@ -174,31 +164,52 @@ func TestEvaluationNotesSaveDoesNotEditSource(t *testing.T) {
 func TestRerunFromEvaluationTabDoesNotLoseRequestToPreview(t *testing.T) {
 	m := evalFixture()
 	m.section = 4
-	m.selected = 2
+	m.evalCollection = "set"
+	m.selected = 5
 	m.focus = 1
-	m.data.Evaluations = []evaluationSummary{{ID: "one", Status: "complete"}}
-	m.evaluation = &evaluationRecord{ID: "one"}
-	m.openEval("/eval")
-	left, right := net.Pipe()
-	defer left.Close()
-	defer right.Close()
-	m.client = &client{conn: left}
-	cmd := m.submitDialog()
-	if cmd == nil {
-		t.Fatal("preview swallowed evaluation request")
+	m.data.EvaluationSets[0].Items = []evaluationSummary{{ID: "one", Status: "complete"}}
+	req := captureCommand(t, m, func() tea.Cmd { return m.openEval("/eval") })
+	if req.Command != "evaluation.collection.run" {
+		t.Fatal(req)
 	}
-	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
-	var request struct {
-		Command string
-		Args    map[string]any
+}
+
+func TestNamedEvaluationLoomOptions(t *testing.T) {
+	o, err := parseGenerationOptions(`/loom 3 --turns 2 --tokens 512 --eval "Character voice" --loops 4`, "loom")
+	if err != nil {
+		t.Fatal(err)
 	}
-	json.NewDecoder(right).Decode(&request)
-	<-done
-	if request.Command != "evaluation.run" {
-		t.Fatal(request)
+	args := map[string]any{}
+	o.apply(args)
+	if args["eval"] != "Character voice" || args["count"] != 3 || args["loops"] != 4 || args["turns"] != 2 || args["n_predict"] != 512 {
+		t.Fatal(args)
 	}
-	if !m.evalStarting {
-		t.Fatal("new results will not be selected")
+	for _, input := range []string{`/loom --eval`, `/loom --eval ""`, `/loom --eval a --eval b`} {
+		if _, err := parseGenerationOptions(input, "loom"); err == nil {
+			t.Fatal(input)
+		}
+	}
+}
+
+func TestCollectionConfigAndAddingDoNotRunJudges(t *testing.T) {
+	m := evalFixture()
+	m.section = 4
+	m.enterCollection("set")
+	m.openConfig()
+	if m.dialog == nil || m.dialog.kind != "eval-collection-config" {
+		t.Fatal(m.dialog)
+	}
+	m.closeDialog()
+	m.openCollectionItems()
+	if m.dialog == nil || m.dialog.kind != "eval-add-items" {
+		t.Fatal(m.dialog)
+	}
+	if len(m.dialog.rows) == 0 {
+		t.Fatal("missing source items")
+	}
+	m.dialog.args["selected"] = map[string]bool{m.dialog.rows[0].id: true}
+	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
+	if req.Command != "evaluation.collection.add" {
+		t.Fatal(req)
 	}
 }

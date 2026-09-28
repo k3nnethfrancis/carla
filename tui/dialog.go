@@ -268,7 +268,7 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 	if d.kind == "config-number" {
 		return m.numberKey(msg)
 	}
-	if d.kind == "sim-documents" && (msg.Code == tea.KeySpace || msg.Code == tea.KeyEnter) {
+	if (d.kind == "sim-documents" || d.kind == "eval-judges" || d.kind == "eval-add-items") && (msg.Code == tea.KeySpace || msg.Code == tea.KeyEnter) {
 		if len(d.rows) == 0 {
 			return nil
 		}
@@ -317,6 +317,26 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 			d.index = (d.index + step + len(d.rows)) % len(d.rows)
 		}
 		return nil
+	}
+	if msg.Code == tea.KeySpace || msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight {
+		if d.choicePicker() && len(d.rows) > 0 {
+			if msg.Code == tea.KeySpace {
+				return m.submitDialog()
+			}
+			step := 1
+			if msg.Code == tea.KeyLeft {
+				step = -1
+			}
+			d.index = (d.index + step + len(d.rows)) % len(d.rows)
+			return nil
+		}
+		if _, ok := m.dialogChoice(); ok {
+			step := 1
+			if msg.Code == tea.KeyLeft {
+				step = -1
+			}
+			return m.cycleDialogChoice(step)
+		}
 	}
 	if m.filterDialog(msg) {
 		return nil

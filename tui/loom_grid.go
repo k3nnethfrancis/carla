@@ -56,8 +56,12 @@ func (m *model) gridItems() []loomTile {
 			}
 			fmt.Fprintln(&body)
 		}
+		title := fmt.Sprintf("Conversation %d", c.Index+1)
+		if m.loomConversation != nil && m.loomConversation.Run == m.simulation.ID && m.loomConversation.Conversation == c.Index {
+			title = "✓ " + title
+		}
 		items = append(items, loomTile{
-			ID: conversationKey(m.simulation.ID, c.Index), Title: fmt.Sprintf("Conversation %d", c.Index+1), Text: body.String(), Status: conversationStatus(c),
+			ID: conversationKey(m.simulation.ID, c.Index), Title: title, Text: body.String(), Status: conversationStatus(c),
 		})
 	}
 	return items
@@ -213,6 +217,9 @@ func (m *model) openGridTile(index int) tea.Cmd {
 		m.notesOpen = false
 		m.selectDocument(items[index].ID)
 		return m.send("node.open", map[string]any{"node": items[index].ID})
+	}
+	if m.simulation != nil {
+		m.loomConversation = &conversationParent{Run: m.simulation.ID, Conversation: index}
 	}
 	m.selectConversationRow()
 	m.reflow()

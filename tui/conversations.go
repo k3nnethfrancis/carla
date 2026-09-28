@@ -80,11 +80,16 @@ func (m *model) simulationRows() []row {
 				}
 			}
 			for _, t := range c.Turns {
-				if turnFlagged(t) {
+				if c.Status == "running" && turnFlagged(t) {
 					label = "! " + label
 					break
 				}
 			}
+			mark := "  "
+			if m.loomConversation != nil && m.loomConversation.Run == r.ID && m.loomConversation.Conversation == c.Index {
+				mark = "✓ "
+			}
+			label = mark + label
 			rows = append(rows, row{id: key, kind: "conversation", depth: depth, label: label, preview: r.ID})
 			if !m.collapsed[key] {
 				addChildren(r.ID, c.Index, depth+1)
@@ -236,7 +241,7 @@ func (m *model) conversationDocument(width int) string {
 		return "Select a conversation to open it, or select a Loom to view its grid."
 	}
 	c := m.simulation.Conversations[m.gridSelection]
-	blocks := []string{m.helpStyle().Render(fmt.Sprintf("Conversation %d · %s", c.Index+1, conversationStatus(c)))}
+	var blocks []string
 	for i, t := range c.Turns {
 		style := m.humanStyle().Bold(false)
 		if t.Role == "character" {
@@ -321,4 +326,57 @@ func turnFlagged(t simulationTurn) bool {
 		}
 	}
 	return false
+}
+
+// Preview/focus is separate from the one explicit parent of the next Loom.
+func (m *model) selectLoomConversation(target map[string]any) {
+	m.loomConversation = &conversationParent{Run: target["run"].(string), Conversation: target["conversation"].(int)}
+}
+func (m *model) loomConversationTarget() (map[string]any, bool) {
+	if m.section != 3 || m.loomConversation == nil {
+		return nil, false
+	}
+	return map[string]any{"run": m.loomConversation.Run, "conversation": m.loomConversation.Conversation}, true
+}
+
+func conversationFlags(c simulationConversation) string {
+	seen := map[string]bool{}
+	var flags []string
+	add := func(name string) {
+		if name != "" && !seen[name] {
+			seen[name] = true
+			flags = append(flags, name)
+		}
+	}
+	for _, turn := range c.Turns {
+		for _, check := range append([]monitorResult{turn.Monitor}, turn.MonitorChecks...) {
+			for _, detection := range check.Detections {
+				add(detection.Name)
+			}
+		}
+	}
+	if len(flags) == 0 {
+		return ""
+	}
+	return "! " + strings.Join(flags, " · ")
+}
+
+// Keep policy evidence visible even while the transcript is scrolled. The
+// sidebar's transient warning is distinct from the persistent header summary.
+func (m *model) conversationHeading(width int) string {
+	title := fmt.Sprintf("Conversation %d", m.gridSelection+1)
+	if m.simulation == nil || m.gridSelection >= len(m.simulation.Conversations) {
+		return title
+	}
+	conversation := m.simulation.Conversations[m.gridSelection]
+	if status := safe(conversationStatus(conversation)); status != "" {
+		title += " · " + status
+	}
+	title = ansi.Truncate(title, width, "…")
+	flags := safe(conversationFlags(conversation))
+	if flags == "" || width-ansi.StringWidth(title) < 3 {
+		return title
+	}
+	flags = ansi.Truncate(flags, max(1, width-ansi.StringWidth(title)-2), "…")
+	return title + strings.Repeat(" ", max(2, width-ansi.StringWidth(title)-ansi.StringWidth(flags))) + m.accent("#A84F39", "#DB937C").Render(flags)
 }

@@ -93,12 +93,18 @@ func (m *model) refreshConfig() {
 		return
 	}
 	switch d.kind {
+	case "eval-collection-config":
+		m.openCollectionConfig()
 	case "eval-definitions":
 		m.openEvaluators()
 	case "eval-definition":
 		m.openEvaluator(d.args["id"].(string))
+	case "loom-policy-behaviors":
+		m.openBehaviors()
 	case "loom-policy":
 		m.openLoomPolicy()
+	case "loom-policy-timing":
+		m.openMonitorTiming()
 	case "loom-policy-dimension":
 		m.openDimension(d.args["id"].(string))
 	case "sim-openings":
@@ -119,10 +125,27 @@ func (m *model) refreshConfig() {
 		return
 	}
 	m.dialog.parent = d.parent
+	// Keep a filtered choice stable when its saved value refreshes the panel.
+	if d.query != "" {
+		m.dialog.query = d.query
+		m.dialog.allRows = append([]row{}, m.dialog.rows...)
+		m.dialog.rows = filterRows(m.dialog.rows, d.query)
+	}
 	m.dialog.index = min(d.index, max(0, len(m.dialog.rows)-1))
+	if len(d.rows) > 0 {
+		for i, r := range m.dialog.rows {
+			if r.id == d.rows[d.index].id {
+				m.dialog.index = i
+				break
+			}
+		}
+	}
 }
 func (m *model) saveDialog(d *dialog, command string, args map[string]any) tea.Cmd {
 	m.dialog = d.parent
+	if command == "loom-policy.update" {
+		return m.updateBehavior(args)
+	}
 	return m.send(command, args)
 }
 func (m *model) speakerPicker() tea.Cmd {
@@ -149,7 +172,10 @@ func (m *model) openSampling(group string) tea.Cmd {
 	m.dialog = d
 	return nil
 }
-func readOnlyAction(id string) bool {
+func (m *model) readOnlyAction(id string) bool {
+	if m.section == 3 && (id == "select" || id == "clear") {
+		return true
+	}
 	switch id {
 	case "evaluations", "grid", "library", "branches", "kept", "simulator", "inspect", "notes", "active", "find", "help", "keys", "cancel", "restart", "quit", "exit":
 		return true
@@ -271,6 +297,9 @@ func (m *model) filterDialog(msg tea.KeyPressMsg) bool {
 // Closing an auxiliary command such as Help restores a suspended picker/editor.
 func (m *model) closeDialog() tea.Cmd {
 	d := m.dialog
+	if d != nil && d.kind == "loom-policy-dimension" && d.args["id"] == "draft" {
+		m.behaviorDraft = nil
+	}
 	if d != nil && d.kind == "setup-busy" {
 		m.dialog = d.parent
 		m.pending = false
@@ -278,6 +307,9 @@ func (m *model) closeDialog() tea.Cmd {
 	}
 	if d != nil && d.parent != nil {
 		m.dialog = d.parent
+		if d.kind == "loom-policy-timing" || d.kind == "loom-policy-dimension" {
+			m.refreshConfig()
+		}
 		return nil
 	}
 	m.dialog = nil

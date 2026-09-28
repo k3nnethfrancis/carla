@@ -5,7 +5,7 @@ Carla (character lab) is a TUI for developing AI characters from base models ins
 Select from seed documents to generate base-model continuations, branch, edit, and curate an anthology of generations and explore how it behaves in simulated conversations. Prompts, model settings, source provenance and alternative branches remain inspectable.
 
 ```text
-Library → Branches → Anthology → Simulator → Evaluation
+Library → Branches → Anthology → Simulator → Evaluate
              │                      │
          fork / Loom           fork / Loom
              └── inspect, edit, compare ──┘
@@ -63,9 +63,9 @@ suggestion, and press Enter. Commands relevant to the current page appear first.
 | `/help` · `/keys` | Browse all commands or customize keyboard bindings. |
 | `/workspace` · `/model` | Choose a workspace or local model. |
 | `/config` | Generation models, prompts and sampling for this workflow. |
-| `/policy` | Monitoring, selection and saved evaluation judges/criteria. |
-| `/eval --train-on-pass true` | Evaluate selected material; optionally mark passing results for training. |
-| `/evaluations` | Review results, add notes and select/export training items. |
+| `/policy` | Monitoring, selection and reusable judge configurations. |
+| `/eval [name] --train-on-pass true` | Run active/named evaluation on selected material; optionally mark passes for training. |
+| `/evaluations` | Manage named evaluation collections, inspect judgments and export training items. |
 | `/loom` | Generate one continuation or the next Character reply. |
 | `/loom 3 --tokens 512` | In Branches, generate three alternative continuations. |
 | `/loom 3 --turns 4 --tokens 512` | In Simulator, generate three conversations, each with four new character replies. |

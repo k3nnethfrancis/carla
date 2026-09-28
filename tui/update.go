@@ -93,7 +93,7 @@ func (m *model) perform(id string) tea.Cmd {
 	if id == "cancel" {
 		return m.send("cancel", nil)
 	}
-	if m.data.Busy && !readOnlyAction(id) {
+	if m.data.Busy && !m.readOnlyAction(id) {
 		m.status = "Operation running · /stop cancels it"
 		return nil
 	}
@@ -140,6 +140,11 @@ func (m *model) perform(id string) tea.Cmd {
 	case "loom":
 		return m.loom(generationOptions{})
 	case "clear":
+		if m.section == 3 {
+			m.loomConversation = nil
+			m.reflow()
+			return nil
+		}
 		if m.selectionVisible() {
 			return m.selectionAction("clear")
 		}
@@ -187,6 +192,12 @@ func (m *model) perform(id string) tea.Cmd {
 }
 
 func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	before, workspace := m.workspaceView(), m.data.Workspace.Path
+	defer func() {
+		if workspace == m.data.Workspace.Path && before != m.workspaceView() {
+			m.saveWorkspaceView()
+		}
+	}()
 	switch msg := message.(type) {
 	case policyTick:
 		return m, m.advancePolicyPulse(time.Time(msg))
@@ -202,6 +213,7 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		reset := m.flushSeedReset()
 		return m, tea.Batch(cmd, reset, m.previewTarget(), m.client.read())
 	case failure:
+		m.restoringView = false
 		m.editRequest = ""
 		m.pending = false
 		m.disconnected = true
@@ -243,6 +255,10 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.dialog != nil {
 			return m, m.dialogKey(msg)
+		}
+		if key == "nav.back" && m.section == 4 && m.evalCollection != "" && m.focus == 0 && !m.sectionFocus {
+			m.enterCollection("")
+			return m, nil
 		}
 		if m.sectionFocus {
 			if m.boundAction(raw, "panels") == "commands" {
@@ -527,6 +543,19 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.MouseWheelMsg:
+		if m.editing != "" && m.focus == 1 && m.dialog == nil && m.editRequest == "" {
+			code := tea.KeyDown
+			if msg.Button == tea.MouseWheelUp {
+				code = tea.KeyUp
+			}
+			var cmds []tea.Cmd
+			for i := 0; i < 3; i++ {
+				var cmd tea.Cmd
+				m.editor, cmd = m.editor.Update(tea.KeyPressMsg{Code: code})
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
 		if m.editRequest != "" {
 			return m, nil
 		}
@@ -596,11 +625,14 @@ func (m *model) dialogClick(x, y int) tea.Cmd {
 }
 
 func (m *model) nodeTitle() string {
+	if m.editing == "evaluation-new-spec" {
+		return "Evaluation criteria"
+	}
 	if strings.HasPrefix(m.editing, "evaluation-") {
 		return strings.ReplaceAll(m.editing, "-", " ")
 	}
 	if m.section == 4 {
-		return "Evaluation"
+		return "Evaluate"
 	}
 	switch m.editing {
 	case "conversation":
@@ -616,6 +648,12 @@ func (m *model) nodeTitle() string {
 		return "Opening generation prompt"
 	case "visitor_brief":
 		return "Visitor brief"
+	}
+	if m.editing == "monitor_spec" {
+		if name := m.dimension(m.behaviorEditID).Name; name != "" {
+			return "Behavior spec · " + name
+		}
+		return "Behavior spec"
 	}
 	if m.editing == "policy_spec" {
 		return "Selection spec"

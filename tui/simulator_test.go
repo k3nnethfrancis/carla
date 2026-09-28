@@ -26,7 +26,7 @@ func TestSimulatorStreamAndConfiguration(t *testing.T) {
 	if len(m.dialog.rows) != 9 {
 		t.Fatal("missing simulator controls")
 	}
-	if strings.Join(sectionNames, " ") != "Library Branches Anthology Simulator Evaluation" {
+	if strings.Join(sectionNames, " ") != "Library Branches Anthology Simulator Evaluate" {
 		t.Fatal(sectionNames)
 	}
 }

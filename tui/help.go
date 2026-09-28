@@ -4,9 +4,9 @@ import tea "charm.land/bubbletea/v2"
 
 // Help documents commands independently of availability (busy/edit states).
 var commandDescriptions = map[string]string{
-	"policy":             "Configure monitoring, selection and saved whole-item evaluations. Jev behavior specs or local LLM judging prompts stay separate from generation settings.",
-	"eval":               "Evaluate selected document versions, a conversation, or all conversations in a selected Loom. Choose a saved evaluation. --train-on-pass true marks passing results for training; default false.",
-	"evaluations":        "Browse evaluated documents and conversations, filter results, add notes and mark items for training. /snapshot exports marked items and metadata.",
+	"policy":             "Configure monitoring, selection and reusable judge configurations. Jev behavior specs or local LLM judging prompts stay separate from generation settings.",
+	"eval":               "Run /eval [name] on selected document versions or a checked conversation. Uses the active evaluation when no name is given. --train-on-pass true marks passing results for training; default false.",
+	"evaluations":        "Browse named evaluation collections, add existing material without judging, run selected/pending items, review evidence and mark items for training. /snapshot exports marked items and metadata.",
 	"import":             "Add a local UTF-8 .txt or .md document to the shared Library. Title defaults to filename; author and source URL are optional.",
 	"visitor":            "Write a visitor message in a new conversation fork. Open a conversation first.",
 	"loom-policy":        "Configure Jev conversation dimensions, warnings, explicit stop rules and probability cutoffs. Alias: /loom-control-policy.",
@@ -21,7 +21,7 @@ var commandDescriptions = map[string]string{
 	"generate":           "Alias for /continue; uses the current saved document and cursor.",
 	"continue":           "Continue from cursor. /continue 512 sets the maximum output tokens.",
 	"branch":             "Fork the selected conversation in Simulator, or saved document in Branches, without generation. Save edits first.",
-	"loom":               "Generate one continuation or Character reply. /loom 3 --tokens 512 --loops 4 creates three alternatives per loop. Simulator also accepts --turns N. A batch requires choosing a conversation.",
+	"loom":               "Generate one continuation or Character reply. /loom 3 --tokens 512 --loops 4 creates three alternatives per loop. Simulator accepts --turns N and --msg (alias --message) with quoted opener text. Space or Enter selects one conversation to continue; browsing alone starts fresh. /clear clears that target.",
 	"add":                "Add highlighted source passages to the workspace seed set.",
 	"remove":             "Library: deselect sources. Anthology: unkeep versions. Branches: confirm deletion of versions and descendants. Alias: /delete.",
 	"delete":             "Review checked branches and descendants, then confirm deletion. Saves a recovery snapshot.",

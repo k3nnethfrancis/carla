@@ -66,10 +66,14 @@ type simulationRun struct {
 	Parent            *conversationParent
 	ID, Status, Error string
 	Opened            bool
+	Forked            bool
 	Preview           bool
 	Conversations     []simulationConversation
 }
 type state struct {
+	EvaluationSets   []evaluationCollection `json:"evaluation_sets"`
+	ActiveEvaluation string                 `json:"active_evaluation"`
+	MonitorKeySource string                 `json:"monitor_key_source"`
 	Evaluators       []evaluator
 	Evaluations      []evaluationSummary
 	EvaluationPrompt string `json:"evaluation_prompt"`
@@ -121,8 +125,12 @@ type dialog struct {
 type loomTile struct{ ID, Title, Text, Status string }
 
 type model struct {
+	evalCollection         string
+	evalCreating           bool
+	behaviorDraft          *loomDimension
+	behaviorEditID         string
+	behaviorCreating       string
 	evalViewedID           string
-	evalStarting           bool
 	evaluation             *evaluationRecord
 	evaluationRaw          json.RawMessage
 	evalSelection          map[string]bool
@@ -131,6 +139,7 @@ type model struct {
 	editRequest            string // A draft stays owned by the editor until this request succeeds.
 	setupReturn            *dialog
 	conversationOpen       bool
+	loomConversation       *conversationParent
 	conversationEdit       int
 	policyPulses           map[string]policyPulse
 	policySeen             map[string]bool
@@ -172,6 +181,7 @@ type model struct {
 	sources                []source
 	width, height          int
 	focus                  int // navigation, document, inspector, command
+	restoringView          bool
 	section                int // library, branches, anthology, simulator
 	selected, commandIndex int
 	command                textinput.Model
@@ -320,8 +330,11 @@ func (m *model) activate() tea.Cmd {
 	m.selected = min(m.selected, len(rows)-1)
 	r := rows[m.selected]
 	switch r.kind {
+	case "eval-collection", "eval-create", "eval-back", "eval-config", "eval-add", "eval-execute":
+		return m.evaluationCollectionAction(r.kind, r.id)
 	case "evaluation":
-		return m.evaluationActions()
+		m.focus = 1
+		return m.previewTarget()
 	case "eval-definitions":
 		return m.openEvaluators()
 	case "eval-filter":
@@ -335,11 +348,16 @@ func (m *model) activate() tea.Cmd {
 	case "sim-config":
 		return m.perform("sim-config")
 	case "sim-run":
+		m.loomConversation = nil
 		return m.perform("simulate")
 	case "conversation":
 		args, ok := m.conversationTarget()
 		if ok {
-			return m.send("simulator.open", args)
+			cmd := m.send("simulator.open", args)
+			if cmd != nil {
+				m.selectLoomConversation(args)
+			}
+			return cmd
 		}
 		return nil
 	case "simulation":
@@ -379,6 +397,8 @@ func (m *model) beginEdit(kind string) tea.Cmd {
 	text := m.currentText()
 	if kind == "character_template" || kind == "visitor_template" || kind == "visitor_brief" || kind == "opening_prompt" {
 		text = m.simString(kind)
+	} else if kind == "monitor_spec" {
+		text = m.dimension(m.behaviorEditID).Spec
 	} else if kind == "policy_spec" {
 		text = m.data.PolicySpec
 	} else if kind == "policy_prompt" {
@@ -399,9 +419,33 @@ func (m *model) saveEditor() tea.Cmd {
 		return nil
 	}
 	kind, text := m.editing, m.editor.Value()
+	if kind == "monitor_spec" {
+		args := map[string]any{"id": m.behaviorEditID, "spec": text}
+		if m.behaviorEditID == "draft" {
+			m.behaviorDraft.Spec = text
+			m.editing = ""
+			m.editor.Blur()
+			m.dialog, m.editReturn = m.editReturn, nil
+			m.refreshConfig()
+			return nil
+		}
+		return m.submitEditor("loom-policy.update", args)
+	}
+	if kind == "evaluation-new-spec" {
+		if strings.TrimSpace(text) == "" {
+			m.status = "Enter criteria before saving"
+			return nil
+		}
+		d := m.editReturn
+		args := map[string]any{"name": d.fields[0].input.Value(), "spec": text, "kind": d.args["kind"], "prompt": m.data.EvaluationPrompt, "threshold": 0.8, "model": m.simString("monitor_model")}
+		if args["kind"] == "llm" {
+			args["model"] = m.data.SelectorModels[0].Alias
+		}
+		return m.submitEditor("evaluation.configure", args)
+	}
 	if strings.HasPrefix(kind, "evaluation-") {
 		if kind == "evaluation-note" {
-			return m.submitEditor("evaluation.annotate", map[string]any{"ids": []string{m.evalEditingID}, "note": text})
+			return m.submitEditor("evaluation.item.annotate", map[string]any{"collection": m.evalCollection, "ids": []string{m.evalEditingID}, "note": text})
 		}
 		args := m.evaluator(m.evalEditingID).args()
 		args[strings.TrimPrefix(kind, "evaluation-")] = text
@@ -517,7 +561,15 @@ func (m *model) apply(e event) tea.Cmd {
 			m.gridPinned = true
 			m.focus = 1
 		}
+		if run.Opened && m.restoringView {
+			m.restoringView = false
+			m.focus, m.sectionFocus = 3, false
+			m.command.Focus()
+		}
 		if run.Opened {
+			if run.Forked && run.OpenConversation != nil {
+				m.loomConversation = &conversationParent{Run: run.ID, Conversation: *run.OpenConversation}
+			}
 			m.pending = false
 		}
 		if !run.Opened {
@@ -605,6 +657,9 @@ func (m *model) apply(e event) tea.Cmd {
 		m.pending = false
 		if m.editRequest != "" {
 			if e.ID == m.editRequest {
+				if m.editing == "evaluation-new-spec" && m.editReturn != nil {
+					m.editReturn = m.editReturn.parent
+				}
 				m.enterLoom = m.editing == "document"
 				m.editRequest, m.editing = "", ""
 				m.dialog, m.editReturn = m.editReturn, nil
@@ -616,7 +671,33 @@ func (m *model) apply(e event) tea.Cmd {
 		if !m.data.Busy {
 			m.capacityStatus = ""
 		}
+		createdBehavior := ""
+		if m.behaviorCreating != "" && e.ID == m.behaviorCreating {
+			if items := m.dimensions(); len(items) > 0 {
+				createdBehavior = items[len(items)-1].ID
+			}
+			m.behaviorCreating = ""
+			for d := m.dialog; d != nil; d = d.parent {
+				if d.kind == "loom-policy-dimension" && d.args["id"] == "draft" {
+					m.dialog = d.parent
+					break
+				}
+			}
+			m.behaviorDraft = nil
+		}
 		m.refreshConfig()
+		if m.evalCreating {
+			m.evalCreating = false
+			m.enterCollection(m.data.ActiveEvaluation)
+		}
+		if createdBehavior != "" && m.dialog != nil && m.dialog.kind == "loom-policy-behaviors" {
+			for i, r := range m.dialog.rows {
+				if r.id == createdBehavior {
+					m.dialog.index = i
+					break
+				}
+			}
+		}
 		if m.dialog != nil && m.dialog.kind == "keys" && m.keySaving && m.keyDraft != nil {
 			if reflect.DeepEqual(m.keyDraft, m.data.Bindings) {
 				m.dialog = nil
@@ -626,7 +707,9 @@ func (m *model) apply(e event) tea.Cmd {
 			}
 		}
 		if oldWorkspace != m.data.Workspace.Path {
-			m.evalStarting = false
+			m.behaviorDraft = nil
+			m.behaviorCreating = ""
+			m.evalCollection = ""
 			m.evaluation = nil
 			m.evalViewedID = ""
 			m.evaluationRaw = nil
@@ -637,6 +720,7 @@ func (m *model) apply(e event) tea.Cmd {
 			m.simulation = nil
 			m.conversationOpen = false
 			m.activeSimulation = nil
+			m.loomConversation = nil
 			m.pages = [5]*pagePosition{}
 			m.restorePage = nil
 			m.commandOrigin = nil
@@ -657,7 +741,7 @@ func (m *model) apply(e event) tea.Cmd {
 			m.status = "Saved locally · " + m.data.Workspace.Path
 			if len(m.data.Nodes) > 0 {
 				m.section = 1
-				// Keep the command bar focused when restoring a workspace.
+				// The saved UI location is restored after this snapshot is applied.
 			}
 		}
 		if oldID != m.currentID() {
@@ -714,11 +798,7 @@ func (m *model) apply(e event) tea.Cmd {
 				delete(m.branchSelection, id)
 			}
 		}
-		if m.evalStarting && len(m.data.Evaluations) > 0 && m.section == 4 {
-			m.selected = 2
-			m.evalStarting = false
-			m.focus = 0
-		}
+
 		m.selected = max(0, min(m.selected, len(m.rows())-1))
 		if oldID != m.currentID() {
 			m.previewChangePending = (m.section == 1 || m.section == 2) && !m.data.Busy && m.editing == ""
@@ -733,6 +813,9 @@ func (m *model) apply(e event) tea.Cmd {
 			}
 		}
 		m.applyPagePosition()
+		if oldWorkspace != m.data.Workspace.Path {
+			return m.restoreWorkspaceView()
+		}
 		if startDocumentEdit {
 			return m.openDocumentWithNotes()
 		}
@@ -792,7 +875,6 @@ func (m *model) apply(e event) tea.Cmd {
 		m.reflow()
 		m.inspector.GotoTop()
 	case "error":
-		m.evalStarting = false
 		if m.editRequest != "" && e.ID != "" && e.ID != m.editRequest {
 			return nil
 		}
@@ -800,6 +882,8 @@ func (m *model) apply(e event) tea.Cmd {
 		m.notePending = false
 		m.enterLoom = false
 		m.keySaving = false
+		m.restoringView = false
+		m.behaviorCreating = ""
 		var err struct{ Message string }
 		json.Unmarshal(e.Data, &err)
 		m.pending = false

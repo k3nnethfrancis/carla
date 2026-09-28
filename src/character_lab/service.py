@@ -11,7 +11,7 @@ import random
 from contextlib import aclosing
 from pathlib import Path
 
-from . import evaluation, simulator
+from . import credentials, evaluation, evaluation_sets, simulator
 from .domain import Project, display_title, generation_status, library, now
 from .exploration import explore, require_selector
 from .model_metadata import native_context
@@ -74,6 +74,7 @@ class Session:
             project.data["models"] = catalog
             project.data["model_alias"] = model["alias"]
             project.data["selected"] = []
+            evaluation_sets.migrate(project)
             project.save()
         except Exception:
             lock.close()
@@ -149,6 +150,8 @@ class Session:
             native_context=native_context(self.runtime.model),
             evaluators=evaluation.definitions(p),
             evaluations=evaluation.summaries(p),
+            evaluation_sets=evaluation_sets.summaries(p),
+            active_evaluation=p.data.get("active_evaluation", ""),
             evaluation_prompt=evaluation.DEFAULT_PROMPT,
             policy_spec=p.data.get("policy_spec", DEFAULT_SPEC),
             policy_prompt=p.data.get("policy_prompt", DEFAULT_PROMPT),
@@ -159,6 +162,7 @@ class Session:
                 for r in p.data.get("policy_runs", [])
             ],
             simulator_config=simulator.configuration(p, self.runtime.model["alias"]),
+            monitor_key_source=credentials.openrouter_key()[1],
             simulation_runs=[
                 simulator.summary(r) for r in p.data.get("simulation_runs", [])
             ],
@@ -188,6 +192,7 @@ class Session:
             "simulator.open",
             "simulator.inspect",
             "evaluation.open",
+            "evaluation.item.open",
         }:
             raise ValueError(
                 "Stop the active operation before changing the workspace or document"
@@ -231,6 +236,9 @@ class Session:
 
             await dispatch(self, command, args, request_id)
             return
+        eval_plan = (
+            evaluation_sets.plan(self, args["eval"]) if args.get("eval") else None
+        )
         if command == "grow.selector":
             if args["alias"] != self.policy_model["alias"]:
                 raise ValueError("Selector model is not configured")
@@ -510,7 +518,13 @@ class Session:
             self.job_id = request_id
             self.job = asyncio.create_task(
                 self.document_loom(
-                    command, node["id"], node["text"][:end], settings, count, loops
+                    command,
+                    node["id"],
+                    node["text"][:end],
+                    settings,
+                    count,
+                    loops,
+                    eval_plan,
                 )
             )
         else:
@@ -724,9 +738,12 @@ class Session:
             raise ValueError("Loom batch failed; partial outputs retained")
         return branches
 
-    async def document_loom(self, command, parent, prefix, settings, count, loops):
-        if loops == 1:
+    async def document_loom(
+        self, command, parent, prefix, settings, count, loops, eval_plan=None
+    ):
+        if loops == 1 and not eval_plan:
             return await self.generate("continue", parent, prefix, settings, count)
+        before = {n["id"] for n in self.project.data["nodes"]}
 
         async def emit(kind, data):
             await self.emit(kind, data, self.job_id)
@@ -752,15 +769,27 @@ class Session:
             parent, prefix = key, node["text"]
 
         try:
-            await explore(
-                self.project,
-                loops,
-                self.policy_model,
-                self.runtime_factory,
-                batch,
-                advance,
-                emit,
-            )
+            if loops == 1:
+                await self.generate(
+                    "continue", parent, prefix, settings, count, nested=True
+                )
+            else:
+                await explore(
+                    self.project,
+                    loops,
+                    self.policy_model,
+                    self.runtime_factory,
+                    batch,
+                    advance,
+                    emit,
+                )
+            if eval_plan and not asyncio.current_task().cancelling():
+                targets = [
+                    {"node": n["id"]}
+                    for n in self.project.data["nodes"]
+                    if n["id"] not in before and n.get("status") == "complete"
+                ]
+                await evaluation_sets.after_generation(self, eval_plan, targets)
         except asyncio.CancelledError:
             pass
         except Exception as exc:
@@ -785,16 +814,17 @@ class Session:
                 self.lock.close()
                 self.lock = None
 
-    async def start_simulation(self, config, seed, request_id):
+    async def start_simulation(self, config, seed, request_id, eval_plan=None):
         """Take ownership of a validated run before returning to the command reader."""
         self.active_node = None
         self.runtime.close()
         self.job_id = request_id
-        self.job = asyncio.create_task(self.simulate(config, seed))
+        self.job = asyncio.create_task(self.simulate(config, seed, eval_plan))
         await self.snapshot(request_id)
 
-    async def simulate(self, config, seed=None):
+    async def simulate(self, config, seed=None, eval_plan=None):
         p = self.project
+        before = {r["id"] for r in p.data.get("simulation_runs", [])}
 
         async def emit(kind, data):
             await self.emit(kind, data, self.job_id)
@@ -851,6 +881,15 @@ class Session:
                     advance,
                     emit,
                 )
+            if eval_plan and not asyncio.current_task().cancelling():
+                targets = [
+                    {"run": r["id"], "conversation": c["index"]}
+                    for r in p.data.get("simulation_runs", [])
+                    if r["id"] not in before
+                    for c in r["conversations"]
+                    if c["status"] == "complete"
+                ]
+                await evaluation_sets.after_generation(self, eval_plan, targets)
         except asyncio.CancelledError:
             pass
         except Exception as exc:

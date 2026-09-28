@@ -275,3 +275,213 @@ async def test_edited_document_freezes_ancestor_generation_evidence(lab):
     ancestor = records[0]["source"]["ancestors"][0]
     assert ancestor["trace"]["model"]["name"] == "Base"
     assert ancestor["trace"]["request"]["prompt"] == "Seed"
+
+
+async def collection(s, definition, name="Voice"):
+    await s.execute(
+        "evaluation.collection.save",
+        {"name": name, "judges": [definition["id"]]},
+        "new-set",
+    )
+    return s.project.data["evaluation_sets"][-1]
+
+
+@pytest.mark.asyncio
+async def test_collections_add_run_attach_and_preserve_original_evidence(lab):
+    from character_lab import evaluation_sets as sets
+
+    s = lab
+    definition = define(s)
+    group = await collection(s, definition)
+    node = s.project.add("A coherent path.")
+    await s.execute(
+        "evaluation.collection.add",
+        {"collection": group["id"], "targets": [{"node": node["id"]}]},
+        "add",
+    )
+    assert not s.busy and not s.project.data.get("evaluations")
+    item = group["items"][0]
+    assert sets.item_summary(s.project, group, item)["status"] == "unjudged"
+    await s.execute(
+        "evaluation.collection.run",
+        {"collection": "Voice", "items": [item["id"]], "train_on_pass": True},
+        "judge",
+    )
+    await s.job
+    assert (
+        item["training"] and sets.item_summary(s.project, group, item)["passed"] is True
+    )
+    original = copy.deepcopy(s.project.data["evaluations"])
+    second = await collection(s, definition, "Comparison")
+    await s.execute(
+        "evaluation.collection.add",
+        {"collection": second["id"], "targets": [{"evaluation": original[0]["id"]}]},
+        "attach",
+    )
+    assert not s.busy
+    assert s.project.data["evaluations"] == original
+    assert second["items"][0]["judgments"] == [original[0]["id"]]
+    await s.execute(
+        "evaluation.item.open",
+        {"collection": second["id"], "id": second["items"][0]["id"]},
+        "open",
+    )
+    assert s.events[-1][1]["evidence"] == []
+    assert len(s.events[-1][1]["judgments"]) == 1
+    define(s, id=definition["id"], spec="New criteria")
+    assert sets.item_summary(s.project, group, item)["status"] == "evidence"
+    assert s.project.data["evaluations"] == original
+
+
+@pytest.mark.asyncio
+async def test_collection_migration_is_additive_and_idempotent(lab):
+    from character_lab import evaluation_sets as sets
+
+    s = lab
+    definition = define(s)
+    node = s.project.add("Old document")
+    await run(s, definition, [{"node": node["id"]}])
+    original = copy.deepcopy(s.project.data["evaluations"])
+    del s.project.data["evaluation_sets"]
+    sets.migrate(s.project)
+    groups = copy.deepcopy(sets.collections(s.project))
+    sets.migrate(s.project)
+    assert sets.collections(s.project) == groups
+    assert groups[0]["items"][0]["judgments"] == [original[0]["id"]]
+    assert s.project.data["evaluations"] == original
+
+
+@pytest.mark.asyncio
+async def test_attach_monitoring_and_selection_is_scoped_not_whole_item_pass(lab):
+    from character_lab import evaluation_sets as sets
+
+    s = lab
+    group = await collection(s, define(s))
+    node = s.project.add("A path repeats")
+    node["monitor_checks"] = [
+        {
+            "status": "complete",
+            "characters": 4,
+            "end_of_turn": False,
+            "scores": {"looping": 0.9},
+        }
+    ]
+    s.project.data["policy_runs"] = [
+        {
+            "id": "selection",
+            "spec": "Develops the theme",
+            "prompt": "judge",
+            "policy_model": {"alias": "judge"},
+            "steps": [
+                {
+                    "loop": 1,
+                    "status": "complete",
+                    "candidates": [node["id"]],
+                    "messages": ["exact candidate context"],
+                    "decision": {"selected": node["id"]},
+                }
+            ],
+        }
+    ]
+    args = {
+        "collection": group["id"],
+        "targets": [{"node": node["id"]}],
+        "attach_evidence": True,
+    }
+    await s.execute("evaluation.collection.add", args, "attach")
+    await s.execute("evaluation.collection.add", args, "again")
+    item = group["items"][0]
+    assert len(group["items"]) == 1 and len(item["evidence"]) == 2
+    assert sets.item_summary(s.project, group, item)["passed"] is None
+    assert item["evidence"][0]["result"]["characters"] == 4
+    assert not s.busy
+
+
+@pytest.mark.asyncio
+async def test_loom_evaluation_chain_and_preflight(lab, monkeypatch):
+    from test_service import FakeRuntime
+
+    s = lab
+    monkeypatch.setattr(Judge, "stream", FakeRuntime.stream, raising=False)
+    definition = define(s)
+    group = await collection(s, definition)
+    node = s.project.add("Seed")
+    before = len(s.project.data["nodes"])
+    with pytest.raises(ValueError):
+        await s.execute("continue", {"node": node["id"], "eval": "missing"}, "bad")
+    assert len(s.project.data["nodes"]) == before
+    await s.execute(
+        "continue", {"node": node["id"], "count": 2, "eval": "Voice"}, "chain"
+    )
+    await s.job
+    assert len(group["items"]) == 2
+    assert all(i["judgments"] for i in group["items"])
+    assert all(r["passed"] for r in s.project.data["evaluations"])
+    assert not s.busy
+
+
+@pytest.mark.asyncio
+async def test_simulator_chain_freezes_conversations_and_runs_all_judges(
+    lab, monkeypatch
+):
+    from test_service import FakeRuntime
+
+    from character_lab import evaluation_sets as sets
+
+    s = lab
+    monkeypatch.setattr(Judge, "stream", FakeRuntime.stream, raising=False)
+    first, second = define(s), define(s, name="Another rubric")
+    group = await collection(s, first)
+    await s.execute(
+        "evaluation.collection.save",
+        {
+            "id": group["id"],
+            "name": group["name"],
+            "judges": [first["id"], second["id"]],
+        },
+        "judges",
+    )
+    node = s.project.add("Anthology.")
+    node["kept"] = True
+    await s.execute(
+        "simulator.configure",
+        {
+            "documents": [node["id"]],
+            "turns": 1,
+            "opening_mode": "fixed",
+            "opening": "Hello",
+        },
+        "config",
+    )
+    await s.execute("simulator.run", {"count": 2, "eval": group["name"]}, "chain")
+    await s.job
+    assert len(group["items"]) == 2
+    assert all(len(item["judgments"]) == 2 for item in group["items"])
+    assert all(
+        sets.item_summary(s.project, group, item)["passed"] for item in group["items"]
+    )
+    statuses = [data["busy"] for kind, data, _ in s.events if kind == "state"]
+    # Once generation starts, ownership stays held through judging until final snapshot.
+    first_busy = statuses.index(True)
+    assert all(statuses[first_busy:-1]) and statuses[-1] is False
+
+
+@pytest.mark.asyncio
+async def test_cancel_generation_never_starts_chained_judge(lab, monkeypatch):
+    s = lab
+    started = asyncio.Event()
+
+    async def stream(self, prompt, settings, trace):
+        started.set()
+        yield "partial"
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(Judge, "stream", stream, raising=False)
+    group = await collection(s, define(s))
+    node = s.project.add("Seed")
+    await s.execute("continue", {"node": node["id"], "eval": group["name"]}, "chain")
+    await started.wait()
+    await s.execute("cancel", {}, "cancel")
+    assert not group["items"]
+    assert not s.project.data.get("evaluations")
+    assert not s.busy

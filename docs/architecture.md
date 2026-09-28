@@ -135,20 +135,32 @@ selection happen in the owning Session only after a successful transfer.
 
 ## Evaluation records
 
-`evaluation.py` owns saved evaluator definitions, immutable input/configuration
-snapshots, judge execution, and training-selection metadata. `/eval` captures
-explicit document or conversation targets before starting a cancellable session
-job. Local judging reuses `Runtime.judge`; Jev evaluation and monitoring share
-`monitor.classify`, retaining exact requests and provider results. Evaluation
-prompts never enter generation context. Generation-time monitoring and selection
-remain in their existing owners.
+`evaluation.py` owns versioned judge definitions and execution. Local judging
+reuses `Runtime.judge`; Jev evaluation and monitoring share `monitor.classify`,
+retaining exact requests and provider results. Evaluation prompts never enter
+generation context. Monitoring and selection retain their operational owners.
 
-Workspace `evaluators` holds current definitions; `evaluations` holds append-only
-results with frozen definitions and source records. Notes and training membership
-can change and record their own metadata history. Re-evaluation appends a new
-result. Result summaries cross in normal state events; opening an item requests
-its full record separately. Interrupted jobs recover visibly. Dataset export writes
-marked records to a fresh workspace-local JSONL file; it does not train a model.
+`evaluation_sets.py` owns named collections, frozen item membership, evidence
+references and training metadata. Workspace `evaluators` holds current judge
+definitions; `evaluations` holds immutable completed judgment records;
+`evaluation_sets` holds collections and `active_evaluation` selects the default.
+A one-time additive migration references historical results without rewriting them.
+Adding snapshots or attaching completed judgments requires no model call. Policy
+evidence retains turn/candidate scope rather than becoming a whole-item grade.
 
-`tui/evaluation.go` owns the fifth tab and its dialogs. It uses the same command,
-focus, editor-save acknowledgement and parent/back mechanisms as the other pages.
+`/eval` captures targets before a cancellable session job. `/loom --eval name`
+freezes judge configuration at dispatch and chains evaluation after generation
+under the same operation lock. Re-evaluation appends results. Item notes and
+training membership have metadata histories. Normal state events carry collection
+summaries; opening an item requests its full text/evidence separately. Export
+writes training-marked items to a new workspace-local JSONL; it does not train.
+
+`tui/evaluation_collections.go` owns collection navigation, membership/configuration
+dialogs and item rendering. `tui/evaluation.go` owns judge dialogs and command
+execution. Both reuse the app's focus, editor and parent/back mechanisms.
+
+The frontend saves the last tab and document/trace row in each workspace's
+`view-state.json`, separately from project data. Startup restores that location
+with keyboard focus in the command bar. It does not restore checked Loom targets,
+editing, dialogs, or command input. Missing/deleted rows fall back to the tab's
+first item. Navigation writes are atomic and occur only when the location changes.

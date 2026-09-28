@@ -630,10 +630,21 @@ async def test_simulator_run_overrides_are_recorded_not_saved(session):
     doc = s.project.add("Paths", kind="source")
     doc["kept"] = True
     await s.execute(
-        "simulator.configure", {"documents": [doc["id"]], "turns": 2}, "config"
+        "simulator.configure",
+        {"documents": [doc["id"]], "turns": 2, "opening_mode": "generated"},
+        "config",
     )
     saved = json.loads(json.dumps(s.project.data["simulator_config"]))
-    await s.execute("simulator.run", {"count": 3, "n_predict": 32, "turns": 3}, "loom")
+    await s.execute(
+        "simulator.run",
+        {
+            "count": 3,
+            "n_predict": 32,
+            "turns": 3,
+            "message": "What makes a path yours?",
+        },
+        "loom",
+    )
     await s.job
     run = s.project.data["simulation_runs"][-1]
     assert len(run["conversations"]) == 3
@@ -641,11 +652,15 @@ async def test_simulator_run_overrides_are_recorded_not_saved(session):
     assert s.project.data["simulator_config"] == saved
     for conversation in run["conversations"]:
         assert len(conversation["turns"]) == 6
+        assert conversation["turns"][0]["text"] == "What makes a path yours?"
+        assert run["config"]["opening_mode"] == "fixed"
         for turn in conversation["turns"][1:]:
             assert turn["settings"]["n_predict"] == 32
             assert "token_range" not in turn["settings"]
     for overrides in [
         {"count": 0},
+        {"message": " "},
+        {"message": 3},
         {"turns": 0},
         {"n_predict": 0},
         {"token_range": [40, 10]},
@@ -752,6 +767,15 @@ async def test_simulator_fork_and_resume_commands(session):
     assert len(run["conversations"][0]["turns"]) == 6
     assert run["documents"][0]["text"] == "Frozen anthology."
     assert source["conversations"][0]["turns"] == fork["conversations"][0]["turns"]
+    before = len(s.project.data["simulation_runs"])
+    with pytest.raises(ValueError, match="Clear the conversation selection"):
+        await s.execute(
+            "simulator.run",
+            {"run": fork["id"], "conversation": 0, "message": "Replace history?"},
+            "invalid-message",
+        )
+    assert len(s.project.data["simulation_runs"]) == before
+
     with pytest.raises(ValueError, match="Conversation not found"):
         await s.execute(
             "simulator.open", {"run": source["id"], "conversation": 100}, "invalid"
@@ -896,6 +920,7 @@ async def test_cancel_during_selection_preserves_batch_and_trace(session, monkey
 async def test_document_monitor_stop_preserves_output_and_never_selects(
     session, monkeypatch
 ):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-only")
     from character_lab import monitor
 
     async def scan(config, conversation, turn):
@@ -916,3 +941,45 @@ async def test_document_monitor_stop_preserves_output_and_never_selects(
     assert node["monitor_checks"][0]["detections"][0]["action"] == "stop"
     assert node["text"].startswith("Seed")
     assert not session.project.data.get("policy_runs")
+
+
+@pytest.mark.asyncio
+async def test_monitor_key_setup_enables_without_exposing_secret(session, monkeypatch):
+    from character_lab import credentials
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    assert (
+        session.project.data.get("simulator_config", {}).get("monitor_mode", "off")
+        == "off"
+    )
+    with pytest.raises(ValueError, match="API key"):
+        await session.execute("simulator.configure", {"monitor_mode": "jev"}, "enable")
+    key = "fake-secret-for-test"
+    await session.execute("loom-policy.key", {"key": key}, "key")
+    assert session.project.data["simulator_config"]["monitor_mode"] == "jev"
+    assert credentials.openrouter_key() == (key, "saved")
+    assert key not in json.dumps(session.events)
+    assert key not in session.project.path.read_text()
+    state = [data for kind, data, _ in session.events if kind == "state"][-1]
+    assert state["monitor_key_source"] == "saved"
+    await session.execute("simulator.configure", {"monitor_mode": "off"}, "off")
+    assert credentials.openrouter_key() == (key, "saved")
+
+
+@pytest.mark.asyncio
+async def test_create_behavior_with_full_configuration(session):
+    values = {
+        "name": "Voice drift",
+        "spec": "Flag loss of voice.\n\nIgnore quoted speech.",
+        "enabled": False,
+        "action": "stop",
+        "decision": "threshold",
+        "threshold": 0.9,
+        "color": "violet",
+    }
+    await session.execute("loom-policy.add", values, "create")
+    item = session.project.data["simulator_config"]["monitor_dimensions"][-1]
+    assert all(item[key] == value for key, value in values.items())
+    with pytest.raises(ValueError):
+        await session.execute("loom-policy.add", values | {"threshold": 2}, "bad")
+    assert len(session.project.data["simulator_config"]["monitor_dimensions"]) == 4

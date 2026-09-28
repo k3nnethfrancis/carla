@@ -1,6 +1,6 @@
                                                                                
  carla / Gunkel exploration              Next: Qwen3-14B Base                  
-  Library   Branches   Anthology   Simulator   Evaluation                      
+  Library   Branches   Anthology   Simulator   Evaluate                        
  ┌────────────────────────────────────────────────────────────────────────────┐
  │ › Source preview                                                           │
  │                                                                            │

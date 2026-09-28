@@ -4,6 +4,9 @@ import tea "charm.land/bubbletea/v2"
 
 // Configuration is a contextual view, not a separate settings copy per tab.
 func (m *model) openConfig() tea.Cmd {
+	if m.section == 4 {
+		return m.openCollectionConfig()
+	}
 	if m.section == 3 {
 		return m.openSimulatorConfig()
 	}

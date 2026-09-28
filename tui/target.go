@@ -80,6 +80,12 @@ func (m *model) contextualActions() []action {
 	return actions
 }
 func (m *model) targetLabel() string {
+	if m.section == 3 && m.editing == "" {
+		if target := m.loomConversation; target != nil {
+			return fmt.Sprintf("Loom target · Conversation %d · %s · /clear for fresh", target.Conversation+1, target.Run)
+		}
+		return "Loom · new conversation · SPACE selects a continuation target"
+	}
 	if m.notesOpen && m.editing == "" {
 		return "Document · " + m.nodeTitle()
 	}
@@ -101,7 +107,7 @@ func (m *model) previewTarget() tea.Cmd {
 	}
 	r := m.targetRow()
 	if m.section == 4 && r.kind == "evaluation" && (m.evaluation == nil || m.evaluation.ID != r.id) {
-		return m.send("evaluation.open", map[string]any{"id": r.id})
+		return m.send("evaluation.item.open", map[string]any{"collection": m.evalCollection, "id": r.id})
 	}
 	if (m.section == 1 || m.section == 2) && r.kind == "node" && r.id != m.currentID() {
 		m.loomGrid = false

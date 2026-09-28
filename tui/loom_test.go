@@ -29,7 +29,7 @@ func TestSimulatorLoomRoutesCountAndTokenOverride(t *testing.T) {
 	m.focus = 3
 	// A previously viewed document must never become the Simulator command target.
 	m.commandDocument = m.currentID()
-	m.command.SetValue("/loom 5 --turns 4 --tokens 64")
+	m.command.SetValue(`/loom 5 --turns 4 --tokens 64 --message "Where do paths meet?"`)
 	cmd := m.commandKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("no simulator command")
@@ -39,17 +39,18 @@ func TestSimulatorLoomRoutesCountAndTokenOverride(t *testing.T) {
 	var request struct {
 		Command string
 		Args    struct {
-			Count  int
-			Tokens int `json:"n_predict"`
-			Turns  int
-			Node   string
+			Count   int
+			Tokens  int `json:"n_predict"`
+			Turns   int
+			Node    string
+			Message string
 		}
 	}
 	if err := json.NewDecoder(right).Decode(&request); err != nil {
 		t.Fatal(err)
 	}
 	<-done
-	if request.Command != "simulator.run" || request.Args.Count != 5 || request.Args.Tokens != 64 || request.Args.Turns != 4 || request.Args.Node != "" {
+	if request.Command != "simulator.run" || request.Args.Count != 5 || request.Args.Tokens != 64 || request.Args.Turns != 4 || request.Args.Node != "" || request.Args.Message != "Where do paths meet?" {
 		t.Fatalf("wrong destination: %+v", request)
 	}
 }
