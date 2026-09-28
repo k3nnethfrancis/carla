@@ -187,3 +187,9 @@ The **Detection rule** determines whether a behavior is flagged: **Most likely**
 requires estimated probability above 50%; **Threshold** uses your chosen cutoff.
 The separate **Action** determines what follows a detection: warn or stop.
 Disabling a behavior skips it while retaining its settings.
+
+Long specs, criteria and prompts use the full document editor. Text wraps and
+scrolls with the cursor; use arrows, Page Up/Page Down or the mouse wheel to
+navigate. The heading shows the current line and total lines. New evaluations
+ask for a name first, then open this editor for criteria. Saving preserves the
+complete multiline text, including content outside the visible window.

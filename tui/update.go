@@ -539,6 +539,19 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.MouseWheelMsg:
+		if m.editing != "" && m.focus == 1 && m.dialog == nil && m.editRequest == "" {
+			code := tea.KeyDown
+			if msg.Button == tea.MouseWheelUp {
+				code = tea.KeyUp
+			}
+			var cmds []tea.Cmd
+			for i := 0; i < 3; i++ {
+				var cmd tea.Cmd
+				m.editor, cmd = m.editor.Update(tea.KeyPressMsg{Code: code})
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
 		if m.editRequest != "" {
 			return m, nil
 		}
@@ -608,6 +621,9 @@ func (m *model) dialogClick(x, y int) tea.Cmd {
 }
 
 func (m *model) nodeTitle() string {
+	if m.editing == "evaluation-new-spec" {
+		return "Evaluation criteria"
+	}
 	if strings.HasPrefix(m.editing, "evaluation-") {
 		return strings.ReplaceAll(m.editing, "-", " ")
 	}
@@ -630,7 +646,10 @@ func (m *model) nodeTitle() string {
 		return "Visitor brief"
 	}
 	if m.editing == "monitor_spec" {
-		return "Behavior spec · " + m.dimension(m.behaviorEditID).Name
+		if name := m.dimension(m.behaviorEditID).Name; name != "" {
+			return "Behavior spec · " + name
+		}
+		return "Behavior spec"
 	}
 	if m.editing == "policy_spec" {
 		return "Selection spec"

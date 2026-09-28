@@ -276,22 +276,21 @@ func (m *model) evalAction(id string) tea.Cmd {
 func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 	if len(d.fields) > 0 {
 		if d.kind == "eval-new" {
-			if strings.TrimSpace(d.fields[0].input.Value()) == "" || strings.TrimSpace(d.fields[1].input.Value()) == "" {
-				m.status = "Enter a name and criteria"
+			if strings.TrimSpace(d.fields[0].input.Value()) == "" {
+				m.status = "Enter a name"
 				return nil
 			}
 			if d.args["kind"] == "llm" && len(m.data.SelectorModels) == 0 {
 				m.status = "Configure a local policy model first"
 				return nil
 			}
-			args := map[string]any{"name": d.fields[0].input.Value(), "spec": d.fields[1].input.Value(), "kind": d.args["kind"], "prompt": m.data.EvaluationPrompt, "threshold": 0.8, "model": ""}
-			if args["kind"] == "llm" {
-				args["model"] = m.data.SelectorModels[0].Alias
-			}
-			if args["kind"] == "jev" {
-				args["model"] = m.simString("monitor_model")
-			}
-			return m.saveDialog(d, "evaluation.configure", args)
+			m.editing = "evaluation-new-spec"
+			m.editReturn = d
+			m.dialog = nil
+			m.editor.SetValue("")
+			m.focus = 1
+			m.reflow()
+			return m.editor.Focus()
 		}
 		e := m.evaluator(d.args["id"].(string))
 		args := e.args()
@@ -333,7 +332,6 @@ func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 	case "eval-new-kind":
 		n := &dialog{kind: "eval-new", title: "New evaluation", parent: d.parent, args: map[string]any{"kind": r.id}}
 		n.add("Name", "")
-		n.add("Criteria / behavior spec", "")
 		m.dialog = n
 		return n.fields[0].input.Focus()
 	case "eval-definition":
