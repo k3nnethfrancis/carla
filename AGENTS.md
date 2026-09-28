@@ -14,8 +14,9 @@ and target PRs at `dev`. Promote tested changes with a separate `dev` → `main`
 Current scope is data-generation stabilization; later phases are on hold. Review
 existing boundaries before proposing focused refactors. Keep research notes and experiments local; don't create a parallel repo task ledger.
 Before handing off, run `make test lint build`, exercise changed terminal journeys,
-and report the outcome, evidence and remaining gaps. Don't publish releases or
-change repository visibility merely because checks pass.
+and report the outcome, evidence and remaining gaps. Each main promotion requires a new app version and publishes a checked release
+through release.yml. Never move a release tag or change repository visibility
+merely because checks pass.
 
 - Python owns domain state, prompts, inference, persistence and job lifecycles.
   Go owns terminal interaction and rendering. Exchange structured NDJSON events.

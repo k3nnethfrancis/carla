@@ -97,16 +97,31 @@ use `0.1.x` for compatible fixes and a new minor version for a coherent new
 capability or a breaking change. Describe compatibility changes explicitly even
 before 1.0. A release tag is `v` followed by the manifest version; tags are immutable.
 
-For each release:
+Every promotion to `main` is a release. Ordinary feature/fix merges into `dev`
+do not tag or publish anything.
 
-1. Submit the version change in a PR (the first release can use the existing
-   `0.1.0`). Run `uv lock` to update the package version in the lockfile. Document
-   user-visible changes and any relevant limitations in the PR.
-2. Once merged, run **Draft release** from GitHub Actions on `main`, supplying the
-   exact manifest version. It checks the version and tests/builds the exact commit
-   on both supported CI platforms before creating a draft GitHub Release.
-3. Review the generated release notes and install the draft's exact source commit
-   in a separate checkout. Publish the draft only after that review.
+1. Before opening the `dev` → `main` PR, bump `project.version` in
+   `pyproject.toml` through a PR into `dev`, then run `uv lock` to update the
+   lockfile. The initial release uses `0.1.0`; subsequent compatible fixes use
+   `0.1.1`, `0.1.2`, etc. Document the user-visible changes in the PRs.
+2. The promotion PR's **Release / validate** check rejects a reused or older
+   version. Review the changes and wait for all checks before merging.
+3. A push to `main` starts **Release**, which tests/builds that exact commit on
+   macOS and Linux, including the source installer and launcher. Only after those
+   checks pass does it create `v<version>` and publish the GitHub release with
+   generated notes. Review and expand those notes for significant releases.
+
+Tags never move. Re-running **Release** on the same `main` commit safely leaves
+an existing published release alone, or completes publication if only its tag
+exists. If checks fail, fix them through `dev` and promote again; if publication
+alone fails, rerun the workflow on `main`. The publisher refuses to release a
+stale commit if `main` moved during checks. API failures stop the release rather
+than being interpreted as missing tags. Manually created untagged drafts must be
+resolved before the workflow can claim their version.
+
+The private repository currently cannot enforce branch protection; passing the
+version check is a required maintainer convention. A direct push with a reused
+version will fail publication, not retag an existing release.
 
 Initial releases are source releases: clone/checkout the tag, run `make install`,
 then `carla`. A Python wheel alone does not contain the Go frontend; no standalone
@@ -114,7 +129,8 @@ binary installer or public package-registry release is promised here. There are 
 model weights or user workspaces in release assets. GitHub Release notes are the
 changelog; avoid maintaining a duplicate one in the repository.
 
-Creating the workflow does not publish a release or change repository visibility.
+Merging into `main` authorizes release publication through this workflow. It never
+changes repository visibility; a private repository’s releases remain private.
 
 ## Public-release readiness
 
