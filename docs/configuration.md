@@ -139,8 +139,18 @@ The texts are not covered by Carla’s MIT software license.
 The Monitoring policy under `/policy` configures Jev via OpenRouter System One. Enable it only when you
 intend to send the full conversation history, including character output and
 human messages, to that external service. Its requests may incur charges.
-Set `OPENROUTER_API_KEY` in the launching environment; never put it in a workspace
-or model JSON file. The client stores request/response evidence but not the key.
+Monitoring defaults to Off. Choose Jev to open a masked OpenRouter API-key form;
+other monitoring controls appear only after a key is configured. Cancelling this
+step leaves monitoring Off. An existing `OPENROUTER_API_KEY` in the launching
+environment also satisfies setup.
+
+Keys entered in Carla are saved in `credentials.json` under its application data
+home, outside all workspaces, with owner-only permissions (`0600`). This is a
+local file, not encrypted storage. A saved key takes precedence over the
+environment variable; the API key row lets you replace it. Turning monitoring Off
+retains the key for later use. Keys are not included in state events, generation
+configs, traces or dataset exports. Saving a key does not make a paid request or
+verify provider authentication; provider errors remain visible when used.
 
 Checks apply to character replies and document continuations. In `/policy` →
 Monitoring → When to check, toggle after-reply and during-reply checks separately.

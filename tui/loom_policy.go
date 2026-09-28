@@ -1,6 +1,7 @@
 package main
 
 import (
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"encoding/json"
 	"fmt"
@@ -31,11 +32,25 @@ func (m *model) dimension(id string) loomDimension {
 	return loomDimension{}
 }
 func (m *model) openLoomPolicy() tea.Cmd {
+	mode := "Off"
+	if m.simString("monitor_mode") == "jev" {
+		mode = "Jev"
+	}
 	d := &dialog{kind: "loom-policy", title: "Monitoring policy", rows: []row{
-		{id: "mode", label: "Monitoring · " + m.simString("monitor_mode"), preview: "Jev via OpenRouter checks document continuations or Character replies with context. Requires OPENROUTER_API_KEY."},
-		{id: "model", label: "Model · " + m.simString("monitor_model")},
-		{id: "timing", label: "When to check · " + m.monitorTimingSummary(), preview: "Choose checks after replies, during generation, or both. Shared with document continuations; Visitor messages are not checked."},
+		{id: "mode", label: "Monitoring · " + mode, preview: "Off by default. Jev sends monitored text to OpenRouter; API usage may incur charges."},
 	}}
+	m.dialog = d
+	if mode == "Off" {
+		return nil
+	}
+	if m.data.MonitorKeySource == "" {
+		d.rows = append(d.rows, row{id: "key", label: "Set up OpenRouter API key", preview: "Complete API key setup to reveal monitoring settings."})
+		return nil
+	}
+	d.rows = append(d.rows,
+		row{id: "model", label: "Model · " + m.simString("monitor_model")},
+		row{id: "timing", label: "When to check · " + m.monitorTimingSummary(), preview: "Shared with document continuations; Visitor messages are not checked."},
+	)
 	for _, item := range m.dimensions() {
 		status := "Off"
 		if item.Enabled {
@@ -47,6 +62,7 @@ func (m *model) openLoomPolicy() tea.Cmd {
 		}
 		d.rows = append(d.rows, row{id: item.ID, label: item.Name + " · " + status, preview: origin + " · " + item.Spec})
 	}
+	d.rows = append(d.rows, row{id: "key", label: "API key · " + m.data.MonitorKeySource, preview: "Replace the saved key. Keys stay outside workspaces and exported traces."})
 	d.rows = append(d.rows, row{id: "new", label: "+ New dimension"})
 	m.dialog = d
 	return nil
@@ -78,6 +94,14 @@ func (m *model) openDimension(id string) tea.Cmd {
 
 // Policy forms and pickers retain their parent; Escape always moves one level.
 func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
+	if d.kind == "loom-policy-key" {
+		key := strings.TrimSpace(d.fields[0].input.Value())
+		if key == "" {
+			m.status = "Enter an OpenRouter API key"
+			return nil
+		}
+		return m.saveDialog(d, "loom-policy.key", map[string]any{"key": key})
+	}
 	if len(d.fields) > 0 {
 		args := map[string]any{}
 		for k, v := range d.args {
@@ -102,6 +126,9 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 	if d.kind == "loom-policy-pick" {
 		field := d.args["field"].(string)
 		if field == "monitor_mode" {
+			if r.id == "jev" && m.data.MonitorKeySource == "" {
+				return m.openMonitorKey(d.parent)
+			}
 			return m.saveDialog(d, "simulator.configure", map[string]any{field: r.id})
 		}
 		if field == "delete" {
@@ -129,6 +156,8 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 	}
 	if d.kind == "loom-policy" {
 		switch r.id {
+		case "key":
+			return m.openMonitorKey(d)
 		case "timing":
 			m.openMonitorTiming()
 			m.dialog.parent = d
@@ -240,4 +269,13 @@ func (m *model) openMonitorTiming() tea.Cmd {
 	}
 	m.dialog = d
 	return nil
+}
+
+func (m *model) openMonitorKey(parent *dialog) tea.Cmd {
+	d := &dialog{kind: "loom-policy-key", title: "OpenRouter API key · saved locally for Carla", parent: parent}
+	d.add("API key", "")
+	d.fields[0].input.EchoMode = textinput.EchoPassword
+	d.fields[0].input.EchoCharacter = '•'
+	m.dialog = d
+	return d.fields[0].input.Focus()
 }

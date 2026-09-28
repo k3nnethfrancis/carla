@@ -920,6 +920,7 @@ async def test_cancel_during_selection_preserves_batch_and_trace(session, monkey
 async def test_document_monitor_stop_preserves_output_and_never_selects(
     session, monkeypatch
 ):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-only")
     from character_lab import monitor
 
     async def scan(config, conversation, turn):
@@ -940,3 +941,26 @@ async def test_document_monitor_stop_preserves_output_and_never_selects(
     assert node["monitor_checks"][0]["detections"][0]["action"] == "stop"
     assert node["text"].startswith("Seed")
     assert not session.project.data.get("policy_runs")
+
+
+@pytest.mark.asyncio
+async def test_monitor_key_setup_enables_without_exposing_secret(session, monkeypatch):
+    from character_lab import credentials
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    assert (
+        session.project.data.get("simulator_config", {}).get("monitor_mode", "off")
+        == "off"
+    )
+    with pytest.raises(ValueError, match="API key"):
+        await session.execute("simulator.configure", {"monitor_mode": "jev"}, "enable")
+    key = "fake-secret-for-test"
+    await session.execute("loom-policy.key", {"key": key}, "key")
+    assert session.project.data["simulator_config"]["monitor_mode"] == "jev"
+    assert credentials.openrouter_key() == (key, "saved")
+    assert key not in json.dumps(session.events)
+    assert key not in session.project.path.read_text()
+    state = [data for kind, data, _ in session.events if kind == "state"][-1]
+    assert state["monitor_key_source"] == "saved"
+    await session.execute("simulator.configure", {"monitor_mode": "off"}, "off")
+    assert credentials.openrouter_key() == (key, "saved")

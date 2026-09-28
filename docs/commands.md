@@ -333,3 +333,12 @@ messages. Only one check runs at a time; a busy judge coalesces token intervals
 rather than queuing requests. Existing zero-interval settings still mean no
 mid-reply checks; turning those on starts at 512 tokens. Disabling both timings
 means no checks, even if Monitoring is on. Saved traces retain the timing used.
+
+### Enabling monitoring
+
+`/policy` → Monitoring initially shows only **Monitoring · Off**. Select Jev and
+complete the masked OpenRouter API-key step before timing, model and behavior
+settings appear. If a saved or environment key already exists, setup is already
+complete. An older workspace with Jev enabled but no available key shows only the
+provider choice and key setup. Turning monitoring off hides its controls while
+retaining the configuration. The configured-key row permits replacing a saved key.

@@ -10,7 +10,8 @@ import (
 
 func policyFixture() *model {
 	m := fixture()
-	m.data.SimulatorConfig = map[string]any{"monitor_mode": "off", "monitor_model": "jev-latest", "monitor_dimensions": []any{
+	m.data.MonitorKeySource = "environment"
+	m.data.SimulatorConfig = map[string]any{"monitor_mode": "jev", "monitor_model": "jev-latest", "monitor_dimensions": []any{
 		map[string]any{"id": "looping", "name": "Looping", "spec": "Repeating without development", "enabled": true, "action": "warn", "color": "amber", "decision": "most_likely", "threshold": .8},
 		map[string]any{"id": "custom_1", "name": "Drift", "spec": "Loses voice", "enabled": false, "action": "stop", "color": "coral", "decision": "threshold", "threshold": .9},
 	}}
@@ -169,5 +170,41 @@ func TestMonitorTimingNavigationAndSavedInterval(t *testing.T) {
 	m.openMonitorTiming()
 	if !strings.Contains(m.dialog.rows[1].label, "Off") || len(m.dialog.rows) != 2 {
 		t.Fatal("legacy end-only not honored")
+	}
+}
+
+func TestMonitoringSetupGatesSettingsAndMasksKey(t *testing.T) {
+	m := policyFixture()
+	m.width, m.height = 100, 30
+	m.data.SimulatorConfig["monitor_mode"] = "off"
+	m.data.MonitorKeySource = ""
+	m.openLoomPolicy()
+	root := m.dialog
+	if len(root.rows) != 1 {
+		t.Fatal("Off exposed monitoring configuration")
+	}
+	m.submitDialog() // choose a provider
+	m.dialog.index = 1
+	m.submitDialog() // Jev needs a key first
+	if m.dialog.kind != "loom-policy-key" || m.simString("monitor_mode") != "off" {
+		t.Fatal("enabled before key setup")
+	}
+	m.dialog.fields[0].input.SetValue("secret-must-not-render")
+	if strings.Contains(m.View().Content, "secret-must-not-render") {
+		t.Fatal("key exposed in terminal")
+	}
+	m.closeDialog()
+	if m.dialog != root || m.simString("monitor_mode") != "off" {
+		t.Fatal("cancel changed configuration")
+	}
+	m.data.SimulatorConfig["monitor_mode"] = "jev"
+	m.openLoomPolicy()
+	if len(m.dialog.rows) != 2 || m.dialog.rows[1].id != "key" {
+		t.Fatal("legacy Jev without key exposed options")
+	}
+	m.data.MonitorKeySource = "environment"
+	m.openLoomPolicy()
+	if len(m.dialog.rows) < 4 || m.dialog.rows[2].id != "timing" {
+		t.Fatal("environment key did not unlock settings")
 	}
 }

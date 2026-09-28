@@ -11,7 +11,7 @@ import random
 from contextlib import aclosing
 from pathlib import Path
 
-from . import evaluation, simulator
+from . import credentials, evaluation, simulator
 from .domain import Project, display_title, generation_status, library, now
 from .exploration import explore, require_selector
 from .model_metadata import native_context
@@ -159,6 +159,7 @@ class Session:
                 for r in p.data.get("policy_runs", [])
             ],
             simulator_config=simulator.configuration(p, self.runtime.model["alias"]),
+            monitor_key_source=credentials.openrouter_key()[1],
             simulation_runs=[
                 simulator.summary(r) for r in p.data.get("simulation_runs", [])
             ],

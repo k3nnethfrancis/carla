@@ -9,7 +9,7 @@ import pytest
 def local_data(tmp_path, monkeypatch):
     home = tmp_path / "app-data"
     home.mkdir()
-    for module in ("models", "library", "workspaces", "model_setup"):
+    for module in ("models", "library", "workspaces", "model_setup", "credentials"):
         monkeypatch.setattr(f"character_lab.{module}.HOME", home)
     sources = [
         {

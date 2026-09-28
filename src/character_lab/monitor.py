@@ -2,9 +2,10 @@
 
 import copy
 import json
-import os
 
 import httpx
+
+from .credentials import openrouter_key
 
 DEFAULT_QUESTIONS = json.dumps(
     {
@@ -147,11 +148,11 @@ async def classify(request, record):
     """Shared Jev transport for streaming policies and saved-trace evaluations."""
     record["request"] = copy.deepcopy(request)
     record["provider"] = "openrouter"
-    key = os.environ.get("OPENROUTER_API_KEY")
+    key, _ = openrouter_key()
     if not key:
         record.update(
             status="unavailable",
-            error="Set OPENROUTER_API_KEY in the terminal before starting Carla",
+            error="Configure an OpenRouter API key in /policy → Monitoring",
         )
         return
     try:

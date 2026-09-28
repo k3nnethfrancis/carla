@@ -71,6 +71,7 @@ type simulationRun struct {
 	Conversations     []simulationConversation
 }
 type state struct {
+	MonitorKeySource string `json:"monitor_key_source"`
 	Evaluators       []evaluator
 	Evaluations      []evaluationSummary
 	EvaluationPrompt string `json:"evaluation_prompt"`

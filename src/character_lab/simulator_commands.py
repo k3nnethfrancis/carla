@@ -7,12 +7,20 @@ Simulator's command arguments and emits its domain events through that session.
 import copy
 from uuid import uuid4
 
-from . import monitor, simulator
+from . import credentials, monitor, simulator
 from .exploration import require_selector
 
 
 async def dispatch(session, command, args, request_id):
     p = session.project
+    if command == "loom-policy.key":
+        credentials.save_openrouter_key(args.get("key"))
+        config = simulator.configuration(p, session.runtime.model["alias"])
+        config["monitor_mode"] = "jev"
+        p.data["simulator_config"] = config
+        p.save()
+        await session.snapshot(request_id)
+        return
     if command.startswith("loom-policy."):
         config = simulator.configuration(p, session.runtime.model["alias"])
         items = monitor.dimensions(config)
@@ -44,6 +52,10 @@ async def dispatch(session, command, args, request_id):
         args = {"monitor_dimensions": items}
         command = "simulator.configure"
     if command == "simulator.configure":
+        if args.get("monitor_mode") == "jev" and not credentials.openrouter_key()[0]:
+            raise ValueError(
+                "Configure an OpenRouter API key in /policy → Monitoring first"
+            )
         config = {**simulator.configuration(p, session.runtime.model["alias"]), **args}
         simulator.validate(config, p, session.validate_settings)
         p.data["simulator_config"] = config

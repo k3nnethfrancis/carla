@@ -345,6 +345,9 @@ func (m *model) renderDialog() string {
 			body = append(body, bold.Render(label), value, "")
 		}
 		footer := m.keyLabel("nav.enter") + " next · " + m.keyLabel("save") + " save · " + m.keyLabel("nav.back") + " cancel"
+		if d.kind == "loom-policy-key" {
+			footer = m.keyLabel("nav.enter") + " save & enable · " + m.keyLabel("nav.back") + " cancel"
+		}
 		if d.kind == "import" {
 			footer = "ENTER next/import · CTRL+ENTER import · ESC cancel"
 			if message, ok := d.args["error"].(string); ok {
