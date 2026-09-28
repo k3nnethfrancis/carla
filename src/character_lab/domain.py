@@ -137,6 +137,9 @@ class Project:
                         ]:
                             if check.get("status") == "checking":
                                 check["status"] = "interrupted"
+        for record in self.data.get("evaluations", []):
+            if record["status"] in {"queued", "running"}:
+                record["status"] = "interrupted"
         self.save()
 
     def stream_delta(self, target, text, trace):

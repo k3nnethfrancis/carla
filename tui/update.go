@@ -25,9 +25,22 @@ var allActions = []action{
 	{"visitor", "Write a visitor message in a conversation fork", ""}, {"grid", "Show Loom grid", ""}, {"loom-policy", "Configure conversation warnings and stop rules", ""},
 	{"character-sampling", "Character temperature, top-p and output tokens", ""}, {"visitor-sampling", "Visitor temperature, top-p and output tokens", ""},
 	{"import", "Import a document into Library", ""},
+	{"policy", "Monitoring, selection and evaluation criteria", ""}, {"eval", "Evaluate selected material", ""}, {"evaluations", "Evaluation datasets", "6"},
 }
 
 func (m *model) perform(id string) tea.Cmd {
+	if id == "policy" {
+		return m.openPolicy()
+	}
+	if id == "eval" {
+		return m.openEval("/eval")
+	}
+	if m.section == 4 && (id == "keep" || id == "remove" || id == "delete" || id == "notes" || id == "inspect" || id == "snapshot") {
+		if id == "delete" {
+			id = "remove"
+		}
+		return m.evalAction(id)
+	}
 	// Legacy keybindings enter the same generation operation as the command bar.
 	if id == "continue" || id == "generate" || id == "run" || id == "simulate" || id == "grow" {
 		return m.loom(generationOptions{})
@@ -166,8 +179,8 @@ func (m *model) perform(id string) tea.Cmd {
 		return m.openDialog(id)
 	case "notes":
 		return m.openNotes(true)
-	case "library", "branches", "kept", "simulator":
-		modes := map[string]int{"library": 0, "branches": 1, "kept": 2, "simulator": 3}
+	case "library", "branches", "kept", "simulator", "evaluations":
+		modes := map[string]int{"library": 0, "branches": 1, "kept": 2, "simulator": 3, "evaluations": 4}
 		return m.switchSection(modes[id])
 	}
 	return nil
@@ -583,6 +596,12 @@ func (m *model) dialogClick(x, y int) tea.Cmd {
 }
 
 func (m *model) nodeTitle() string {
+	if strings.HasPrefix(m.editing, "evaluation-") {
+		return strings.ReplaceAll(m.editing, "-", " ")
+	}
+	if m.section == 4 {
+		return "Evaluation"
+	}
 	switch m.editing {
 	case "conversation":
 		if m.conversationEdit < 0 {

@@ -96,6 +96,9 @@ func box(title, body string, r rect, active bool) string {
 	return style.Render(strings.Join(contents, "\n"))
 }
 func (m *model) renderDocument(width int) string {
+	if m.section == 4 && m.editing == "" {
+		return m.evaluationView(width)
+	}
 	if m.section == 3 && m.editing == "" {
 		return m.conversationDocument(width)
 	}
@@ -184,6 +187,13 @@ func (m *model) navigation(r rect) string {
 		item := rows[i]
 		label := strings.Repeat(" ", item.depth) + safe(item.label)
 		label = line(label, r.w-4)
+		if item.kind == "evaluation" {
+			if strings.Contains(item.label, "PASS") {
+				label = m.aiStyle().Render(label)
+			} else if strings.Contains(item.label, "FAIL") || strings.Contains(item.label, "ERROR") {
+				label = m.accent("#A84F39", "#DB937C").Render(label)
+			}
+		}
 		if i == mIndex {
 			label = selectedStyle.Render(label)
 		}
@@ -201,6 +211,15 @@ func (m *model) navigation(r rect) string {
 	footer := fmt.Sprintf("%d selected · CTRL+F filter", len(m.data.Selected))
 	if m.section != 0 {
 		footer = fmt.Sprintf("%d items", len(rows))
+		if m.section == 4 {
+			count := 0
+			for _, selected := range m.evalSelection {
+				if selected {
+					count++
+				}
+			}
+			footer = fmt.Sprintf("%d selected · ENTER actions", count)
+		}
 		if m.section == 1 || m.section == 2 {
 			footer = fmt.Sprintf("%d selected · %s actions", len(m.selectedBranches()), m.keyLabel("nav.enter"))
 		}
@@ -355,7 +374,7 @@ func (m *model) View() tea.View {
 	}
 	l := m.layout()
 	parts := []string{}
-	sections := []string{"Library", "Branches", "Anthology", "Simulator"}
+	sections := []string{"Library", "Branches", "Anthology", "Simulator", "Evaluation"}
 	for _, p := range l.panels {
 		title, body := "", ""
 		switch p.kind {
@@ -378,7 +397,7 @@ func (m *model) View() tea.View {
 				}
 			}
 			body = m.document.View() + "\n" + "Source · " + m.aiStyle().Render("AI") + " · " + m.humanStyle().Render("Human edits")
-			if m.section == 3 {
+			if m.section == 3 || m.section == 4 {
 				body = m.document.View()
 			}
 			if m.editing != "" {
@@ -421,6 +440,15 @@ func (m *model) View() tea.View {
 	} else {
 		modelName = "Next: " + modelName
 	}
+	if m.section == 4 {
+		training := 0
+		for _, e := range m.data.Evaluations {
+			if e.Training {
+				training++
+			}
+		}
+		modelName = fmt.Sprintf("%d evaluations · %d training", len(m.data.Evaluations), training)
+	}
 	header := line(bold.Render(heading), max(20, m.width/2)) + dim.Render(line(safe(modelName), max(1, m.width-2-max(20, m.width/2))))
 	lines := []string{"", " " + header, m.sectionBar(), lipgloss.NewStyle().PaddingLeft(1).Render(lipgloss.JoinHorizontal(lipgloss.Top, joinPanels(parts)...)), " " + dim.Render(line(m.targetLabel(), m.width-2))}
 	if m.section == 0 && m.editing == "" {
@@ -452,6 +480,11 @@ func (m *model) View() tea.View {
 	if !m.sectionFocus && m.editing == "" && m.focus != 3 {
 		if m.section == 0 {
 			legend = m.keyLabel("select") + " select · " + m.keyLabel("nav.enter") + " to Branches · " + m.keyLabel("nav.next") + " next"
+		} else if m.section == 4 {
+			legend = m.keyLabel("select") + " select · " + m.keyLabel("nav.enter") + " actions · /eval · /policy"
+			if m.focus == 1 {
+				legend = "↑↓ scroll · TAB next · /inspect · /notes"
+			}
 		} else if m.section == 1 || m.section == 2 {
 			legend = m.keyLabel("select") + " select · " + m.keyLabel("nav.enter") + " open/actions · " + m.keyLabel("nav.next") + " next"
 			if m.focus == 1 {
@@ -499,7 +532,7 @@ func joinPanels(parts []string) []string {
 	return out
 }
 
-var sectionNames = []string{"Library", "Branches", "Anthology", "Simulator"}
+var sectionNames = []string{"Library", "Branches", "Anthology", "Simulator", "Evaluation"}
 
 func (m *model) sectionLabels() []string {
 	labels := []string{}

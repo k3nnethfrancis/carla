@@ -65,6 +65,8 @@ func (m *model) commandHints() []string {
 		return nil
 	}
 	switch fields[0] {
+	case "/eval":
+		return []string{"Judge selected items using a saved evaluation", "--train-on-pass true|false · default false"}
 	case "/loom", "/continue", "/generate", "/run", "/grow", "/simulate":
 		if m.section == 3 {
 			return []string{"[alternatives] · --tokens N|Max · --turns N · --loops N", "Selected conversation or fresh setup · bare /loom = one reply"}

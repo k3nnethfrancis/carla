@@ -138,6 +138,15 @@ async def scan(config, conversation, turn):
     if not request["questions"]:
         record.update(status="complete", scores={}, detections=[])
         return
+    await classify(request, record)
+    if record["status"] == "complete":
+        record["detections"] = detections(config, record["scores"])
+
+
+async def classify(request, record):
+    """Shared Jev transport for streaming policies and saved-trace evaluations."""
+    record["request"] = copy.deepcopy(request)
+    record["provider"] = "openrouter"
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
         record.update(
@@ -155,6 +164,7 @@ async def scan(config, conversation, turn):
             record["http_status"] = response.status_code
             response.raise_for_status()
             data = response.json()
+            record["response"] = data
             scores = {}
             for name in request["questions"]:
                 score = data["answers"][name]["noul"]
@@ -165,7 +175,6 @@ async def scan(config, conversation, turn):
                 status="complete",
                 response=data,
                 scores=scores,
-                detections=detections(config, scores),
             )
     except Exception as exc:
         # A failed scan is visible, never a reason to stop generation. Do not save

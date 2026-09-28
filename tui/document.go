@@ -9,6 +9,17 @@ import (
 )
 
 func (m *model) toggleTarget() tea.Cmd {
+	if m.section == 4 && !m.data.Busy {
+		r := m.targetRow()
+		if r.kind == "evaluation" {
+			if m.evalSelection == nil {
+				m.evalSelection = map[string]bool{}
+			}
+			m.evalSelection[r.id] = !m.evalSelection[r.id]
+		}
+		m.reflow()
+		return nil
+	}
 	if m.notesOpen {
 		return nil
 	}

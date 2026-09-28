@@ -12,7 +12,7 @@ func TestPartialCommandArrowSelection(t *testing.T) {
 		m.commandKey(tea.KeyPressMsg{Code: ch, Text: string(ch)})
 	}
 	m.commandKey(tea.KeyPressMsg{Code: tea.KeyDown})
-	if m.commandChoices()[m.commandIndex].id != "configure" || m.command.Value() != "/loo" {
+	if m.commandChoices()[m.commandIndex].id != "policy" || m.command.Value() != "/loo" {
 		t.Fatal("partial loom did not select", m.command.Value())
 	}
 	m.commandKey(tea.KeyPressMsg{Code: tea.KeyUp})

@@ -4,6 +4,9 @@ import tea "charm.land/bubbletea/v2"
 
 // Help documents commands independently of availability (busy/edit states).
 var commandDescriptions = map[string]string{
+	"policy":             "Configure monitoring, selection and saved whole-item evaluations. Jev behavior specs or local LLM judging prompts stay separate from generation settings.",
+	"eval":               "Evaluate selected document versions, a conversation, or all conversations in a selected Loom. Choose a saved evaluation. --train-on-pass true marks passing results for training; default false.",
+	"evaluations":        "Browse evaluated documents and conversations, filter results, add notes and mark items for training. /snapshot exports marked items and metadata.",
 	"import":             "Add a local UTF-8 .txt or .md document to the shared Library. Title defaults to filename; author and source URL are optional.",
 	"visitor":            "Write a visitor message in a new conversation fork. Open a conversation first.",
 	"loom-policy":        "Configure Jev conversation dimensions, warnings, explicit stop rules and probability cutoffs. Alias: /loom-control-policy.",

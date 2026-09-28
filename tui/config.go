@@ -10,8 +10,6 @@ func (m *model) openConfig() tea.Cmd {
 	m.dialog = &dialog{kind: "loom-config", title: "Document Loom", rows: []row{
 		{id: "models", label: "Generation model"},
 		{id: "settings", label: "Sampling and token ceiling", preview: "Shared by Library, Branches and Anthology. Bare /loom creates one continuation."},
-		{id: "selection", label: "Selection policy", preview: "Classify alternatives and advance one eligible result between loops."},
-		{id: "monitor", label: "Monitoring policy", preview: "Shared monitoring specs; warn or explicitly stop. Independent of selection."},
 	}}
 	return nil
 }

@@ -15,7 +15,7 @@ from .policy import DEFAULT_PROMPT, DEFAULT_SPEC, validate
 
 def require_selector(model):
     if not Path(model.get("path", "")).is_file():
-        raise ValueError("Configure a selection model in /config before using --loops")
+        raise ValueError("Configure a selection model in /policy before using --loops")
 
 
 async def explore(project, loops, model, runtime_factory, batch, advance, emit):
@@ -33,7 +33,7 @@ async def explore(project, loops, model, runtime_factory, batch, advance, emit):
         prompt=project.data.get("policy_prompt", DEFAULT_PROMPT),
     )
     if not run["spec"].strip() or not run["prompt"].strip():
-        raise ValueError("Selection criteria and prompt are required in /config")
+        raise ValueError("Selection criteria and prompt are required in /policy")
     project.data.setdefault("policy_runs", []).append(run)
     project.save()
     judge = runtime_factory(project.folder, model)

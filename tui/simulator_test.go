@@ -23,10 +23,10 @@ func TestSimulatorStreamAndConfiguration(t *testing.T) {
 		t.Fatal("Max exposed as sentinel")
 	}
 	m.openSimulatorConfig()
-	if len(m.dialog.rows) != 11 {
+	if len(m.dialog.rows) != 9 {
 		t.Fatal("missing simulator controls")
 	}
-	if strings.Join(sectionNames, " ") != "Library Branches Anthology Simulator" {
+	if strings.Join(sectionNames, " ") != "Library Branches Anthology Simulator Evaluation" {
 		t.Fatal(sectionNames)
 	}
 }

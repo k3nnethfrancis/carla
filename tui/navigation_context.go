@@ -93,6 +93,10 @@ func (m *model) refreshConfig() {
 		return
 	}
 	switch d.kind {
+	case "eval-definitions":
+		m.openEvaluators()
+	case "eval-definition":
+		m.openEvaluator(d.args["id"].(string))
 	case "loom-policy":
 		m.openLoomPolicy()
 	case "loom-policy-dimension":
@@ -147,7 +151,7 @@ func (m *model) openSampling(group string) tea.Cmd {
 }
 func readOnlyAction(id string) bool {
 	switch id {
-	case "grid", "library", "branches", "kept", "simulator", "inspect", "notes", "active", "find", "help", "keys", "cancel", "restart", "quit", "exit":
+	case "evaluations", "grid", "library", "branches", "kept", "simulator", "inspect", "notes", "active", "find", "help", "keys", "cancel", "restart", "quit", "exit":
 		return true
 	}
 	return false
