@@ -175,6 +175,7 @@ type model struct {
 	sources                []source
 	width, height          int
 	focus                  int // navigation, document, inspector, command
+	restoringView          bool
 	section                int // library, branches, anthology, simulator
 	selected, commandIndex int
 	command                textinput.Model
@@ -525,6 +526,10 @@ func (m *model) apply(e event) tea.Cmd {
 			m.gridPinned = true
 			m.focus = 1
 		}
+		if run.Opened && m.restoringView {
+			m.restoringView = false
+			m.focus, m.sectionFocus = 0, true
+		}
 		if run.Opened {
 			if run.Forked && run.OpenConversation != nil {
 				m.loomConversation = &conversationParent{Run: run.ID, Conversation: *run.OpenConversation}
@@ -669,7 +674,7 @@ func (m *model) apply(e event) tea.Cmd {
 			m.status = "Saved locally · " + m.data.Workspace.Path
 			if len(m.data.Nodes) > 0 {
 				m.section = 1
-				// Keep the command bar focused when restoring a workspace.
+				// The saved UI location is restored after this snapshot is applied.
 			}
 		}
 		if oldID != m.currentID() {
@@ -745,6 +750,9 @@ func (m *model) apply(e event) tea.Cmd {
 			}
 		}
 		m.applyPagePosition()
+		if oldWorkspace != m.data.Workspace.Path {
+			return m.restoreWorkspaceView()
+		}
 		if startDocumentEdit {
 			return m.openDocumentWithNotes()
 		}
@@ -812,6 +820,7 @@ func (m *model) apply(e event) tea.Cmd {
 		m.notePending = false
 		m.enterLoom = false
 		m.keySaving = false
+		m.restoringView = false
 		var err struct{ Message string }
 		json.Unmarshal(e.Data, &err)
 		m.pending = false

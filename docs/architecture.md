@@ -152,3 +152,9 @@ marked records to a fresh workspace-local JSONL file; it does not train a model.
 
 `tui/evaluation.go` owns the fifth tab and its dialogs. It uses the same command,
 focus, editor-save acknowledgement and parent/back mechanisms as the other pages.
+
+The frontend saves the last tab and document/trace row in each workspace's
+`view-state.json`, separately from project data. Startup restores that location
+with keyboard focus on the tab bar. It does not restore checked Loom targets,
+editing, dialogs, or command input. Missing/deleted rows fall back to the tab's
+first item. Navigation writes are atomic and occur only when the location changes.

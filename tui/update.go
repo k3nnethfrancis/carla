@@ -192,6 +192,12 @@ func (m *model) perform(id string) tea.Cmd {
 }
 
 func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	before, workspace := m.workspaceView(), m.data.Workspace.Path
+	defer func() {
+		if workspace == m.data.Workspace.Path && before != m.workspaceView() {
+			m.saveWorkspaceView()
+		}
+	}()
 	switch msg := message.(type) {
 	case policyTick:
 		return m, m.advancePolicyPulse(time.Time(msg))
@@ -207,6 +213,7 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		reset := m.flushSeedReset()
 		return m, tea.Batch(cmd, reset, m.previewTarget(), m.client.read())
 	case failure:
+		m.restoringView = false
 		m.editRequest = ""
 		m.pending = false
 		m.disconnected = true
