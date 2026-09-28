@@ -120,10 +120,8 @@ Creating the workflow does not publish a release or change repository visibility
 
 Before changing visibility or publishing a release:
 
-- Resolve [#24](https://github.com/k3nnethfrancis/carla/issues/24): redistribution
-  permission for the bundled Gunkel text is unverified. Confirm permission or
-  replace bundling with an agreed source-link/download workflow. Attribution alone
-  is not a permission check. Keep source provenance either way.
+- Verify redistribution terms before adding starter texts; retain edition and
+  source provenance. Gunkel’s Paths table is a source reference only, not bundled.
 - Preserve third-party notices, including the vendored TUI skill's MIT license.
 - Confirm no credentials, private workspaces, model weights or research artifacts
   are tracked. Use synthetic fixtures in tests and examples.

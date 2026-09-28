@@ -7,17 +7,17 @@ from character_lab.library import load_library
 
 def test_empty_library_has_bundled_starters(tmp_path):
     sources = load_library(tmp_path)
-    assert [s["key"] for s in sources] == ["gunkel", "meditations", "tractatus"]
-    assert [len(s["passages"]) for s in sources] == [1, 487, 7]
+    assert [s["key"] for s in sources] == ["meditations", "tractatus"]
+    assert [len(s["passages"]) for s in sources] == [487, 7]
     assert all(s["url"] and s["source_sha256"] for s in sources)
 
 
 def test_local_document_overrides_starter_without_hiding_others(tmp_path):
-    source = {"key": "gunkel", "title": "My paths", "passages": []}
+    source = {"key": "meditations", "title": "My passages", "passages": []}
     (tmp_path / "custom.json").write_text(json.dumps(source))
     sources = load_library(tmp_path)
     assert sources[0] == source
-    assert len(sources) == 3
+    assert len(sources) == 2
 
 
 def test_duplicate_library_keys_fail(tmp_path):

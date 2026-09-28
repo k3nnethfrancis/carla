@@ -13,6 +13,21 @@ import (
 	"time"
 )
 
+// Transport tests own their seed instead of depending on the shipped library.
+func transportData(t *testing.T) string {
+	t.Helper()
+	data := t.TempDir()
+	library := filepath.Join(data, "library")
+	if err := os.MkdirAll(library, 0700); err != nil {
+		t.Fatal(err)
+	}
+	seed := `{"key":"transport-test","title":"Test seed","passages":[{"id":"1","text":"An original synthetic seed."}]}`
+	if err := os.WriteFile(filepath.Join(library, "seed.json"), []byte(seed), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
 // Exercise the real Go→Python boundary with an isolated on-disk workspace.
 // Inference itself is separately tested through the Python runtime contract.
 func TestPythonTransport(t *testing.T) {
@@ -21,7 +36,7 @@ func TestPythonTransport(t *testing.T) {
 		t.Fatal(err)
 	}
 	cmd := exec.Command(python, "-m", "character_lab.backend", "--workspace", "test")
-	cmd.Env = append(os.Environ(), "CARLA_DATA_DIR="+t.TempDir())
+	cmd.Env = append(os.Environ(), "CARLA_DATA_DIR="+transportData(t))
 	c, err := startClient(cmd)
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +58,7 @@ func TestPythonTransport(t *testing.T) {
 	read("library")
 	read("state")
 	read("setup")
-	if _, ok := c.send("seed.toggle", map[string]any{"ref": "gunkel:table"})().(sent); !ok {
+	if _, ok := c.send("seed.toggle", map[string]any{"ref": "transport-test:1"})().(sent); !ok {
 		t.Fatal("send failed")
 	}
 	e := read("state")
@@ -68,7 +83,7 @@ func TestPythonTransport(t *testing.T) {
 // A broken TUI connection must cancel its in-flight generation, retain its
 // partial trace, release the workspace lock, and permit the next launch.
 func TestPythonTransportDisconnectRecoversPartialAndLock(t *testing.T) {
-	data := t.TempDir()
+	data := transportData(t)
 	const alias = "synthetic-base"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -142,7 +157,7 @@ func TestPythonTransportDisconnectRecoversPartialAndLock(t *testing.T) {
 	defer cmd.Process.Kill()
 	read(c, "library")
 	read(c, "state")
-	if _, ok := c.send("seed.toggle", map[string]any{"ref": "gunkel:table"})().(sent); !ok {
+	if _, ok := c.send("seed.toggle", map[string]any{"ref": "transport-test:1"})().(sent); !ok {
 		t.Fatal("seed selection failed")
 	}
 	read(c, "state")

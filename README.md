@@ -13,7 +13,7 @@ prompts, model settings, ancestry and judge results.
 ```text
 Seed documents → Continuations → Anthology → Conversations → Evaluation → Training data
    Library          Branches      Anthology     Simulator     Evaluate       Export
-                       ↳ fork / loom               ↳ fork / loom
+                       ↳ loom                      ↳ loom
 ```
 
 Carla currently implements **data generation, curation, evaluation and export**.
@@ -51,7 +51,7 @@ Use ↑/↓ and Enter to choose, or Escape to go back:
 - Download a tested Qwen3 **8B**, **14B**, or **30B-A3B Base** GGUF (Q4_K_M).
 - Paste a Hugging Face repository or GGUF file URL and choose a file to download.
 - Point to a local GGUF without copying it.
-- Skip setup to browse the bundled Gunkel, Meditations and Tractatus starters offline.
+- Skip setup to browse the bundled Meditations and Tractatus starters offline.
 
 Downloads show their size, license and pinned revision before confirmation.
 Use `/model` → `+ Add model`, or run `carla --setup-model`, to add another model. Generation also requires
