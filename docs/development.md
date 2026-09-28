@@ -1,7 +1,8 @@
 # Developing Carla
 
-Carla is currently shared privately with collaborators. GitHub Issues is the
-canonical bug and feature backlog; access follows repository permissions.
+GitHub Issues is the canonical bug and feature backlog; access follows repository
+permissions. Repository visibility and release publication are explicit maintainer
+decisions. See the [release-readiness checklist](#public-release-readiness).
 
 ## Work on a change
 
@@ -114,3 +115,20 @@ model weights or user workspaces in release assets. GitHub Release notes are the
 changelog; avoid maintaining a duplicate one in the repository.
 
 Creating the workflow does not publish a release or change repository visibility.
+
+## Public-release readiness
+
+Before changing visibility or publishing a release:
+
+- Resolve [#24](https://github.com/k3nnethfrancis/carla/issues/24): redistribution
+  permission for the bundled Gunkel text is unverified. Confirm permission or
+  replace bundling with an agreed source-link/download workflow. Attribution alone
+  is not a permission check. Keep source provenance either way.
+- Preserve third-party notices, including the vendored TUI skill's MIT license.
+- Confirm no credentials, private workspaces, model weights or research artifacts
+  are tracked. Use synthetic fixtures in tests and examples.
+- Run the documented install and changed terminal journeys, plus all CI checks.
+- Keep implemented capabilities, known limits and future training work distinct
+  in the README. Publish the intended reviewed `main` revision.
+
+Documentation completion does not itself change repository visibility.
