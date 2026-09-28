@@ -309,12 +309,19 @@ func (m *model) renderDialog() string {
 		if d.kind == "keys" {
 			footer = "ENTER bind · CTRL+S save · ESC cancel"
 		}
+		if d.kind == "loom-policy-timing" {
+			action := "toggle"
+			if len(d.rows) > 0 && d.rows[d.index].id == "interval" {
+				action = "edit interval"
+			}
+			footer = "↑↓ choose · " + m.keyLabel("nav.enter") + " " + action + " · " + m.keyLabel("nav.back") + " back"
+		}
 		if d.kind == "sim-documents" {
 			footer = "SPACE select · CTRL+S save · ESC cancel"
 		}
 		if d.query != "" {
 			footer = "Filter: " + d.query + " · " + footer
-		} else if d.kind != "keys" && d.kind != "delete" && !strings.HasPrefix(d.kind, "setup-") {
+		} else if d.kind != "keys" && d.kind != "delete" && d.kind != "loom-policy-timing" && !strings.HasPrefix(d.kind, "setup-") {
 			footer = "Type to filter · " + footer
 		}
 		body = append(body, footer)

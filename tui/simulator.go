@@ -238,7 +238,7 @@ func (m *model) numberKey(msg tea.KeyPressMsg) tea.Cmd {
 		unit, lower = .01, 0
 	}
 	if key == "monitor_interval_tokens" {
-		unit, lower = 64, 0
+		unit, lower = 64, 1
 	}
 	if key == "threshold" {
 		lower = 0

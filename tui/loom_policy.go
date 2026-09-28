@@ -34,6 +34,7 @@ func (m *model) openLoomPolicy() tea.Cmd {
 	d := &dialog{kind: "loom-policy", title: "Monitoring policy", rows: []row{
 		{id: "mode", label: "Monitoring · " + m.simString("monitor_mode"), preview: "Jev via OpenRouter checks document continuations or Character replies with context. Requires OPENROUTER_API_KEY."},
 		{id: "model", label: "Model · " + m.simString("monitor_model")},
+		{id: "timing", label: "When to check · " + m.monitorTimingSummary(), preview: "Choose checks after replies, during generation, or both. Shared with document continuations; Visitor messages are not checked."},
 	}}
 	for _, item := range m.dimensions() {
 		status := "Off"
@@ -46,15 +47,6 @@ func (m *model) openLoomPolicy() tea.Cmd {
 		}
 		d.rows = append(d.rows, row{id: item.ID, label: item.Name + " · " + status, preview: origin + " · " + item.Spec})
 	}
-	interval, ok := m.data.SimulatorConfig["monitor_interval_tokens"].(float64)
-	if !ok {
-		interval = 512
-	}
-	cadence := fmt.Sprintf("Every %.0f output tokens", interval)
-	if interval == 0 {
-		cadence = "End of turn only"
-	}
-	d.rows = append(d.rows, row{id: "interval", label: "During reply · " + cadence, preview: "Checks character replies while they stream. 0 disables mid-turn checks; completed replies are still checked."})
 	d.rows = append(d.rows, row{id: "new", label: "+ New dimension"})
 	m.dialog = d
 	return nil
@@ -121,15 +113,24 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 		}
 		return m.saveDialog(d, "loom-policy.update", map[string]any{"id": d.args["id"], field: r.id})
 	}
+	if d.kind == "loom-policy-timing" {
+		if r.id == "interval" {
+			m.numberConfig("sim", "monitor_interval_tokens", m.monitorInterval(), "")
+			m.dialog.title = "Output tokens between checks · ↑↓ 64 · ←→ 640"
+			m.dialog.parent = d
+			return nil
+		}
+		enabled := m.monitorTimingEnabled(r.id)
+		args := map[string]any{r.id: !enabled}
+		if r.id == "monitor_during_reply" && !enabled && m.monitorInterval() == 0 {
+			args["monitor_interval_tokens"] = 512
+		}
+		return m.send("simulator.configure", args)
+	}
 	if d.kind == "loom-policy" {
 		switch r.id {
-		case "interval":
-			value, ok := m.data.SimulatorConfig["monitor_interval_tokens"].(float64)
-			if !ok {
-				value = 512
-			}
-			m.numberConfig("sim", "monitor_interval_tokens", value, "")
-			m.dialog.title = "Check every N output tokens · 0 = end only · arrows adjust"
+		case "timing":
+			m.openMonitorTiming()
 			m.dialog.parent = d
 		case "mode":
 			m.policyPicker(d, "", "monitor_mode", []string{"off", "jev"})
@@ -190,4 +191,53 @@ func (m *model) policyPicker(parent *dialog, id, field string, values []string) 
 		d.rows = append(d.rows, row{id: v, label: label})
 	}
 	m.dialog = d
+}
+
+func (m *model) monitorInterval() float64 {
+	if value, ok := m.data.SimulatorConfig["monitor_interval_tokens"].(float64); ok {
+		return value
+	}
+	return 512
+}
+func (m *model) monitorTimingEnabled(key string) bool {
+	enabled, ok := m.data.SimulatorConfig[key].(bool)
+	if !ok {
+		enabled = true
+	}
+	// Older workspaces used zero for end-only monitoring.
+	return enabled && (key != "monitor_during_reply" || m.monitorInterval() > 0)
+}
+func (m *model) monitorTimingSummary() string {
+	var parts []string
+	if m.monitorTimingEnabled("monitor_after_reply") {
+		parts = append(parts, "After reply")
+	}
+	if m.monitorTimingEnabled("monitor_during_reply") {
+		parts = append(parts, "During reply")
+	}
+	if len(parts) == 0 {
+		return "No checks"
+	}
+	return strings.Join(parts, " + ")
+}
+func (m *model) openMonitorTiming() tea.Cmd {
+	d := &dialog{kind: "loom-policy-timing", title: "When to check", rows: []row{}}
+	if m.simString("monitor_mode") != "jev" {
+		d.title += " · monitoring off"
+	}
+	for _, entry := range []struct{ key, label, preview string }{
+		{"monitor_after_reply", "After each reply", "Check the completed Character reply (or document continuation). Enter toggles."},
+		{"monitor_during_reply", "During a reply", "Check partial output while it streams. Enter toggles; your interval stays saved."},
+	} {
+		value := "Off"
+		if m.monitorTimingEnabled(entry.key) {
+			value = "On"
+		}
+		d.rows = append(d.rows, row{id: entry.key, label: entry.label + " · " + value, preview: entry.preview})
+	}
+	if m.monitorTimingEnabled("monitor_during_reply") {
+		d.rows = append(d.rows, row{id: "interval", label: fmt.Sprintf("Check interval · %.0f output tokens", m.monitorInterval()), preview: "Enter adjusts the interval. One check at a time; if the judge is busy, checks are coalesced rather than queued."})
+	}
+	m.dialog = d
+	return nil
 }

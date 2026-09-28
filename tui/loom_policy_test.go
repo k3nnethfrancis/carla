@@ -21,7 +21,7 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 	m.width, m.height = 120, 36
 	m.perform("loom-policy")
 	root := m.dialog
-	root.index = 2
+	root.index = 3
 	m.submitDialog()
 	if m.dialog.kind != "loom-policy-dimension" || m.dialog.parent != root {
 		t.Fatal("dimension lost parent")
@@ -44,7 +44,7 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 	if m.dialog != root {
 		t.Fatal("Escape skipped policy")
 	}
-	root.index = 3
+	root.index = 4
 	m.submitDialog()
 	found := false
 	for _, r := range m.dialog.rows {
@@ -127,5 +127,47 @@ func TestPulseBackoffAndCheckpointIdentity(t *testing.T) {
 	m.detectPolicy(json.RawMessage(`{"run":"r","conversation":0,"turn":1,"id":"looping","check":1}`))
 	if m.policyPulses["r:0"].Started == first {
 		t.Fatal("new checkpoint did not restart pulses")
+	}
+}
+
+func TestMonitorTimingNavigationAndSavedInterval(t *testing.T) {
+	m := policyFixture()
+	m.width, m.height = 120, 36
+	m.data.SimulatorConfig["monitor_interval_tokens"] = float64(768)
+	m.openLoomPolicy()
+	root := m.dialog
+	root.index = 2
+	m.submitDialog()
+	timing := m.dialog
+	if timing.kind != "loom-policy-timing" || timing.parent != root || len(timing.rows) != 3 {
+		t.Fatal("missing timing page")
+	}
+	timing.index = 2
+	m.submitDialog()
+	if m.dialog.kind != "config-number" || m.dialog.parent != timing || m.dialog.fields[0].input.Value() != "768" {
+		t.Fatal("interval did not open")
+	}
+	m.closeDialog()
+	if m.dialog != timing {
+		t.Fatal("Escape skipped timing page")
+	}
+	m.data.SimulatorConfig["monitor_during_reply"] = false
+	m.refreshConfig()
+	if len(m.dialog.rows) != 2 || m.monitorInterval() != 768 {
+		t.Fatal("off discarded interval")
+	}
+	m.data.SimulatorConfig["monitor_during_reply"] = true
+	m.refreshConfig()
+	if len(m.dialog.rows) != 3 || !strings.Contains(m.dialog.rows[2].label, "768") {
+		t.Fatal("interval not restored")
+	}
+	m.closeDialog()
+	if m.dialog.kind != "loom-policy" {
+		t.Fatal("Escape skipped monitoring policy")
+	}
+	m.data.SimulatorConfig["monitor_interval_tokens"] = float64(0)
+	m.openMonitorTiming()
+	if !strings.Contains(m.dialog.rows[1].label, "Off") || len(m.dialog.rows) != 2 {
+		t.Fatal("legacy end-only not honored")
 	}
 }

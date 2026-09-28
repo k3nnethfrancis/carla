@@ -142,8 +142,11 @@ human messages, to that external service. Its requests may incur charges.
 Set `OPENROUTER_API_KEY` in the launching environment; never put it in a workspace
 or model JSON file. The client stores request/response evidence but not the key.
 
-Checks apply to character replies. The default cadence is every 512 generated
-tokens plus the final reply; 0 means end-of-turn only. Only one check per
+Checks apply to character replies and document continuations. In `/policy` →
+Monitoring → When to check, toggle after-reply and during-reply checks separately.
+Both default to on, with a 512-output-token interval when monitoring is enabled.
+Turning during-reply checks off preserves the interval. Legacy interval 0 still
+disables mid-reply checks. Only one check per
 conversation is in flight. Partial checks do not block token streaming; the
 conversation awaits its pending/final result before advancing so an explicit Stop
 can take effect. Sibling conversations on the same model can keep advancing.

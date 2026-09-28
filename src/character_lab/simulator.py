@@ -29,6 +29,8 @@ def defaults(alias):
     return dict(
         monitor_mode="off",
         monitor_interval_tokens=512,
+        monitor_after_reply=True,
+        monitor_during_reply=True,
         monitor_model="jev-latest",
         monitor_dimensions=monitor.dimensions({}),
         documents=[],
@@ -69,6 +71,9 @@ def validate(config, project, validate_settings):
     ):
         raise ValueError("Supply a monitor model")
     monitor.validate_dimensions(monitor.dimensions(config))
+    for key in ("monitor_after_reply", "monitor_during_reply"):
+        if type(config.get(key, True)) is not bool:
+            raise ValueError("Monitor timing switches must be boolean")
     interval = config.get("monitor_interval_tokens", 512)
     if type(interval) is not int or interval < 0:
         raise ValueError(

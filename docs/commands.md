@@ -319,3 +319,17 @@ not add task generation, automatic judge calibration, or a training runner.
 
 Losing the UI connection cancels generation; it is not an inference failure.
 Completed conversations and turns retain their status when siblings stop.
+
+### Monitoring timing
+
+In `/policy` → Monitoring → **When to check**, use Enter to toggle **After each
+reply** and **During a reply** independently. When during-reply checking is on,
+**Check interval** opens an arrow-controlled positive output-token count. Turning
+it off preserves that count. Both checks default to on with a 512-token interval;
+the separate Monitoring switch still defaults to off.
+
+These controls apply to Character replies and document continuations, not Visitor
+messages. Only one check runs at a time; a busy judge coalesces token intervals
+rather than queuing requests. Existing zero-interval settings still mean no
+mid-reply checks; turning those on starts at 512 tokens. Disabling both timings
+means no checks, even if Monitoring is on. Saved traces retain the timing used.

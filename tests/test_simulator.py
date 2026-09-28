@@ -704,3 +704,55 @@ async def test_inference_connection_failure_is_still_a_failure(setup):
     run = await simulator.generate(project, config, BrokenModel, emit)
     assert run["status"] == "failed"
     assert run["error"] == "Model connection lost"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "after,during", [(True, True), (True, False), (False, True), (False, False)]
+)
+async def test_monitor_timing_switches_are_independent(
+    setup, monkeypatch, after, during
+):
+    from character_lab import monitor
+
+    project, config, emit, _ = setup
+    config.update(
+        turns=1,
+        monitor_mode="jev",
+        monitor_interval_tokens=2,
+        monitor_after_reply=after,
+        monitor_during_reply=during,
+    )
+
+    class Tokens(Runtime):
+        async def stream(self, prompt, settings, trace):
+            for count in range(1, 4):
+                trace["generated_tokens"] = count
+                yield "x"
+                await asyncio.sleep(0)
+
+    async def scan(config, conversation, turn):
+        turn["monitor"] = {"status": "complete", "scores": {}, "detections": []}
+
+    monkeypatch.setattr(monitor, "scan", scan)
+    run = await simulator.generate(project, config, Tokens, emit)
+    turn = run["conversations"][0]["turns"][-1]
+    checks = turn.get("monitor_checks", [])
+    assert any(c["phase"] == "partial" for c in checks) == during
+    assert (
+        any(c["phase"] == "complete" or c.get("end_of_turn") for c in checks) == after
+    )
+    assert turn["text"] == "xxx" and run["status"] == "complete"
+
+
+def test_monitor_timing_defaults_and_validation(setup):
+    project, config, _, _ = setup
+    project.data["simulator_config"] = {"monitor_interval_tokens": 0}
+    restored = simulator.configuration(project, "base")
+    assert restored["monitor_interval_tokens"] == 0
+    assert restored["monitor_after_reply"] is True
+    for key in ("monitor_after_reply", "monitor_during_reply"):
+        with pytest.raises(ValueError, match="boolean"):
+            simulator.validate(
+                {**config, key: "false"}, project, Session.validate_settings
+            )

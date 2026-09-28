@@ -99,6 +99,8 @@ func (m *model) refreshConfig() {
 		m.openEvaluator(d.args["id"].(string))
 	case "loom-policy":
 		m.openLoomPolicy()
+	case "loom-policy-timing":
+		m.openMonitorTiming()
 	case "loom-policy-dimension":
 		m.openDimension(d.args["id"].(string))
 	case "sim-openings":
@@ -281,6 +283,9 @@ func (m *model) closeDialog() tea.Cmd {
 	}
 	if d != nil && d.parent != nil {
 		m.dialog = d.parent
+		if d.kind == "loom-policy-timing" {
+			m.refreshConfig()
+		}
 		return nil
 	}
 	m.dialog = nil

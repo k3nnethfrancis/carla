@@ -11,7 +11,11 @@ class TurnMonitor:
         self.config, self.project, self.run = config, project, run
         self.conversation, self.turn, self.emit = conversation, turn, emit
         self.enabled = config["monitor_mode"] == "jev" and turn["role"] == "character"
-        self.interval = config.get("monitor_interval_tokens", 512)
+        self.interval = (
+            config.get("monitor_interval_tokens", 512)
+            if config.get("monitor_during_reply", True)
+            else 0
+        )
         self.next_tokens = self.interval
         self.task = None
         self.stop = asyncio.Event()
@@ -124,7 +128,7 @@ class TurnMonitor:
             return
         if self.task:
             await self.task
-        if self.stopped:
+        if self.stopped or not self.config.get("monitor_after_reply", True):
             return
         checks = self.turn.get("monitor_checks", [])
         if checks and checks[-1]["characters"] == len(self.turn["text"]):
