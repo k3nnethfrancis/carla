@@ -7,9 +7,12 @@ import (
 )
 
 // The tab defines what the positional count produces. Tokens are always a cap.
-type generationOptions struct{ Count, Tokens, Turns int }
+type generationOptions struct{ Count, Tokens, Turns, Loops int }
 
 func (o generationOptions) apply(args map[string]any) {
+	if o.Loops > 0 {
+		args["loops"] = o.Loops
+	}
 	if o.Count > 0 {
 		args["count"] = o.Count
 	}
@@ -25,7 +28,7 @@ func parseGenerationOptions(input, id string) (generationOptions, error) {
 	fields := strings.Fields(input)
 	seen := map[string]bool{}
 	fail := func() (generationOptions, error) {
-		return out, fmt.Errorf("use /loom 5 --tokens 1024 (Simulator also accepts --turns N); token ranges are not supported")
+		return out, fmt.Errorf("use /loom 5 --tokens 1024 --loops 4 (Simulator also accepts --turns N); token ranges are not supported")
 	}
 	for i := 1; i < len(fields); i++ {
 		key, value, inline := strings.Cut(fields[i], "=")
@@ -40,7 +43,7 @@ func parseGenerationOptions(input, id string) (generationOptions, error) {
 				key = "--count"
 			}
 		}
-		if key != "--tokens" && (id != "loom" || (key != "--count" && key != "-n" && key != "--turns")) {
+		if key != "--tokens" && (id != "loom" || (key != "--count" && key != "-n" && key != "--turns" && key != "--loops")) {
 			return fail()
 		}
 		if key == "-n" {
@@ -67,6 +70,8 @@ func parseGenerationOptions(input, id string) (generationOptions, error) {
 		switch key {
 		case "--tokens":
 			out.Tokens = n
+		case "--loops":
+			out.Loops = n
 		case "--turns":
 			out.Turns = n
 		default:

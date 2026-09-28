@@ -785,3 +785,134 @@ async def test_edit_state_acknowledges_its_request(session):
     assert (kind, request_id) == ("state", "save-42")
     assert state["current"]["text"] == "edited 🙂"
     assert state["current"]["parent"] == root["id"]
+
+
+@pytest.mark.asyncio
+async def test_document_loops_share_batch_generation_and_preserve_ancestry(session):
+    s = session
+    root = s.project.add("A source.", kind="source")
+    defaults = s.state()["settings"].copy()
+    await s.execute(
+        "continue",
+        {"node": root["id"], "count": 2, "loops": 3, "n_predict": 32},
+        "loops",
+    )
+    await s.job
+    nodes = s.project.data["nodes"][1:]
+    assert len(nodes) == 6
+    policy = s.project.data["policy_runs"][-1]
+    assert policy["status"] == "complete" and len(policy["steps"]) == 3
+    for previous, current in zip(policy["steps"], policy["steps"][1:]):
+        winner = s.project.node(previous["decision"]["selected"])
+        assert all(
+            s.project.node(key)["parent"] == winner["id"]
+            for key in current["candidates"]
+        )
+        assert current["messages"][0]["content"] == policy["prompt"]
+    assert not any(n.get("kept") for n in nodes)
+    assert all(n["settings"]["n_predict"] == 32 for n in nodes)
+    assert s.state()["settings"] == defaults and not s.busy
+
+
+@pytest.mark.asyncio
+async def test_simulator_loops_advance_selected_transcript_not_original_seed(session):
+    s = session
+    doc = s.project.add("An anthology.", kind="source")
+    doc["kept"] = True
+    await s.execute("simulator.configure", {"documents": [doc["id"]]}, "config")
+    await s.execute(
+        "simulator.run", {"count": 2, "turns": 2, "loops": 3, "n_predict": 16}, "loops"
+    )
+    await s.job
+    runs = s.project.data["simulation_runs"]
+    assert len(runs) == 3
+    assert all(len(r["conversations"]) == 2 for r in runs)
+    assert runs[1]["parent"] == {"run": runs[0]["id"], "conversation": 0}
+    assert runs[2]["parent"] == {"run": runs[1]["id"], "conversation": 0}
+    final = runs[-1]["conversations"][0]
+    assert sum(t["role"] == "character" for t in final["turns"]) == 6
+    assert s.project.data["policy_runs"][-1]["status"] == "complete"
+    assert not s.busy
+
+
+@pytest.mark.asyncio
+async def test_loops_validate_selector_before_generating(session):
+    s = session
+    s.project.add("Source", kind="source")
+    s.policy_model["path"] = ""
+    before = len(s.project.data["nodes"])
+    with pytest.raises(ValueError, match="selection model"):
+        await s.execute("continue", {"count": 2, "loops": 2}, "invalid")
+    assert len(s.project.data["nodes"]) == before and not s.busy
+    with pytest.raises(ValueError, match="Loops"):
+        await s.execute("continue", {"loops": 0}, "invalid")
+
+
+@pytest.mark.asyncio
+async def test_no_selection_does_not_start_an_extra_loop(session, monkeypatch):
+    async def none(self, messages, trace):
+        data = json.loads(messages[1]["content"])
+        return dict(
+            reviews=[
+                dict(
+                    node=c["node"],
+                    decision="pass",
+                    reason="Not useful",
+                    evidence=c["continuation"],
+                )
+                for c in data["candidates"]
+            ],
+            selected=None,
+            reason="No eligible result",
+        )
+
+    monkeypatch.setattr(FakeRuntime, "judge", none)
+    session.project.add("Source", kind="source")
+    await session.execute("continue", {"count": 2, "loops": 4}, "loops")
+    await session.job
+    assert len(session.project.data["nodes"]) == 3
+    assert session.project.data["policy_runs"][-1]["status"] == "no_selection"
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_selection_preserves_batch_and_trace(session, monkeypatch):
+    async def cancelled(self, messages, trace):
+        trace["request"] = messages
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(FakeRuntime, "judge", cancelled)
+    session.project.add("Seed", kind="source")
+    await session.execute("continue", {"count": 2, "loops": 3}, "loops")
+    await session.job
+    loaded = Project(session.project.folder)
+    run = loaded.data["policy_runs"][-1]
+    assert run["status"] == "stopped" and len(run["steps"]) == 1
+    assert len(run["steps"][0]["trace"]["request"]) == 2
+    assert all(n["status"] == "complete" for n in loaded.data["nodes"])
+    assert not session.busy
+
+
+@pytest.mark.asyncio
+async def test_document_monitor_stop_preserves_output_and_never_selects(
+    session, monkeypatch
+):
+    from character_lab import monitor
+
+    async def scan(config, conversation, turn):
+        turn["monitor"] = dict(
+            status="complete",
+            detections=[
+                dict(action="stop", name="Looping", color="amber", confidence=0.99)
+            ],
+        )
+
+    monkeypatch.setattr(monitor, "scan", scan)
+    session.project.add("Seed", kind="source")
+    await session.execute("simulator.configure", {"monitor_mode": "jev"}, "config")
+    await session.execute("continue", {"count": 1, "loops": 1}, "loom")
+    await session.job
+    node = session.project.data["nodes"][-1]
+    assert node["status"] == "policy_stopped"
+    assert node["monitor_checks"][0]["detections"][0]["action"] == "stop"
+    assert node["text"].startswith("Seed")
+    assert not session.project.data.get("policy_runs")

@@ -196,6 +196,7 @@ func (m *model) forkDocument() tea.Cmd {
 		m.editor.Blur()
 		m.commandDocument = ""
 		m.enterLoom = true
+		m.section = 1
 	}
 	return cmd
 }

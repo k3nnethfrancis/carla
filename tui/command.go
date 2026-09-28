@@ -11,6 +11,10 @@ import (
 // Commands reuse the action handlers; typing never invokes single-key shortcuts.
 func commandName(a action) string {
 	switch a.id {
+	case "branch":
+		return "fork"
+	case "configure":
+		return "config"
 	case "kept":
 		return "anthology"
 	case "models":
@@ -28,7 +32,7 @@ func (m *model) commandChoices() []action {
 	value := strings.ToLower(strings.TrimSpace(m.command.Value()))
 	if fields := strings.Fields(value); len(fields) > 1 {
 		switch fields[0] {
-		case "/continue", "/generate", "/loom", "/branch", "/model", "/configure":
+		case "/continue", "/generate", "/loom", "/branch", "/model", "/configure", "/config", "/fork", "/run", "/grow":
 			value = fields[0]
 		}
 	}
@@ -107,7 +111,7 @@ func (m *model) commandChoices() []action {
 			} else if m.section == 1 {
 				a.label = "Generate branches at cursor · number = branches"
 			} else {
-				a.label = "Open Branches or Simulator to run"
+				a.label = "Continue source or kept document in Branches"
 			}
 		}
 		if m.section == 3 && a.id == "branch" {
@@ -120,13 +124,13 @@ func (m *model) commandChoices() []action {
 			a.label = "Loom temperature, top-p, output tokens and context"
 		}
 		if a.id == "configure" {
-			a.label = "Configure this page"
+			a.label = "Models, sampling, selection and monitoring policies"
 		}
 		if a.id == "continue" && m.section > 0 {
 			a.label = "Continue current document at cursor"
 		}
-		if a.id == "delete" {
-			a.label = fmt.Sprintf("Delete %d selected/highlighted documents…", m.collectionCount())
+		if a.id == "remove" && m.section == 1 {
+			a.label = fmt.Sprintf("Remove %d versions and descendants…", m.collectionCount())
 		}
 		unique = append(unique, a)
 	}
@@ -284,37 +288,6 @@ func (m *model) commandKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.forkDocument()
 		case "loom":
 			return m.loom(options)
-		case "continue", "generate":
-			siblings := false
-			if m.editing == "document" {
-				m.focus = 1
-				return m.generateDraft(siblings, options)
-			}
-			if m.commandDocument != "" {
-				if m.commandDocument != m.currentID() {
-					m.status = "Document changed; return to it before generating"
-					return nil
-				}
-				m.focus = 1
-				m.reflow()
-				return m.generateAtCursor(siblings, options)
-			}
-			if options.Count > 0 || options.Tokens != 0 {
-				if m.section == 0 {
-					args := map[string]any{"refs": m.targetRefs()}
-					options.apply(args)
-					m.section, m.focus = 1, 1
-					return m.send("continue", args)
-				}
-				if m.currentID() != m.targetRow().id {
-					m.status = "Wait for the selected document to load"
-					return nil
-				}
-				m.focus = 1
-				m.reflow()
-				return m.generateAtCursor(siblings, options)
-			}
-			return m.perform(a.id)
 		case "save":
 			return m.saveEditor()
 		case "discard":
@@ -410,13 +383,13 @@ func (m *model) prioritizePageCommands(actions []action) {
 	var preferred []string
 	switch m.section {
 	case 0:
-		preferred = []string{"import", "add", "remove", "clear", "continue", "generate", "branches"}
+		preferred = []string{"import", "add", "remove", "clear", "loom", "configure", "branches"}
 	case 1:
-		preferred = []string{"continue", "loom", "branch", "keep", "delete", "clear", "grow", "grow-config", "edit", "notes", "inspect", "review", "models", "settings"}
+		preferred = []string{"loom", "configure", "branch", "keep", "remove", "clear", "edit", "notes", "inspect", "review", "models", "settings"}
 	case 2:
 		preferred = []string{"snapshot", "remove", "inspect", "notes", "edit", "simulator", "continue", "loom", "branch"}
 	case 3:
-		preferred = []string{"run", "configure", "loom", "branch", "edit", "visitor", "inspect", "anthology"}
+		preferred = []string{"loom", "configure", "branch", "edit", "visitor", "inspect", "anthology"}
 	}
 	if m.notesOpen {
 		preferred = append([]string{"notes", "edit", "inspect"}, preferred...)
@@ -435,48 +408,38 @@ func (m *model) prioritizePageCommands(actions []action) {
 	sort.SliceStable(actions, func(i, j int) bool { return rank(actions[i].id) < rank(actions[j].id) })
 }
 
+// Internal action IDs remain stable for saved keyboard bindings. Canonical names
+// and aliases share a single palette row and dispatch path.
 func (m *model) canonicalCommand(id string) string {
 	switch id {
-	case "generate":
-		return "continue"
+	case "continue", "generate", "run", "simulate", "grow":
+		return "loom"
+	case "delete":
+		return "remove"
+	case "fork":
+		return "branch"
 	case "quit":
 		return "exit"
-	case "spec":
-		return "grow-policy"
-	case "sim-config":
-		if m.section == 3 {
-			return "configure"
-		}
-	case "simulate":
-		if m.section == 3 {
-			return "run"
-		}
-	case "settings":
-		if m.section == 3 {
-			return "configure"
-		}
+	case "settings", "config", "sim-config", "grow-config", "grow-policy", "spec", "prompt", "loom-policy", "character-sampling", "visitor-sampling":
+		return "configure"
 	}
 	return id
 }
 func (m *model) commandAliases(id string) []string {
 	names := []string{commandName(action{id: id})}
 	switch id {
-	case "continue":
-		names = append(names, "generate")
+	case "loom":
+		names = append(names, "continue", "generate", "run", "simulate", "grow")
+	case "branch":
+		names = append(names, "branch")
+	case "remove":
+		names = append(names, "delete")
+	case "configure":
+		names = append(names, "configure", "settings", "sim-config", "grow-config", "grow-policy", "spec", "prompt", "loom-policy", "loom-control-policy", "character-sampling", "visitor-sampling")
 	case "exit":
 		names = append(names, "quit")
-	case "loom-policy":
-		names = append(names, "loom-control-policy")
-	case "grow-policy":
-		names = append(names, "spec")
 	case "kept":
 		names = append(names, "kept")
-	case "run":
-		names = append(names, "simulate")
-	case "configure":
-		if m.section == 3 {
-			names = append(names, "sim-config", "settings")
-		}
 	}
 	return names
 }

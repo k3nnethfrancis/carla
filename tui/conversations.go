@@ -16,7 +16,7 @@ type conversationParent struct {
 // A run groups sibling alternatives; a one-conversation run is a leaf. Forks
 // remain nested beneath their originating conversation, including on reload.
 func (m *model) simulationRows() []row {
-	rows := []row{{id: "config", kind: "sim-config", label: "Configure"}, {id: "run", kind: "sim-run", label: "▶ Run conversations"}}
+	rows := []row{{id: "config", kind: "sim-config", label: "Configure"}, {id: "run", kind: "sim-run", label: "▶ New conversation · /loom"}}
 	runs := append([]runSummary{}, m.data.SimulationRuns...)
 	if m.simulation != nil {
 		found := false

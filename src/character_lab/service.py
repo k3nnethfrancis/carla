@@ -8,15 +8,18 @@ import asyncio
 import json
 import math
 import random
+from contextlib import aclosing
 from pathlib import Path
 
 from . import simulator
 from .domain import Project, display_title, generation_status, library, now
+from .exploration import explore, require_selector
 from .model_metadata import native_context
 from .models import available_models
-from .policy import DEFAULT_PROMPT, DEFAULT_SPEC, default_model, grow
+from .policy import DEFAULT_PROMPT, DEFAULT_SPEC, default_model
 from .runtime import Runtime
 from .scheduling import parallel_map
+from .stream_monitor import DocumentMonitor
 from .workspaces import Workspaces, acquire
 
 DEFAULT_SETTINGS = dict(count=3, n_predict=-1, temperature=1.0, top_p=0.98, rounds=1)
@@ -448,6 +451,18 @@ class Session:
             await self.emit("inspection", record, request_id)
             return
         elif command in {"continue", "grow"}:
+            loops = args.get(
+                "loops",
+                p.data.get("grow_settings", {}).get(
+                    "rounds", p.data.get("settings", {}).get("rounds", 1)
+                )
+                if command == "grow"
+                else 1,
+            )
+            if type(loops) is not int or loops < 1:
+                raise ValueError("Loops must be a positive integer")
+            if loops > 1:
+                require_selector(self.policy_model)
             override = args.get("count")
             if override is not None and (type(override) is not int or override < 1):
                 raise ValueError("Generation count must be a positive integer")
@@ -483,9 +498,12 @@ class Session:
             settings["count"] = count
             if "n_predict" in args:
                 settings["n_predict"] = args["n_predict"]
+            self.validate_settings(settings)
             self.job_id = request_id
             self.job = asyncio.create_task(
-                self.generate(command, node["id"], node["text"][:end], settings, count)
+                self.document_loom(
+                    command, node["id"], node["text"][:end], settings, count, loops
+                )
             )
         else:
             raise ValueError("Unknown command: " + command)
@@ -516,7 +534,7 @@ class Session:
             raise ValueError("Document changed before the edit was saved")
         self.project.edit(node["id"], args["text"])
 
-    async def generate(self, command, parent, prefix, settings, count):
+    async def generate(self, command, parent, prefix, settings, count, *, nested=False):
         p = self.project
         self.view_node = None
         job_id = self.job_id
@@ -528,135 +546,121 @@ class Session:
         message = ""
         try:
             await self.emit("operation", dict(stage="loading", command=command), job_id)
-            if command == "grow":
-                seen = {}
+            await self.emit("loom.start", dict(count=count), job_id)
+            branches = []
 
-                async def progress(_message, candidate):
-                    if candidate:
-                        key = candidate["id"]
-                        self.active_node = key
-                        if key not in seen:
-                            seen[key] = len(candidate["prompt"])
-                            await self.snapshot()
-                        delta = candidate["text"][seen[key] :]
-                        seen[key] = len(candidate["text"])
-                        if delta:
-                            await self.emit("token", dict(node=key, text=delta), job_id)
-                    step = p.data["policy_runs"][-1]["steps"][-1]
-                    await self.emit(
-                        "operation",
-                        dict(
-                            stage=step["status"],
-                            round=len(p.data["policy_runs"][-1]["steps"]),
-                        ),
-                        job_id,
-                    )
+            async def schedule(data):
+                await self.emit("capacity", data, job_id)
 
-                await grow(
-                    p,
-                    parent,
+            self.runtime.on_schedule = schedule
+
+            async def sample(i):
+                nonlocal empty_count, output_chars
+                branch_settings = {**settings, "seed": random.randrange(2**31)}
+                node = p.add(
                     prefix,
-                    self.runtime,
-                    self.policy_model,
-                    p.data.get("policy_spec", DEFAULT_SPEC),
-                    p.data.get("policy_prompt", DEFAULT_PROMPT),
-                    count,
-                    settings["rounds"],
-                    settings,
-                    progress,
-                    runtime_factory=self.runtime_factory,
+                    parent=parent,
+                    fork_offset=len(prefix),
+                    prompt=prefix,
+                    settings=branch_settings,
+                    trace={},
+                )
+                branches.append(node)
+                node["loom_index"] = i
+                node["status"] = "generating"
+                self.active_node = node["id"]
+                p.save()
+                await self.emit(
+                    "loom.branch",
+                    dict(
+                        index=i,
+                        id=node["id"],
+                        title=f"Branch {i + 1} · {node['id'][:6]}",
+                        text="",
+                        status="generating",
+                    ),
+                    job_id,
+                )
+                await self.snapshot()
+                await self.emit(
+                    "operation",
+                    dict(stage="generating", index=i + 1, count=count),
+                    job_id,
+                )
+                try:
+                    config = simulator.configuration(p, self.runtime.model["alias"])
+
+                    async def monitor_event(kind, data):
+                        await self.emit(kind, data, job_id)
+
+                    async with DocumentMonitor(
+                        config, p, node, monitor_event
+                    ) as watcher:
+                        async with aclosing(
+                            self.runtime.stream(prefix, node["settings"], node["trace"])
+                        ) as stream:
+                            while True:
+                                try:
+                                    chunk = await watcher.next_chunk(stream)
+                                except StopAsyncIteration:
+                                    break
+                                node["text"] += chunk
+                                watcher.turn["text"] += chunk
+                                p.stream_delta(
+                                    {"node": node["id"]}, chunk, node["trace"]
+                                )
+                                await self.emit(
+                                    "token",
+                                    dict(node=node["id"], text=chunk),
+                                    job_id,
+                                )
+                                watcher.checkpoint()
+                        await watcher.finish()
+                        node["policy_stopped"] = watcher.stopped
+                except asyncio.CancelledError:
+                    node.update(status="stopped", finished=now())
+                    p.save()
+                    raise
+                except Exception as exc:
+                    node.update(status="failed", error=str(exc), finished=now())
+                    p.save()
+                    raise
+                node["status"] = "complete"
+                node["status"] = (
+                    "policy_stopped"
+                    if node.get("policy_stopped")
+                    else generation_status(node)
+                )
+                empty_count += node["status"] == "empty"
+                output_chars += len(node["text"]) - len(prefix)
+                node["finished"] = now()
+                p.save()
+                await self.emit(
+                    "loom.branch",
+                    dict(
+                        index=i,
+                        id=node["id"],
+                        title=f"Branch {i + 1} · {node['id'][:6]}",
+                        text=node["text"][len(prefix) :],
+                        status=node["status"],
+                    ),
+                    job_id,
+                )
+
+            await parallel_map(range(count), sample)
+            node = branches[-1]
+            if empty_count == count:
+                events = node.get("trace", {}).get("events", [])
+                eos = count == 1 and events and events[-1].get("stop_type") == "eos"
+                message = (
+                    "No new text — model ended immediately (EOS)"
+                    if eos
+                    else "No new text — all continuations were empty"
                 )
             else:
-                await self.emit("loom.start", dict(count=count), job_id)
-                branches = []
-
-                async def schedule(data):
-                    await self.emit("capacity", data, job_id)
-
-                self.runtime.on_schedule = schedule
-
-                async def sample(i):
-                    nonlocal empty_count, output_chars
-                    branch_settings = {**settings, "seed": random.randrange(2**31)}
-                    node = p.add(
-                        prefix,
-                        parent=parent,
-                        fork_offset=len(prefix),
-                        prompt=prefix,
-                        settings=branch_settings,
-                        trace={},
-                    )
-                    branches.append(node)
-                    node["loom_index"] = i
-                    node["status"] = "generating"
-                    self.active_node = node["id"]
-                    p.save()
-                    await self.emit(
-                        "loom.branch",
-                        dict(
-                            index=i,
-                            id=node["id"],
-                            title=f"Branch {i + 1} · {node['id'][:6]}",
-                            text="",
-                            status="generating",
-                        ),
-                        job_id,
-                    )
-                    await self.snapshot()
-                    await self.emit(
-                        "operation",
-                        dict(stage="generating", index=i + 1, count=count),
-                        job_id,
-                    )
-                    try:
-                        async for chunk in self.runtime.stream(
-                            prefix, node["settings"], node["trace"]
-                        ):
-                            node["text"] += chunk
-                            p.stream_delta({"node": node["id"]}, chunk, node["trace"])
-                            await self.emit(
-                                "token", dict(node=node["id"], text=chunk), job_id
-                            )
-                    except asyncio.CancelledError:
-                        node.update(status="stopped", finished=now())
-                        p.save()
-                        raise
-                    except Exception as exc:
-                        node.update(status="failed", error=str(exc), finished=now())
-                        p.save()
-                        raise
-                    node["status"] = "complete"
-                    node["status"] = generation_status(node)
-                    empty_count += node["status"] == "empty"
-                    output_chars += len(node["text"]) - len(prefix)
-                    node["finished"] = now()
-                    p.save()
-                    await self.emit(
-                        "loom.branch",
-                        dict(
-                            index=i,
-                            id=node["id"],
-                            title=f"Branch {i + 1} · {node['id'][:6]}",
-                            text=node["text"][len(prefix) :],
-                            status=node["status"],
-                        ),
-                        job_id,
-                    )
-
-                await parallel_map(range(count), sample)
-                node = branches[-1]
-                if empty_count == count:
-                    events = node.get("trace", {}).get("events", [])
-                    eos = count == 1 and events and events[-1].get("stop_type") == "eos"
-                    message = (
-                        "No new text — model ended immediately (EOS)"
-                        if eos
-                        else "No new text — all continuations were empty"
-                    )
-                else:
-                    message = f"Added {output_chars} characters across {count - empty_count} continuation(s)"
-                    if empty_count:
-                        message += f"; {empty_count} empty"
+                message = f"Added {output_chars} characters across {count - empty_count} continuation(s)"
+                if empty_count:
+                    message += f"; {empty_count} empty"
         except asyncio.CancelledError:
             status = "stopped"
         except Exception as exc:
@@ -693,7 +697,8 @@ class Session:
             if status != "complete":
                 self.runtime.close()
             # Clear ownership before the final snapshot so controls become available.
-            self.job = None
+            if not nested:
+                self.job = None
             if self.view_node:
                 p.data["current"] = self.view_node
                 self.view_node = None
@@ -704,6 +709,57 @@ class Session:
                 dict(stage=status, command=command, message=message),
                 job_id,
             )
+
+        if nested and status == "stopped":
+            raise asyncio.CancelledError
+        if nested and status == "failed":
+            raise ValueError("Loom batch failed; partial outputs retained")
+        return branches
+
+    async def document_loom(self, command, parent, prefix, settings, count, loops):
+        if loops == 1:
+            return await self.generate("continue", parent, prefix, settings, count)
+
+        async def emit(kind, data):
+            await self.emit(kind, data, self.job_id)
+
+        async def batch(run_id, index):
+            candidates = await self.generate(
+                "continue", parent, prefix, settings, count, nested=True
+            )
+            # A selector cannot compete with an externally owned model server.
+            if self.runtime.process is None:
+                raise ValueError(
+                    "Stop the externally managed generator before switching to selection"
+                )
+            self.runtime.close()
+            for candidate in candidates:
+                candidate.update(policy_run=run_id, loop=index + 1)
+            self.project.save()
+            return [c for c in candidates if c["status"] == "complete"]
+
+        async def advance(key):
+            nonlocal parent, prefix
+            node = self.project.node(key)
+            parent, prefix = key, node["text"]
+
+        try:
+            await explore(
+                self.project,
+                loops,
+                self.policy_model,
+                self.runtime_factory,
+                batch,
+                advance,
+                emit,
+            )
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            await emit("error", dict(message=str(exc)))
+        finally:
+            self.job = None
+            await self.snapshot()
 
     async def close(self):
         try:
@@ -735,9 +791,61 @@ class Session:
             await self.emit(kind, data, self.job_id)
 
         try:
-            await simulator.generate(
-                self.project, config, self.runtime_factory, emit, seed
-            )
+            loops = config.get("loops", 1)
+            if loops == 1:
+                await simulator.generate(
+                    self.project, config, self.runtime_factory, emit, seed
+                )
+            else:
+                current_seed = seed
+                latest = None
+
+                def transcript(turns):
+                    return "".join(f"{t['role']}: {t['text']}\n\n" for t in turns)
+
+                async def batch(run_id, index):
+                    nonlocal latest
+                    latest = await simulator.generate(
+                        self.project, config, self.runtime_factory, emit, current_seed
+                    )
+                    latest.update(policy_run=run_id, loop=index + 1)
+                    p.save()
+                    if latest["status"] == "stopped":
+                        raise asyncio.CancelledError
+                    if latest["status"] != "complete":
+                        raise ValueError(
+                            latest.get("error", "Conversation batch failed")
+                        )
+                    prefix = transcript(current_seed["turns"]) if current_seed else ""
+                    return [
+                        dict(
+                            id=str(c["index"]),
+                            prompt=prefix,
+                            text=transcript(c["turns"]),
+                        )
+                        for c in latest["conversations"]
+                        if c["status"] == "complete"
+                    ]
+
+                async def advance(key):
+                    nonlocal current_seed
+                    current_seed = simulator.conversation_seed(
+                        p, latest["id"], int(key)
+                    )
+
+                await explore(
+                    p,
+                    loops,
+                    self.policy_model,
+                    self.runtime_factory,
+                    batch,
+                    advance,
+                    emit,
+                )
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            await emit("error", dict(message=str(exc)))
         finally:
             self.job = None
             if self.view_node:

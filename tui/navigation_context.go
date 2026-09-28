@@ -104,7 +104,11 @@ func (m *model) refreshConfig() {
 	case "sim-speakers":
 		m.speakerPicker()
 	case "grow-config":
-		m.openGrowConfig()
+		if d.title == "Selection policy" {
+			m.openSelectionConfig()
+		} else {
+			m.openGrowConfig()
+		}
 	case "sim-sampling":
 		m.openSampling(d.args["group"].(string))
 	default:

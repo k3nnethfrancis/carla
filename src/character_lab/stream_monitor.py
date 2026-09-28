@@ -92,7 +92,7 @@ class TurnMonitor:
         checks.append(record)
         self.turn["monitor"] = record
         self.project.save()
-        await self.emit("simulation", view(self.run))
+        await self.publish()
         try:
             await monitor.scan(self.config, snapshot, captured)
             record.update(captured["monitor"])
@@ -111,10 +111,13 @@ class TurnMonitor:
                     ),
                 )
             self.project.save()
-            await self.emit("simulation", view(self.run))
+            await self.publish()
         except asyncio.CancelledError:
             record["status"] = "cancelled"
             raise
+
+    async def publish(self):
+        await self.emit("simulation", view(self.run))
 
     async def finish(self):
         if not self.enabled:
@@ -128,3 +131,29 @@ class TurnMonitor:
             checks[-1]["end_of_turn"] = True
             return
         await self.check("complete", self.turn["trace"].get("generated_tokens", 0))
+
+
+class DocumentMonitor(TurnMonitor):
+    """Use the same bounded classifier for a continuation, without a chat prompt.
+
+    The monitor sees the prefix and generated suffix only as material to label;
+    nothing from its configuration is injected into the generation request.
+    """
+
+    def __init__(self, config, project, node, emit):
+        self.node = node
+        turn = dict(role="character", text="", trace=node["trace"], status="generating")
+        turn["monitor_checks"] = node.setdefault("monitor_checks", [])
+        conversation = dict(
+            index=0,
+            status="running",
+            turns=[dict(role="source", text=node["prompt"]), turn],
+        )
+        super().__init__(config, project, {"id": node["id"]}, conversation, turn, emit)
+
+    async def publish(self):
+        self.node["monitor"] = self.turn.get("monitor", {})
+        self.project.save()
+        await self.emit(
+            "document.monitor", dict(node=self.node["id"], monitor=self.node["monitor"])
+        )
