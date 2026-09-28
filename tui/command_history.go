@@ -65,21 +65,11 @@ func (m *model) commandHints() []string {
 		return nil
 	}
 	switch fields[0] {
-	case "/continue", "/generate":
-		return []string{"--tokens N|Max · maximum output tokens",
-			"e.g. /continue --tokens 1024"}
-	case "/loom":
+	case "/loom", "/continue", "/generate", "/run", "/grow", "/simulate":
 		if m.section == 3 {
-			if _, ok := m.conversationTarget(); ok {
-				return []string{"[alternatives] · --turns N · --tokens N|Max", "Continues selected conversation; turns = additional character replies"}
-			}
-			return []string{"[conversations] · --turns N · --tokens N|Max", "Turns = character replies; tokens = cap per reply"}
+			return []string{"[alternatives] · --tokens N|Max · --turns N · --loops N", "Selected conversation or fresh setup · bare /loom = one reply"}
 		}
-		if m.section != 1 {
-			return []string{"Open Branches or Simulator to run /loom"}
-		}
-		return []string{"[branches] · --tokens N|Max",
-			"e.g. /loom 5 --tokens 1024 · tokens = cap per branch"}
+		return []string{"[alternatives] · --tokens N|Max · --loops N", "Selected document → Branches · bare /loom = one continuation"}
 	}
 	return nil
 }

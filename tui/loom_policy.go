@@ -31,8 +31,8 @@ func (m *model) dimension(id string) loomDimension {
 	return loomDimension{}
 }
 func (m *model) openLoomPolicy() tea.Cmd {
-	d := &dialog{kind: "loom-policy", title: "Loom policy · conversations", rows: []row{
-		{id: "mode", label: "Monitoring · " + m.simString("monitor_mode"), preview: "Jev via OpenRouter checks character replies with full history. Requires OPENROUTER_API_KEY."},
+	d := &dialog{kind: "loom-policy", title: "Monitoring policy", rows: []row{
+		{id: "mode", label: "Monitoring · " + m.simString("monitor_mode"), preview: "Jev via OpenRouter checks document continuations or Character replies with context. Requires OPENROUTER_API_KEY."},
 		{id: "model", label: "Model · " + m.simString("monitor_model")},
 	}}
 	for _, item := range m.dimensions() {

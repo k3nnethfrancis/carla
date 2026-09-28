@@ -101,11 +101,11 @@ func TestLoomPolicyAlias(t *testing.T) {
 	m.focus = 3
 	m.command.SetValue("/loom-control-policy")
 	choices := m.commandChoices()
-	if len(choices) == 0 || choices[0].id != "loom-policy" {
+	if len(choices) == 0 || choices[0].id != "configure" {
 		t.Fatal(choices)
 	}
 	m.commandKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if m.dialog == nil || m.dialog.kind != "loom-policy" {
+	if m.dialog == nil || m.dialog.kind != "loom-config" {
 		t.Fatal("alias did not open config")
 	}
 }

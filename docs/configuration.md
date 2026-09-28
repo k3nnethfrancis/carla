@@ -61,10 +61,10 @@ For persistent defaults, place the array at `$CARLA_DATA_DIR/models.json`.
 Saved workspace model entries override matching registry entries; an explicit
 `--models FILE` replaces the workspace catalog. `/model` selects from that catalog.
 
-Grow needs a separate instruct model. `--policy-model FILE` accepts one object
-with the same fields and `kind: "instruct"`. Setup saves the persistent default at `$CARLA_DATA_DIR/policy-model.json`. Grow unloads
+Repeated Loom loops need a separate instruct selection model. `--policy-model FILE` accepts one object
+with the same fields and `kind: "instruct"`. Setup saves the persistent default at `$CARLA_DATA_DIR/policy-model.json`. Selection unloads
 the generator before loading the selector. Selection instructions never enter
-raw generation context. Without a configured policy model, Grow cannot run.
+raw generation context. Without a configured policy model, multi-loop Loom cannot run.
 
 ## Storage and launch
 
@@ -136,7 +136,7 @@ The texts are not covered by Carla’s MIT software license.
 
 ## Optional monitoring
 
-`/loom-policy` configures Jev via OpenRouter System One. Enable it only when you
+The Monitoring policy under `/config` configures Jev via OpenRouter System One. Enable it only when you
 intend to send the full conversation history, including character output and
 human messages, to that external service. Its requests may incur charges.
 Set `OPENROUTER_API_KEY` in the launching environment; never put it in a workspace

@@ -11,7 +11,7 @@ Python / asyncio Session
        │     └─ WorkspaceStore: snapshots, stream journal and recovery
        ├─ library: shared source documents
        ├─ Runtime + Admission: local llama.cpp, bounded requests
-       ├─ policy: generate → unload → select → repeat
+       ├─ exploration: shared generate → unload → classify → advance loops
        └─ simulator + TurnMonitor: conversations and optional classification
 ```
 
@@ -115,6 +115,10 @@ conversation grids and the document editor. Library, Branches, Anthology and
 Simulator are the main views. Notes belong to documents. The terminal supplies
 light/dark base colors; provenance and speaker roles use distinct accents.
 Narrow terminals collapse panels; below 60 × 18 only a resize/quit view is shown.
+
+See [commands](commands.md) for the command contract. `exploration.py` owns repeated
+batches and evidence-backed selection; document and conversation generators own
+their outputs. `stream_monitor.py` shares bounded monitoring across both.
 
 See `service.py` for backend commands, `tui/command.go` for command descriptions,
 and tests alongside each subsystem for its executable behavioral contract.

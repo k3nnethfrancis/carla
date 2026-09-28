@@ -422,6 +422,10 @@ async def generate(project, config, runtime_factory, emit, seed=None):
         for conversation in run["conversations"]:
             if conversation["status"] in {"queued", "running"}:
                 conversation["status"] = "complete"
+        if config.get("loops", 1) > 1 and runtime and runtime.process is None:
+            raise ValueError(
+                "Stop the externally managed generator before switching to selection"
+            )
         run["status"] = "complete"
     except asyncio.CancelledError:
         run["status"] = "stopped"

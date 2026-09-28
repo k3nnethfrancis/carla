@@ -8,19 +8,12 @@ import (
 	"testing"
 )
 
-func TestLoomOutsideSupportedTabsOnlyExplains(t *testing.T) {
-	for _, section := range []int{0, 2} {
+func TestLoomRejectsConversationOptionsInDocumentViews(t *testing.T) {
+	for _, section := range []int{0, 1, 2} {
 		m := fixture()
-		m.width, m.height = 120, 36
 		m.section = section
-		m.focus = 3
-		m.command.SetValue("/loom 4")
-		if choices := m.commandChoices(); len(choices) != 1 || choices[0].id != "loom" {
-			t.Fatal("loom not discoverable")
-		}
-		cmd := m.commandKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-		if cmd != nil || m.pending || m.section != section || !strings.Contains(m.status, "Branches or Simulator") {
-			t.Fatal("unsupported tab generated or navigated", m.status)
+		if m.loom(generationOptions{Turns: 2}) != nil || !strings.Contains(m.status, "--turns") {
+			t.Fatal("incompatible option accepted")
 		}
 	}
 }

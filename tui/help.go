@@ -14,20 +14,20 @@ var commandDescriptions = map[string]string{
 	"character-sampling": "Character temperature, top-p, and output token budget.",
 	"visitor-sampling":   "Visitor temperature, top-p, and output token budget.",
 	"run":                "Simulator only: run conversations with the saved configuration (alias for /simulate).",
-	"configure":          "Open settings for this page. On Simulator: documents, models, prompts and sampling.",
+	"configure":          "Temperature, top-p and shared document settings in Library, Branches and Anthology; conversation settings in Simulator. Selection and monitoring are separate policies. Command flags override settings for one run.",
 	"generate":           "Alias for /continue; uses the current saved document and cursor.",
 	"continue":           "Continue from cursor. /continue 512 sets the maximum output tokens.",
 	"branch":             "Fork the selected conversation in Simulator, or saved document in Branches, without generation. Save edits first.",
-	"loom":               "Branches: continuation alternatives. Simulator: conversations. /loom 5 makes five branches or conversations. --tokens N caps each output; Simulator also accepts --turns N (character replies). Other tabs show guidance.",
+	"loom":               "Generate one continuation or Character reply. /loom 3 --tokens 512 --loops 4 creates three alternatives per loop. Simulator also accepts --turns N. A batch requires choosing a conversation.",
 	"add":                "Add highlighted source passages to the workspace seed set.",
-	"remove":             "Remove selected documents from the anthology, or the highlighted document when none are checked; preserves branches.",
+	"remove":             "Library: deselect sources. Anthology: unkeep versions. Branches: confirm deletion of versions and descendants. Alias: /delete.",
 	"delete":             "Review checked branches and descendants, then confirm deletion. Saves a recovery snapshot.",
 	"keep":               "Keep checked branches in the anthology, otherwise the highlighted branch.",
 	"grow":               "Run bounded continuation rounds with the local selection policy.",
 	"settings":           "Loom branch count, output length, sampling and context; on Simulator opens its configuration.",
 	"models":             "Choose the Loom base model; on Simulator choose Character or Visitor. /model visitor jumps directly to that picker.",
 	"workspaces":         "Open a saved workspace or create a new one.",
-	"edit":               "Edit this document; saving preserves it as a new node.",
+	"edit":               "Edit existing document text or a conversation message; saving preserves the original as a new version.",
 	"inspect":            "Show the exact generation inputs and provenance.",
 	"review":             "Attach a verdict and note to this document or a text range.",
 	"spec":               "Edit the criteria used by the continuation selection policy.",
@@ -60,7 +60,13 @@ func (m *model) openHelp() tea.Cmd {
 	for _, id := range []string{"help", "keys", "cancel", "save", "discard", "quit", "exit", "restart"} {
 		actions = append(actions, action{id: id})
 	}
+	seen := map[string]bool{}
 	for _, a := range actions {
+		a.id = m.canonicalCommand(a.id)
+		if seen[a.id] {
+			continue
+		}
+		seen[a.id] = true
 		d.rows = append(d.rows, row{id: a.id, label: "/" + commandName(a), preview: commandDescriptions[a.id]})
 	}
 	m.dialog = d

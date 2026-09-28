@@ -28,6 +28,17 @@ var allActions = []action{
 }
 
 func (m *model) perform(id string) tea.Cmd {
+	// Legacy keybindings enter the same generation operation as the command bar.
+	if id == "continue" || id == "generate" || id == "run" || id == "simulate" || id == "grow" {
+		return m.loom(generationOptions{})
+	}
+	if id == "remove" && m.section == 1 {
+		id = "delete"
+	}
+	if id == "configure" {
+		return m.openConfig()
+	}
+
 	if m.section == 3 && id == "edit" {
 		return m.editConversation(false)
 	}
@@ -46,20 +57,6 @@ func (m *model) perform(id string) tea.Cmd {
 			m.status = "Run a Loom with multiple outputs to show the grid"
 		}
 		return nil
-	}
-	if id == "configure" {
-		if m.section == 3 {
-			id = "sim-config"
-		} else {
-			id = "settings"
-		}
-	}
-	if id == "run" {
-		if m.section != 3 {
-			m.status = "Open Simulator to use /" + id
-			return nil
-		}
-		id = "simulate"
 	}
 	if id == "restart" {
 		return m.exitSession(true)
@@ -117,11 +114,6 @@ func (m *model) perform(id string) tea.Cmd {
 		return m.toggleTarget()
 	case "open":
 		return m.activate()
-	case "continue":
-		if m.cursorActive() {
-			return m.generateAtCursor(false)
-		}
-		return m.contextualAction(id)
 	case "keep", "add", "remove":
 		return m.contextualAction(id)
 	case "grow-config":
@@ -130,16 +122,6 @@ func (m *model) perform(id string) tea.Cmd {
 		return m.beginEdit("policy_spec")
 	case "sim-config":
 		return m.openSimulatorConfig()
-	case "simulate":
-		m.switchSection(3)
-		m.simulation = nil
-		m.conversationOpen = false
-		m.activeSimulation = nil
-		return m.send("simulator.run", nil)
-	case "grow":
-		m.focus = 1
-		m.section = 1
-		return m.send("grow", nil)
 	case "branch":
 		return m.forkDocument()
 	case "loom":

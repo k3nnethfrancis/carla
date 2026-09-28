@@ -8,6 +8,7 @@ import copy
 from uuid import uuid4
 
 from . import monitor, simulator
+from .exploration import require_selector
 
 
 async def dispatch(session, command, args, request_id):
@@ -82,7 +83,16 @@ async def dispatch(session, command, args, request_id):
         run = next(
             r for r in p.data.get("simulation_runs", []) if r["id"] == args["run"]
         )
-        await session.emit("inspection", run, request_id)
+        record = dict(run)
+        record["selection"] = next(
+            (
+                r
+                for r in p.data.get("policy_runs", [])
+                if r["id"] == run.get("policy_run")
+            ),
+            None,
+        )
+        await session.emit("inspection", record, request_id)
         return
     if command in {"simulator.run", "simulator.preview"}:
         config = copy.deepcopy(
@@ -108,6 +118,11 @@ async def dispatch(session, command, args, request_id):
         if "n_predict" in args:
             for role in ("character", "visitor"):
                 config[role + "_settings"]["n_predict"] = args["n_predict"]
+        config["loops"] = args.get("loops", 1)
+        if type(config["loops"]) is not int or config["loops"] < 1:
+            raise ValueError("Loops must be a positive integer")
+        if config["loops"] > 1:
+            require_selector(session.policy_model)
         simulator.validate(config, p, session.validate_settings)
         if not config["documents"] and not config.get("preview") and not seed:
             raise ValueError("Select at least one anthology document in Simulator")

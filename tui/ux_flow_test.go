@@ -146,7 +146,7 @@ func TestIntentSearchAndScopedModel(t *testing.T) {
 	m.focus = 3
 	m.command.SetValue("/temperature")
 	choices := m.commandChoices()
-	if len(choices) != 2 {
+	if len(choices) != 1 || choices[0].id != "configure" {
 		t.Fatalf("sampling matches: %v", choices)
 	}
 	m.command.SetValue("/model visitor")
