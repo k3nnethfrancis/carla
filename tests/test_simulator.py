@@ -639,3 +639,68 @@ async def test_policy_stop_interrupts_stalled_read_without_stopping_sibling(
         ]["text"]
         == "partial"
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("persistent_disconnect", [False, True])
+async def test_terminal_disconnect_stops_incomplete_conversations(
+    setup, persistent_disconnect
+):
+    from character_lab.backend import write_event
+
+    project, config, _, _ = setup
+    config.update(conversations=2, turns=3)
+
+    class ClosedTerminal:
+        def write(self, data):
+            pass
+
+        async def drain(self):
+            raise ConnectionResetError("Connection lost")
+
+    disconnected = False
+
+    async def emit(kind, data):
+        nonlocal disconnected
+        if kind == "simulation.token" or (persistent_disconnect and disconnected):
+            disconnected = True
+            await write_event(ClosedTerminal(), {"type": kind, "data": data})
+
+    if persistent_disconnect:
+        with pytest.raises(asyncio.CancelledError):
+            await simulator.generate(project, config, Runtime, emit)
+        run = project.data["simulation_runs"][-1]
+    else:
+        run = await simulator.generate(project, config, Runtime, emit)
+    assert run["status"] == "stopped"
+    assert "error" not in run
+    assert all(c["status"] == "stopped" for c in run["conversations"])
+    assert any(
+        t.get("text") == " A new path."
+        for c in run["conversations"]
+        for t in c["turns"]
+    )
+    assert all(
+        t["status"] in {"complete", "stopped"}
+        for c in run["conversations"]
+        for t in c["turns"]
+    )
+    assert all(r.closed for r in Runtime.instances)
+    assert (
+        json.loads(project.path.read_text())["simulation_runs"][-1]["status"]
+        == "stopped"
+    )
+
+
+@pytest.mark.asyncio
+async def test_inference_connection_failure_is_still_a_failure(setup):
+    project, config, emit, _ = setup
+
+    class BrokenModel(Runtime):
+        async def stream(self, prompt, settings, trace):
+            raise ConnectionResetError("Model connection lost")
+            yield  # Keep the runtime's asynchronous stream interface.
+
+    run = await simulator.generate(project, config, BrokenModel, emit)
+    assert run["status"] == "failed"
+    assert run["error"] == "Model connection lost"

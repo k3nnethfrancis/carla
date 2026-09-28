@@ -15,6 +15,19 @@ from .service import Session
 from .workspaces import Workspaces
 
 
+async def write_event(writer, message):
+    """A closed UI cancels work; it is not an inference failure.
+
+    Translate only this event socket's errors. Model/provider connections retain
+    their normal error handling and must still be reported as failures.
+    """
+    try:
+        writer.write((json.dumps(message, ensure_ascii=False) + "\n").encode())
+        await writer.drain()
+    except ConnectionError:
+        raise asyncio.CancelledError("Carla terminal disconnected") from None
+
+
 async def serve(args):
     workspaces = Workspaces()
     folder = args.project
@@ -46,8 +59,7 @@ async def serve(args):
             async with write_lock:
                 sequence += 1
                 message = dict(v=1, type=kind, seq=sequence, id=request_id, data=data)
-                writer.write((json.dumps(message, ensure_ascii=False) + "\n").encode())
-                await writer.drain()
+                await write_event(writer, message)
 
         try:
             hello = json.loads(await asyncio.wait_for(reader.readline(), 10))

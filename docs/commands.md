@@ -304,3 +304,18 @@ Evaluation jobs use the session's existing operation lock. `/stop`, disconnect,
 and recovery preserve completed results and label unfinished ones. Items are judged
 sequentially with one resident local model; this first evaluation workflow does
 not add task generation, automatic judge calibration, or a training runner.
+
+## Run status
+
+- **Complete:** the configured work finished.
+- **Stopped:** cancellation was handled while Carla was running, including closing
+  its terminal. Partial text is saved.
+- **Interrupted:** a previous process ended without completing its work; recovery
+  preserves the partial output. Older confirmed terminal-disconnect failures may
+  also be corrected to this label, preserving their error evidence.
+- **Failed:** an actual generation or infrastructure error, such as losing the
+  model connection. Inspect the error before retrying.
+- **Stopped by policy:** an enabled policy explicitly requested a stop.
+
+Losing the UI connection cancels generation; it is not an inference failure.
+Completed conversations and turns retain their status when siblings stop.
