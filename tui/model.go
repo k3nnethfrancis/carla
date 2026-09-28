@@ -136,6 +136,8 @@ type model struct {
 	evalSelection          map[string]bool
 	evalFilter             string
 	evalEditingID          string
+	dialogRequest          string // Correlates local service form validation with its backend reply.
+	savingDialog           *dialog
 	editRequest            string // A draft stays owned by the editor until this request succeeds.
 	setupReturn            *dialog
 	conversationOpen       bool
@@ -438,6 +440,10 @@ func (m *model) saveEditor() tea.Cmd {
 		}
 		d := m.editReturn
 		args := map[string]any{"name": d.fields[0].input.Value(), "spec": text, "kind": d.args["kind"], "prompt": m.data.EvaluationPrompt, "threshold": 0.8, "model": m.simString("monitor_model")}
+		if args["kind"] == "diffusion" {
+			args["model"] = m.simString("monitor_local_model")
+			args["endpoint"] = m.simString("monitor_local_url")
+		}
 		if args["kind"] == "llm" {
 			args["model"] = m.data.SelectorModels[0].Alias
 		}
@@ -655,6 +661,12 @@ func (m *model) apply(e event) tea.Cmd {
 			return func() tea.Msg { return failure{err} }
 		}
 		m.pending = false
+		if m.dialogRequest != "" && e.ID == m.dialogRequest {
+			if m.dialog == m.savingDialog {
+				m.dialog = m.savingDialog.parent
+			}
+			m.dialogRequest, m.savingDialog = "", nil
+		}
 		if m.editRequest != "" {
 			if e.ID == m.editRequest {
 				if m.editing == "evaluation-new-spec" && m.editReturn != nil {
@@ -888,6 +900,10 @@ func (m *model) apply(e event) tea.Cmd {
 		json.Unmarshal(e.Data, &err)
 		m.pending = false
 		m.status = "Error: " + err.Message
+		if m.dialogRequest != "" && e.ID == m.dialogRequest {
+			m.savingDialog.args["error"] = err.Message
+			m.dialogRequest, m.savingDialog = "", nil
+		}
 		if m.dialog != nil && m.dialog.kind == "import" {
 			m.dialog.args["error"] = err.Message
 		}

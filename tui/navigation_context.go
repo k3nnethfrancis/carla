@@ -142,6 +142,16 @@ func (m *model) refreshConfig() {
 	}
 }
 func (m *model) saveDialog(d *dialog, command string, args map[string]any) tea.Cmd {
+	// Keep local service fields visible until backend validation succeeds.
+	// An invalid URL must not silently return to the parent with the old value.
+	if len(d.fields) > 0 && (d.args["field"] == "monitor_local_url" || d.args["field"] == "monitor_local_model" || d.args["field"] == "endpoint") {
+		id, cmd := m.dispatch(command, args)
+		if cmd != nil {
+			delete(d.args, "error")
+			m.dialogRequest, m.savingDialog = id, d
+		}
+		return cmd
+	}
 	m.dialog = d.parent
 	if command == "loom-policy.update" {
 		return m.updateBehavior(args)

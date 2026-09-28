@@ -22,7 +22,7 @@ func (m *model) dialogChoice() (dialogChoice, bool) {
 		if id != "mode" {
 			return c, false
 		}
-		c.field, c.current, c.values = "monitor_mode", m.simString("monitor_mode"), []string{"off", "jev"}
+		c.field, c.current, c.values = "monitor_mode", m.simString("monitor_mode"), []string{"off", "diffusion", "jev"}
 	case "loom-policy-timing":
 		c.toggle = id == "monitor_after_reply" || id == "monitor_during_reply"
 		return c, c.toggle

@@ -2,10 +2,44 @@
 
 import copy
 import json
+import time
+from urllib.parse import urlsplit
 
 import httpx
 
 from .credentials import openrouter_key
+
+LOCAL_URL = "http://127.0.0.1:8080"
+LOCAL_MODEL = "openjev-latest"
+_HOSTED = (
+    object()
+)  # Omitted endpoint means hosted; an invalid explicit endpoint never does.
+
+
+def local_url(value):
+    """Local means loopback only, including when reading an edited workspace."""
+    try:
+        url = urlsplit(value)
+        valid = (
+            url.scheme == "http"
+            and url.hostname in {"127.0.0.1", "::1", "localhost"}
+            and not url.username
+            and not url.password
+            and url.path in {"", "/"}
+            and not url.query
+            and not url.fragment
+            and url.port is not None
+            and url.port > 0
+        )
+    except (ValueError, TypeError, AttributeError):
+        valid = False
+    if not valid:
+        raise ValueError(
+            "Local judge needs a loopback HTTP address with port, e.g. http://127.0.0.1:8080"
+        )
+    host = "[::1]" if url.hostname == "::1" else "127.0.0.1"
+    return f"http://{host}:{url.port}"
+
 
 DEFAULT_QUESTIONS = json.dumps(
     {
@@ -113,12 +147,17 @@ def detections(config, scores):
 
 async def scan(config, conversation, turn):
     """Exact history/questions/result stay in the trace; credentials never do."""
+    local = config.get("monitor_mode") == "diffusion"
     record = dict(
-        status="checking", provider="openrouter", turn=len(conversation["turns"]) - 1
+        status="checking",
+        provider="openjev" if local else "openrouter",
+        turn=len(conversation["turns"]) - 1,
     )
     turn["monitor"] = record
     request = dict(
-        model=config["monitor_model"],
+        model=config.get("monitor_local_model", LOCAL_MODEL)
+        if local
+        else config["monitor_model"],
         state={
             "latest_message_complete": turn.get("status") != "generating",
             "history": [
@@ -139,29 +178,47 @@ async def scan(config, conversation, turn):
     if not request["questions"]:
         record.update(status="complete", scores={}, detections=[])
         return
-    await classify(request, record)
+    if local:
+        await classify(
+            request, record, endpoint=config.get("monitor_local_url", LOCAL_URL)
+        )
+    else:
+        await classify(request, record)
     if record["status"] == "complete":
         record["detections"] = detections(config, record["scores"])
 
 
-async def classify(request, record):
-    """Shared Jev transport for streaming policies and saved-trace evaluations."""
+async def classify(request, record, *, endpoint=_HOSTED):
+    """System One transport shared by monitoring and saved-trace evaluations.
+
+    An explicit loopback endpoint selects OpenJev. Never send an OpenRouter key
+    locally or fall back to a remote service. Local MLX reads serialize server-side;
+    allow a bounded queue wait without truncating history or retrying GPU work.
+    """
     record["request"] = copy.deepcopy(request)
-    record["provider"] = "openrouter"
-    key, _ = openrouter_key()
-    if not key:
-        record.update(
-            status="unavailable",
-            error="Configure an OpenRouter API key in /policy → Monitoring",
-        )
-        return
+    record["provider"] = "openjev" if endpoint is not _HOSTED else "openrouter"
+    headers = {}
+    started = time.monotonic()
     try:
-        async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
-            response = await client.post(
-                "https://openrouter.ai/api/v1/systemone",
-                json=request,
-                headers={"Authorization": "Bearer " + key},
-            )
+        if endpoint is not _HOSTED:
+            url = local_url(endpoint) + "/v1/systemone"
+            timeout = httpx.Timeout(120, connect=3)
+        else:
+            key, _ = openrouter_key()
+            if not key:
+                record.update(
+                    status="unavailable",
+                    error="Configure an OpenRouter API key in /policy → Monitoring",
+                )
+                return
+            headers["Authorization"] = "Bearer " + key
+            url = "https://openrouter.ai/api/v1/systemone"
+            timeout = 15
+        record["endpoint"] = url
+        async with httpx.AsyncClient(
+            timeout=timeout, trust_env=False, follow_redirects=False
+        ) as client:
+            response = await client.post(url, json=request, headers=headers)
             record["http_status"] = response.status_code
             response.raise_for_status()
             data = response.json()
@@ -172,12 +229,12 @@ async def classify(request, record):
                 if type(score) not in (int, float) or not 0 <= score <= 1:
                     raise ValueError("Invalid monitor score")
                 scores[name] = score
-            record.update(
-                status="complete",
-                response=data,
-                scores=scores,
-            )
+            record.update(status="complete", scores=scores)
     except Exception as exc:
-        # A failed scan is visible, never a reason to stop generation. Do not save
-        # HTTP exception strings that may contain provider-supplied secret material.
-        record.update(status="unavailable", error=type(exc).__name__)
+        # Do not save provider exception strings, which may include secrets.
+        error = type(exc).__name__
+        if endpoint is not _HOSTED and isinstance(exc, httpx.ConnectError):
+            error = "Local judge unavailable. Start OpenJev (see docs/local-judge.md) and check its address in /policy."
+        record.update(status="unavailable", error=error)
+    finally:
+        record["elapsed_seconds"] = round(time.monotonic() - started, 3)

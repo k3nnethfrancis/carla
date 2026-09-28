@@ -35,29 +35,36 @@ func (m *model) dimension(id string) loomDimension {
 	return loomDimension{}
 }
 func (m *model) openLoomPolicy() tea.Cmd {
-	mode := "Off"
-	if m.simString("monitor_mode") == "jev" {
-		mode = "Jev"
-	}
+	provider := m.simString("monitor_mode")
+	mode := monitorLabel(provider)
 	d := &dialog{kind: "loom-policy", title: "Monitoring policy", rows: []row{
-		{id: "mode", label: "Monitoring · " + mode, preview: "Off by default. Jev sends monitored text to OpenRouter; API usage may incur charges."},
+		{id: "mode", label: "Monitoring · " + mode, preview: "Off by default. DiffusionGemma runs locally via OpenJev. Jev sends text to OpenRouter (paid API)."},
 	}}
 	m.dialog = d
 	if mode == "Off" {
 		return nil
 	}
-	if m.data.MonitorKeySource == "" {
+	if provider == "jev" && m.data.MonitorKeySource == "" {
 		d.rows = append(d.rows, row{id: "key", label: "Set up OpenRouter API key", preview: "Complete API key setup to reveal monitoring settings."})
 		return nil
 	}
+	if provider == "diffusion" {
+		d.rows = append(d.rows,
+			row{id: "monitor_local_url", label: "Server · " + m.simString("monitor_local_url"), preview: "Start the local OpenJev service first; see docs/local-judge.md. No API key or remote fallback."},
+			row{id: "monitor_local_model", label: "Model · " + m.simString("monitor_local_model")},
+		)
+	} else {
+		d.rows = append(d.rows, row{id: "model", label: "Model · " + m.simString("monitor_model")})
+	}
 	d.rows = append(d.rows,
-		row{id: "model", label: "Model · " + m.simString("monitor_model")},
 		row{id: "timing", label: "Heartbeat · " + m.monitorTimingSummary(), preview: "Shared with document continuations; Visitor messages are not checked."},
 	)
 	d.rows = append(d.rows,
 		row{id: "behaviors", label: "Behaviors", preview: "Define what to detect and what happens when it is detected."},
-		row{id: "key", label: "API key · " + m.data.MonitorKeySource, preview: "Replace the saved key. Keys stay outside workspaces and exported traces."},
 	)
+	if provider == "jev" {
+		d.rows = append(d.rows, row{id: "key", label: "API key · " + m.data.MonitorKeySource, preview: "Replace the saved key. Keys stay outside workspaces and exported traces."})
+	}
 	m.dialog = d
 	return nil
 }
@@ -108,7 +115,7 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 		field := args["field"].(string)
 		delete(args, "field")
 		args[field] = d.fields[0].input.Value()
-		if field == "monitor_model" {
+		if field == "monitor_model" || field == "monitor_local_model" || field == "monitor_local_url" {
 			return m.saveDialog(d, "simulator.configure", map[string]any{field: args[field]})
 		}
 		return m.saveDialog(d, "loom-policy.update", args)
@@ -169,7 +176,9 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 			m.openMonitorTiming()
 			m.dialog.parent = d
 		case "mode":
-			m.policyPicker(d, "", "monitor_mode", []string{"off", "jev"})
+			m.policyPicker(d, "", "monitor_mode", []string{"off", "diffusion", "jev"})
+		case "monitor_local_url", "monitor_local_model":
+			m.policyForm(d, "", r.id, m.simString(r.id))
 		case "model":
 			m.policyForm(d, "", "monitor_model", m.simString("monitor_model"))
 
@@ -224,6 +233,12 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 }
 func (m *model) policyForm(parent *dialog, id, field, value string) {
 	d := &dialog{kind: "loom-policy-field", title: strings.ReplaceAll(field, "_", " "), parent: parent, args: map[string]any{"id": id, "field": field}}
+	if field == "monitor_local_url" {
+		d.title = "Local judge server"
+	}
+	if field == "monitor_local_model" {
+		d.title = "Local judge model"
+	}
 	d.add(d.title, value)
 	m.dialog = d
 }
@@ -232,6 +247,10 @@ func (m *model) policyPicker(parent *dialog, id, field string, values []string) 
 	for _, v := range values {
 		label := strings.Title(strings.ReplaceAll(v, "_", " "))
 		preview := ""
+		if field == "monitor_mode" {
+			d.title = "Monitoring"
+			label = monitorLabel(v)
+		}
 		if field == "decision" {
 			d.title = "Detection rule"
 			if v == "most_likely" {
@@ -274,7 +293,7 @@ func (m *model) monitorTimingSummary() string {
 }
 func (m *model) openMonitorTiming() tea.Cmd {
 	d := &dialog{kind: "loom-policy-timing", title: "Heartbeat", rows: []row{}}
-	if m.simString("monitor_mode") != "jev" {
+	if m.simString("monitor_mode") == "off" {
 		d.title += " · monitoring off"
 	}
 	for _, entry := range []struct{ key, label, preview string }{
@@ -301,4 +320,15 @@ func (m *model) openMonitorKey(parent *dialog) tea.Cmd {
 	d.fields[0].input.EchoCharacter = '•'
 	m.dialog = d
 	return d.fields[0].input.Focus()
+}
+
+func monitorLabel(provider string) string {
+	switch provider {
+	case "diffusion":
+		return "DiffusionGemma (local)"
+	case "jev":
+		return "Jev (OpenRouter)"
+	default:
+		return "Off"
+	}
 }

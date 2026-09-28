@@ -6,16 +6,17 @@ inputs, triggers and effects. Configuring one does not silently enable another.
 
 | Role | Input / trigger | Result and effect |
 | --- | --- | --- |
-| Monitoring | Partial or completed generation and its context, at configured Heartbeat checkpoints | Jev behavior probabilities; enabled rules annotate, warn or explicitly stop. |
+| Monitoring | Partial or completed generation and its context, at configured Heartbeat checkpoints | Local DiffusionGemma or hosted Jev behavior probabilities; enabled rules annotate, warn or explicitly stop. |
 | Selection | Candidate set during a multi-loop Loom | Local instruct model reviews candidates and chooses one eligible continuation, or none. Others remain saved. |
-| Evaluation | Frozen document/conversation items in a named collection | One or more local/Jev judges record whole-item results for comparison and dataset curation. |
+| Evaluation | Frozen document/conversation items in a named collection | One or more instruct/DiffusionGemma/Jev judges record whole-item results for comparison and dataset curation. |
 
 All are inspectable. A monitor flag is not automatically a training rejection;
 a selected branch is not automatically an anthology or training member.
 
 ## Monitoring
 
-Open `/policy` → Monitoring. Default is Off. Selecting Jev requires a saved or
+Open `/policy` → Monitoring. Default is Off. DiffusionGemma (local) uses an
+[OpenJev service](local-judge.md) without an API key. Selecting Jev requires a saved or
 environment OpenRouter key before other settings appear. [Credential storage
 and external data flow](configuration.md#optional-monitoring) apply here.
 
@@ -54,8 +55,8 @@ the classifier prompt; malformed responses remain errors.
 1. Open **Evaluate** → **New evaluation** and name it, for example `Voice`.
 2. Open **Configure** (`/config`). Choose reusable judges. If none exist, create
    one under **Manage judge configurations** or `/policy` → **Judge configurations**.
-   A local judge has criteria and an editable system prompt. A Jev judge uses a
-   spec and pass-probability threshold. Local judges currently use the configured
+   A local judge has criteria and an editable system prompt. A DiffusionGemma or Jev judge uses a
+   spec and pass-probability threshold. Instruct judges currently use the configured
    instruct policy-model alias, not an arbitrary independent model per judge.
 3. Set **Active evaluation** to choose the default used by `/eval` outside this tab.
 4. **Add items / existing judgments** selects saved document versions, conversations
@@ -88,7 +89,7 @@ Each item stores frozen text, source lineage and generation-model provenance.
 Each judgment preserves its judge revision, request/response, reason and evidence.
 A collection-level pass requires every currently configured judge revision to
 complete and pass. Errors/interruption are incomplete, not failed criteria.
-Jev probabilities use your cutoff; they are not validated confidence estimates.
+Classifier probabilities use your cutoff; they are not validated confidence estimates.
 
 Editing a judge creates a new revision. Old results remain readable but do not
 count as passes under the revised criteria. Rerunning appends judgment history.

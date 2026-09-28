@@ -32,6 +32,8 @@ def defaults(alias):
         monitor_after_reply=True,
         monitor_during_reply=True,
         monitor_model="jev-latest",
+        monitor_local_url=monitor.LOCAL_URL,
+        monitor_local_model=monitor.LOCAL_MODEL,
         monitor_dimensions=monitor.dimensions({}),
         documents=[],
         character_alias=alias,
@@ -63,8 +65,15 @@ def configuration(project, alias):
 def validate(config, project, validate_settings):
     if "token_range" in config:
         raise ValueError("Token ranges were removed; use a single maximum")
-    if config["monitor_mode"] not in {"off", "jev"}:
-        raise ValueError("Monitor mode must be off or jev")
+    if config["monitor_mode"] not in {"off", "jev", "diffusion"}:
+        raise ValueError("Choose Off, Jev or DiffusionGemma monitoring")
+    if config["monitor_mode"] == "diffusion":
+        monitor.local_url(config.get("monitor_local_url", monitor.LOCAL_URL))
+        if (
+            not isinstance(config.get("monitor_local_model"), str)
+            or not config["monitor_local_model"].strip()
+        ):
+            raise ValueError("Supply a local monitor model")
     if (
         not isinstance(config["monitor_model"], str)
         or not config["monitor_model"].strip()

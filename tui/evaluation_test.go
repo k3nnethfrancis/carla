@@ -213,3 +213,27 @@ func TestCollectionConfigAndAddingDoNotRunJudges(t *testing.T) {
 		t.Fatal(req)
 	}
 }
+
+func TestDiffusionEvaluatorEndpointSurvivesEditing(t *testing.T) {
+	m := fixture()
+	e := evaluator{ID: "local", Name: "Voice", Kind: "diffusion", Model: "openjev-latest", Endpoint: "http://127.0.0.1:8080", Spec: "Coherent", Threshold: .8}
+	m.data.Evaluators = []evaluator{e}
+	m.openEvaluator(e.ID)
+	found := false
+	for i, r := range m.dialog.rows {
+		if r.id == "endpoint" {
+			found = true
+			m.dialog.index = i
+		}
+	}
+	if !found {
+		t.Fatal("local service not editable")
+	}
+	m.submitDialog()
+	if m.dialog.fields[0].input.Value() != e.Endpoint {
+		t.Fatal("wrong endpoint")
+	}
+	if e.args()["endpoint"] != e.Endpoint {
+		t.Fatal("endpoint lost on judge edits")
+	}
+}

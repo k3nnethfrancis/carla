@@ -322,12 +322,17 @@ async def test_high_monitor_scores_never_stop_next_turn(setup, monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("action", ["warn", "stop"])
-async def test_policy_applies_only_to_matching_conversation(setup, monkeypatch, action):
+@pytest.mark.parametrize("provider", ["jev", "diffusion"])
+async def test_policy_applies_only_to_matching_conversation(
+    setup, monkeypatch, action, provider
+):
     from character_lab import monitor
 
     project, config, emit, events = setup
     config.update(
-        conversations=2, monitor_mode="jev", monitor_dimensions=monitor.dimensions({})
+        conversations=2,
+        monitor_mode=provider,
+        monitor_dimensions=monitor.dimensions({}),
     )
     config["monitor_dimensions"][0]["action"] = action
 

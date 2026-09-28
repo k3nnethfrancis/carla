@@ -148,7 +148,7 @@ Select conversation → /fork    → new version, no generated text
 /policy
   Monitoring     conditions, thresholds and warn/stop actions
   Selection      evaluator, criteria and candidate advancement
-  Judges         reusable whole-item criteria, local prompts or Jev thresholds
+  Judges         reusable whole-item criteria, local prompts or classifier thresholds
 ```
 
 Configuration edits persist. Explicit command arguments override settings for that run only. Bare Loom retains the one-alternative / one-loop / one-reply behavior defined above. Saved legacy batch fields remain compatible with existing workspaces; use explicit command parameters to run batches.
@@ -171,7 +171,7 @@ A multi-loop run needs a configured selection policy. Missing configuration prod
 
 ### Monitoring: what is happening during generation
 
-The current Jev role remains distinct:
+The monitoring classifier role remains distinct:
 
 ```text
 Observe output → classify behavior → annotate / warn / explicitly stop
@@ -243,7 +243,7 @@ The interface replaces separate user-facing `/continue`, `/grow`, `/run` and con
 
 - The local selector reviews every candidate and selects one classified `explore`, or none. Multiple eligible candidates are resolved by the selector’s explicit choice and rationale. No selection ends exploration with `no_selection`; invalid evidence or provider failure fails the run and retains outputs. There is no silent random fallback.
 - Selection happens after a completed batch. A selector uses a separate resident model after generation is unloaded. Externally managed generators cannot be unloaded by Carla; stop that server before using selection loops.
-- Monitoring settings are currently shared between document and conversation workflows. It remains optional and sends the material being checked to OpenRouter when enabled. Document monitor evidence is persisted and inspectable; the conversation-specific blink UI is not reused for document tiles.
+- Monitoring settings are currently shared between document and conversation workflows. It remains optional: DiffusionGemma uses the local OpenJev server; choosing Jev sends the material being checked to OpenRouter. Document monitor evidence is persisted and inspectable; the conversation-specific blink UI is not reused for document tiles.
 - `/continue`, `/generate`, `/run`, `/simulate` and `/grow` are compatibility names for `/loom`. Their positional argument follows Loom’s alternatives count. Use `--tokens` explicitly for an output ceiling. `/grow` no longer silently enables repeated loops.
 - Old settings and sampling names lead to `/config`; policy names lead to `/policy`. Existing keyboard action IDs remain supported. `/model` remains a direct shortcut.
 - Conversation edits fork through the changed message and discard later replies in the fork, preserving the original.
@@ -296,9 +296,10 @@ grades. Existing completed judgments can be added without another model call.
 Older flat results migrate into collections without rerunning or altering them.
 
 A judge uses the configured local instruct model (criteria and editable prompt)
-or Jev through OpenRouter (behavior spec and probability threshold). Jev uses
+or a DiffusionGemma/Jev classifier (behavior spec and probability threshold).
+DiffusionGemma uses a [local OpenJev service](local-judge.md); Jev uses
 the saved OpenRouter credential or `OPENROUTER_API_KEY`. Its probabilities are
-model estimates, not calibrated confidence. Local judges use the policy model;
+model estimates, not calibrated confidence. Instruct judges use the policy model;
 they must return JSON with boolean `passed`, `reason`, and an exact `evidence`
 excerpt. Invalid responses and provider errors remain incomplete, never passes.
 Full items are sent without silent truncation; context overflow remains an error.
@@ -351,7 +352,10 @@ means no checks, even if Monitoring is on. Saved traces retain the timing used.
 
 ### Enabling monitoring
 
-`/policy` → Monitoring initially shows only **Monitoring · Off**. Select Jev and
+`/policy` → Monitoring initially shows only **Monitoring · Off**. Choose
+**DiffusionGemma (local)** for a local service without an API key; Server and Model
+are editable alongside Heartbeat and Behaviors. See [setup](local-judge.md).
+Alternatively, select Jev and
 complete the masked OpenRouter API-key step before timing, model and behavior
 settings appear. If a saved or environment key already exists, setup is already
 complete. An older workspace with Jev enabled but no available key shows only the

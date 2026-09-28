@@ -12,9 +12,9 @@ import (
 // Definitions and result snapshots belong to Python; these structs only render
 // them and carry explicit user actions back across the protocol.
 type evaluator struct {
-	ID, Name, Kind, Spec, Prompt, Model string
-	Revision                            int
-	Threshold                           float64
+	ID, Name, Kind, Spec, Prompt, Model, Endpoint string
+	Revision                                      int
+	Threshold                                     float64
 }
 type evaluationSummary struct {
 	ID, Title, Kind, Status, Created, Evaluator, Error string
@@ -40,7 +40,7 @@ type evaluationRecord struct {
 }
 
 func (e evaluator) args() map[string]any {
-	return map[string]any{"id": e.ID, "name": e.Name, "kind": e.Kind, "spec": e.Spec, "prompt": e.Prompt, "model": e.Model, "threshold": e.Threshold}
+	return map[string]any{"id": e.ID, "name": e.Name, "kind": e.Kind, "spec": e.Spec, "prompt": e.Prompt, "model": e.Model, "threshold": e.Threshold, "endpoint": e.Endpoint}
 }
 func (m *model) evaluator(id string) evaluator {
 	for _, e := range m.data.Evaluators {
@@ -61,7 +61,7 @@ func (m *model) openPolicy() tea.Cmd {
 func (m *model) openEvaluators() tea.Cmd {
 	d := &dialog{kind: "eval-definitions", title: "Judge configurations"}
 	for _, e := range m.data.Evaluators {
-		d.rows = append(d.rows, row{id: e.ID, label: e.Name + " · " + e.Kind, preview: e.Spec})
+		d.rows = append(d.rows, row{id: e.ID, label: e.Name + " · " + judgeLabel(e.Kind), preview: e.Spec})
 	}
 	d.rows = append(d.rows, row{id: "new", label: "+ New judge"})
 	m.dialog = d
@@ -69,7 +69,10 @@ func (m *model) openEvaluators() tea.Cmd {
 }
 func (m *model) openEvaluator(id string) tea.Cmd {
 	e := m.evaluator(id)
-	rows := []row{{id: "name", label: e.Name, preview: "Rename judge"}, {id: "kind", label: "Judge · " + e.Kind}, {id: "model", label: "Model · " + e.Model}, {id: "spec", label: "Criteria", preview: e.Spec}}
+	rows := []row{{id: "name", label: e.Name, preview: "Rename judge"}, {id: "kind", label: "Judge · " + judgeLabel(e.Kind)}, {id: "model", label: "Model · " + e.Model}, {id: "spec", label: "Criteria", preview: e.Spec}}
+	if e.Kind == "diffusion" {
+		rows = append(rows, row{id: "endpoint", label: "Server · " + e.Endpoint, preview: "Local OpenJev service; see docs/local-judge.md. This address is frozen with each result."})
+	}
 	if e.Kind == "llm" {
 		rows = append(rows, row{id: "prompt", label: "Judge prompt", preview: e.Prompt})
 	} else {
@@ -295,6 +298,7 @@ func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 		value := d.fields[0].input.Value()
 		if strings.TrimSpace(value) == "" {
 			m.status = "Enter a value"
+			d.args["error"] = m.status
 			return nil
 		}
 		args[field] = value
@@ -322,7 +326,7 @@ func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 		}
 	case "eval-definitions":
 		if r.id == "new" {
-			m.dialog = &dialog{kind: "eval-new-kind", title: "Judge", parent: d, rows: []row{{id: "llm", label: "Local LLM", preview: "Prompt, criteria, boolean pass and quoted evidence."}, {id: "jev", label: "Jev via OpenRouter", preview: "Behavior spec and probability threshold. Uses OPENROUTER_API_KEY."}}}
+			m.dialog = &dialog{kind: "eval-new-kind", title: "Judge", parent: d, rows: []row{{id: "llm", label: "Local LLM", preview: "Prompt, criteria, boolean pass and quoted evidence."}, {id: "diffusion", label: "DiffusionGemma (local)", preview: "Local OpenJev classifier. Behavior spec and probability threshold; no API key."}, {id: "jev", label: "Jev via OpenRouter", preview: "Behavior spec and probability threshold. Uses OPENROUTER_API_KEY."}}}
 			return nil
 		}
 		return parent(m.openEvaluator(r.id))
@@ -353,7 +357,7 @@ func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 			m.reflow()
 			return m.editor.Focus()
 		case "kind":
-			m.dialog = &dialog{kind: "eval-kind", title: "Judge", parent: d, args: d.args, rows: []row{{id: "llm", label: "Local LLM"}, {id: "jev", label: "Jev via OpenRouter"}}}
+			m.dialog = &dialog{kind: "eval-kind", title: "Judge", parent: d, args: d.args, rows: []row{{id: "llm", label: "Local LLM"}, {id: "diffusion", label: "DiffusionGemma (local)"}, {id: "jev", label: "Jev via OpenRouter"}}}
 			return nil
 		case "model":
 			if e.Kind == "llm" {
@@ -373,6 +377,9 @@ func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 		if r.id == "model" {
 			value = e.Model
 		}
+		if r.id == "endpoint" {
+			value = e.Endpoint
+		}
 		if r.id == "threshold" {
 			value = fmt.Sprint(e.Threshold * 100)
 		}
@@ -386,7 +393,10 @@ func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 			args["model"] = r.id
 		} else {
 			args["kind"] = r.id
-			if r.id == "jev" {
+			if r.id == "diffusion" {
+				args["model"] = m.simString("monitor_local_model")
+				args["endpoint"] = m.simString("monitor_local_url")
+			} else if r.id == "jev" {
 				args["model"] = m.simString("monitor_model")
 			} else if len(m.data.SelectorModels) > 0 {
 				args["model"] = m.data.SelectorModels[0].Alias
@@ -412,4 +422,11 @@ func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 		return m.evalAction(r.id)
 	}
 	return nil
+}
+
+func judgeLabel(kind string) string {
+	if kind == "llm" {
+		return "Local LLM"
+	}
+	return monitorLabel(kind)
 }

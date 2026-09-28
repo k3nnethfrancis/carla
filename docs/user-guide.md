@@ -112,6 +112,7 @@ Use `carla --version` with bug reports.
 | Multi-loop Loom cannot start | Configure the separate instruct policy model and selection spec. A one-loop Loom does not need a selector. |
 | Wrong conversation is continued | Inspect the checked target; `/clear` starts fresh. Hover is not selection. |
 | Evaluation opens but cannot run | Create/select a collection, assign judges, add nonempty items and use Run or `/eval`. Local judges currently use the configured policy model. |
+| Local judge unavailable | Start `scripts/local-judge.sh` in a second terminal, then check Server under `/policy`. See [local judge setup](local-judge.md). |
 | Jev authentication/provider error | Check saved credential versus launching environment, provider access and quota. Saving a key does not validate it. |
 | Workspace already open | Close the owning Carla process; each workspace permits one writer. Do not edit its JSON while running. |
 | Terminal layout unavailable | Resize to at least 60×18; use a UTF-8 terminal. |

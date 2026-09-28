@@ -234,7 +234,12 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		key := m.navigationKey(raw)
-		if raw == "/" && !(m.dialog != nil && (strings.HasPrefix(m.dialog.kind, "setup-") || m.dialog.kind == "import")) && (m.focus != 3 || m.dialog != nil || m.searching || m.sectionFocus) && !m.keyCapture {
+		// Endpoint forms, like file paths, need literal slashes instead of
+		// opening the command bar midway through a URL.
+		literalSlash := m.dialog != nil && (strings.HasPrefix(m.dialog.kind, "setup-") || m.dialog.kind == "import" ||
+			(m.dialog.kind == "loom-policy-field" && m.dialog.args["field"] == "monitor_local_url") ||
+			(m.dialog.kind == "eval-field" && m.dialog.args["field"] == "endpoint"))
+		if raw == "/" && !literalSlash && (m.focus != 3 || m.dialog != nil || m.searching || m.sectionFocus) && !m.keyCapture {
 			m.editor.Blur()
 			m.search.Blur()
 			return m, m.focusCommand(true)

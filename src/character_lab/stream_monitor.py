@@ -10,7 +10,10 @@ class TurnMonitor:
     def __init__(self, config, project, run, conversation, turn, emit):
         self.config, self.project, self.run = config, project, run
         self.conversation, self.turn, self.emit = conversation, turn, emit
-        self.enabled = config["monitor_mode"] == "jev" and turn["role"] == "character"
+        self.enabled = (
+            config["monitor_mode"] in {"jev", "diffusion"}
+            and turn["role"] == "character"
+        )
         self.interval = (
             config.get("monitor_interval_tokens", 512)
             if config.get("monitor_during_reply", True)

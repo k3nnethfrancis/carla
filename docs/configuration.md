@@ -81,8 +81,8 @@ Selection and local evaluation are separate instruct-model judge calls.
 | Fixed opener | Simulator → `/config` → Opening → Fixed → Message | First Visitor message for fresh conversations; `--msg` overrides it for one run. |
 | Generated opener | Simulator → `/config` → Opening → Generated → Generation prompt | Raw completion using its selected model/sampling, once per fresh conversation. |
 | Selection | `/policy` → Selection | Criteria and system prompt for candidate classification; never injected into generator text. |
-| Monitoring | `/policy` → Monitoring → Behaviors | Named behavior specs sent to Jev with context. The provider envelope is managed by Carla. |
-| Evaluation | `/policy` → Judge configurations | Criteria and local judge system prompt, or Jev behavior spec/threshold. |
+| Monitoring | `/policy` → Monitoring → Behaviors | Named behavior specs sent to local DiffusionGemma or Jev with context. The provider envelope is managed by Carla. |
+| Evaluation | `/policy` → Judge configurations | Criteria and local judge system prompt, or DiffusionGemma/Jev behavior spec/threshold. |
 
 ### Document continuations
 
@@ -238,11 +238,15 @@ The texts are not covered by Carla’s MIT software license.
 
 ## Optional monitoring
 
-The Monitoring policy under `/policy` configures Jev via OpenRouter System One. Enable it only when you
+Monitoring is Off by default. For an entirely local classifier, select
+**DiffusionGemma (local)** and follow [local judge setup](local-judge.md).
+Its Server/Model settings are separate from the hosted Jev settings below.
+
+The Jev option uses OpenRouter System One. Choose it only when you
 intend to send the full conversation history, including character output and
 human messages, to that external service. Its requests may incur charges.
 Monitoring defaults to Off. Choose Jev to open a masked OpenRouter API-key form;
-other monitoring controls appear only after a key is configured. Cancelling this
+its other monitoring controls appear only after a key is configured. Cancelling this
 step leaves monitoring Off. An existing `OPENROUTER_API_KEY` in the launching
 environment also satisfies setup.
 
@@ -268,8 +272,9 @@ not a locally calibrated guarantee. A Stop affects only the flagged conversation
 ## Policy and evaluation configuration
 
 Use `/policy` for monitoring, selection and reusable judge configurations.
-Each judge chooses a local LLM or Jev, criteria, and (for Jev) a probability
-threshold. Local judging exposes its complete system prompt. Definitions are
+Each judge chooses a local LLM, local DiffusionGemma or hosted Jev, criteria, and
+(for classifiers) a probability threshold. DiffusionGemma needs a loopback OpenJev
+server; see [local setup](local-judge.md). Local judging exposes its complete system prompt. Definitions are
 workspace-local and revisioned; results keep the definition used at execution.
 In Evaluate, `/config` configures the opened collection: its name, judges and
 active status. Elsewhere it configures generation. Adding collection items and

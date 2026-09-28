@@ -917,8 +917,9 @@ async def test_cancel_during_selection_preserves_batch_and_trace(session, monkey
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("provider", ["jev", "diffusion"])
 async def test_document_monitor_stop_preserves_output_and_never_selects(
-    session, monkeypatch
+    session, monkeypatch, provider
 ):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-only")
     from character_lab import monitor
@@ -933,7 +934,7 @@ async def test_document_monitor_stop_preserves_output_and_never_selects(
 
     monkeypatch.setattr(monitor, "scan", scan)
     session.project.add("Seed", kind="source")
-    await session.execute("simulator.configure", {"monitor_mode": "jev"}, "config")
+    await session.execute("simulator.configure", {"monitor_mode": provider}, "config")
     await session.execute("continue", {"count": 1, "loops": 1}, "loom")
     await session.job
     node = session.project.data["nodes"][-1]
@@ -983,3 +984,21 @@ async def test_create_behavior_with_full_configuration(session):
     with pytest.raises(ValueError):
         await session.execute("loom-policy.add", values | {"threshold": 2}, "bad")
     assert len(session.project.data["simulator_config"]["monitor_dimensions"]) == 4
+
+
+async def test_local_monitor_config_without_credentials_and_bad_endpoint_rejected(
+    session, monkeypatch
+):
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    await session.execute("simulator.configure", {"monitor_mode": "diffusion"}, "local")
+    assert session.project.data["simulator_config"]["monitor_mode"] == "diffusion"
+    with pytest.raises(ValueError, match="loopback"):
+        await session.execute(
+            "simulator.configure",
+            {"monitor_local_url": "https://remote.example:443"},
+            "bad",
+        )
+    assert (
+        session.project.data["simulator_config"]["monitor_local_url"]
+        == "http://127.0.0.1:8080"
+    )

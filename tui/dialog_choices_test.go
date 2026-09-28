@@ -11,7 +11,11 @@ func TestQuickMonitorChoices(t *testing.T) {
 		m := policyFixture()
 		m.openLoomPolicy()
 		req := captureCommand(t, m, func() tea.Cmd { return m.dialogKey(tea.KeyPressMsg{Code: key}) })
-		if req.Command != "simulator.configure" || string(req.Args["monitor_mode"]) != `"off"` || m.dialog.kind != "loom-policy" || m.dialog.query != "" {
+		expected := `"off"`
+		if key == tea.KeyLeft {
+			expected = `"diffusion"`
+		}
+		if req.Command != "simulator.configure" || string(req.Args["monitor_mode"]) != expected || m.dialog.kind != "loom-policy" || m.dialog.query != "" {
 			t.Fatal(req, m.dialog)
 		}
 	}
@@ -19,7 +23,7 @@ func TestQuickMonitorChoices(t *testing.T) {
 	m.data.MonitorKeySource = ""
 	m.data.SimulatorConfig["monitor_mode"] = "off"
 	m.openLoomPolicy()
-	m.dialogKey(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
+	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyLeft})
 	if m.dialog.kind != "loom-policy-key" || m.simString("monitor_mode") != "off" {
 		t.Fatal("quick cycle bypassed key setup")
 	}
