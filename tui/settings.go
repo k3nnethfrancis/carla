@@ -9,11 +9,11 @@ import (
 
 func settingHelp(field int) string {
 	switch field {
-	case 1:
+	case 0:
 		return "Max uses remaining context after the prompt."
-	case 3:
+	case 2:
 		return "Top-p range: 0–1. Step: 0.01."
-	case 4:
+	case 3:
 		return "Default uses the model's native context."
 	}
 	return "↑↓ small steps · ←→ larger steps"
@@ -34,7 +34,7 @@ func (m *model) settingsKey(msg tea.KeyPressMsg) tea.Cmd {
 		if d.adjusting {
 			m.finishSetting(true)
 		} else {
-			m.dialog = nil
+			return m.closeDialog()
 		}
 		return nil
 	}
@@ -72,10 +72,10 @@ func (m *model) settingsKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	value, _ := strconv.ParseFloat(d.fields[d.field].input.Value(), 64)
 	unit, lower := 1.0, 1.0
-	if d.field == 2 {
+	if d.field == 1 {
 		unit, lower = .1, 0
 	}
-	if d.field == 3 {
+	if d.field == 2 {
 		unit, lower = .01, 0
 	}
 	// Up increases numeric steppers; Down decreases.
@@ -83,10 +83,10 @@ func (m *model) settingsKey(msg tea.KeyPressMsg) tea.Cmd {
 		step = -step
 	}
 	value = max(lower, value+float64(step)*unit)
-	if d.field == 3 {
+	if d.field == 2 {
 		value = min(1, value)
 	}
-	if d.field == 2 || d.field == 3 {
+	if d.field == 1 || d.field == 2 {
 		d.fields[d.field].input.SetValue(strconv.FormatFloat(value, 'f', 2, 64))
 	} else {
 		d.fields[d.field].input.SetValue(strconv.FormatFloat(value, 'f', 0, 64))
@@ -97,15 +97,15 @@ func (m *model) startSetting() {
 	d := m.dialog
 	d.adjusting = true
 	d.previous = d.fields[d.field].input.Value()
-	if d.field != 1 && d.field != 4 {
+	if d.field != 0 && d.field != 3 {
 		return
 	}
 	special := "Max"
-	if d.field == 4 {
+	if d.field == 3 {
 		special = "Default"
 	}
 	capacity := m.data.ModelContext
-	if capacity == 0 || d.field == 4 {
+	if capacity == 0 || d.field == 3 {
 		capacity = m.data.NativeContext
 	}
 	values := []int{128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576}
@@ -118,7 +118,7 @@ func (m *model) startSetting() {
 	sort.Ints(values)
 	preview := settingHelp(d.field)
 	label := special
-	if d.field == 4 && m.data.NativeContext > 0 {
+	if d.field == 3 && m.data.NativeContext > 0 {
 		label += " · " + tokenNumber(m.data.NativeContext)
 	}
 	d.rows = []row{{id: special, label: label, preview: preview}}

@@ -12,14 +12,14 @@ func TestPartialCommandArrowSelection(t *testing.T) {
 		m.commandKey(tea.KeyPressMsg{Code: ch, Text: string(ch)})
 	}
 	m.commandKey(tea.KeyPressMsg{Code: tea.KeyDown})
-	if m.commandChoices()[m.commandIndex].id != "loom-policy" || m.command.Value() != "/loo" {
+	if m.commandChoices()[m.commandIndex].id != "policy" || m.command.Value() != "/loo" {
 		t.Fatal("partial loom did not select", m.command.Value())
 	}
 	m.commandKey(tea.KeyPressMsg{Code: tea.KeyUp})
 	// A partial command executes the selected action, not the literal prefix.
 	m.section = 0
 	m.commandKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if m.status != "Open the Branches or Simulator tab to run /loom" {
+	if m.section != 1 {
 		t.Fatal("partial command not dispatched", m.status)
 	}
 	m.focusCommand(true)
@@ -75,7 +75,7 @@ func TestPrefixEnterUsesAlreadySelectedTopMatch(t *testing.T) {
 		m.section = 2
 		m.command.SetValue("/lo")
 		m.commandKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-		if m.status != "Open the Branches or Simulator tab to run /loom" {
+		if m.status != "Select a document in Branches to run /loom" {
 			t.Fatal(m.status)
 		}
 	}

@@ -20,7 +20,7 @@ func (m *model) simDocs() []string {
 }
 func (m *model) simulationText() string {
 	if m.simulation == nil {
-		return fmt.Sprintf("Choose anthology documents and configure a run.\n\nDocuments: %d\nCharacter: %s\nVisitor: %s\n\nOpening: %s\n\nThe character receives the selected documents. The visitor receives its own brief and conversation history. Both use raw local completions.\n\nUse Configure, then Run conversations. /inspect shows a selected run’s exact requests.",
+		return fmt.Sprintf("Choose anthology documents and configure a run.\n\nDocuments: %d\nCharacter: %s\nVisitor: %s\n\nOpening: %s\n\nThe character receives the selected documents. The visitor receives its own brief and conversation history. Both use raw local completions.\n\nUse /config, then /loom. /inspect shows a selected run’s exact requests.",
 			len(m.simDocs()), m.simString("character_alias"), m.simString("visitor_alias"), m.openingDescription())
 	}
 	if m.conversationOpen {
@@ -34,10 +34,8 @@ func (m *model) openSimulatorConfig() tea.Cmd {
 	for _, entry := range []struct{ key, label string }{
 		{"documents", "Anthology documents"}, {"character_alias", "Character model"}, {"visitor_alias", "Visitor model"},
 		{"openings", "Opening"}, {"visitor_brief", "Visitor brief"},
-		{"conversations", "Conversations"}, {"turns", "Character turns per conversation"},
 		{"character_settings", "Character sampling"}, {"visitor_settings", "Visitor sampling"},
 		{"character_template", "Character prompt"}, {"visitor_template", "Visitor prompt"},
-		{"monitor", "Loom policy"},
 	} {
 		value := fmt.Sprint(m.data.SimulatorConfig[entry.key])
 		if entry.key == "documents" {
@@ -92,6 +90,15 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 		}
 	}()
 	switch d.kind {
+	case "loom-config":
+		switch r.id {
+		case "selection":
+			return m.openSelectionConfig()
+		case "monitor":
+			return m.openLoomPolicy()
+		default:
+			return m.perform(r.id)
+		}
 	case "grow-config":
 		switch r.id {
 		case "models":
@@ -113,6 +120,8 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 		return m.saveDialog(d, "grow.selector", map[string]any{"alias": r.id})
 	case "sim-config", "sim-speakers", "sim-openings":
 		switch r.id {
+		case "selection":
+			return m.openSelectionConfig()
 		case "monitor":
 			return m.openLoomPolicy()
 		case "openings":
@@ -229,10 +238,13 @@ func (m *model) numberKey(msg tea.KeyPressMsg) tea.Cmd {
 		unit, lower = .01, 0
 	}
 	if key == "monitor_interval_tokens" {
-		unit, lower = 64, 0
+		unit, lower = 64, 1
 	}
 	if key == "threshold" {
 		lower = 0
+		if d.args["scope"] == "evaluation" {
+			lower = 1
+		}
 	}
 	if key == "n_predict" {
 		unit = 128
@@ -268,7 +280,11 @@ func (m *model) saveNumber(d *dialog) tea.Cmd {
 	}
 	command := "simulator.configure"
 	args := map[string]any{key: setting}
-	if d.args["scope"] == "loom-policy" {
+	if d.args["scope"] == "evaluation" {
+		command = "evaluation.configure"
+		args = m.evaluator(group).args()
+		args[key] = setting
+	} else if d.args["scope"] == "loom-policy" {
 		command = "loom-policy.update"
 		args = map[string]any{"id": group, key: setting}
 	} else if d.args["scope"] == "grow" {

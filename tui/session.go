@@ -14,7 +14,7 @@ func (m *model) exitSession(restart bool) tea.Cmd {
 	if m.editing != "" {
 		dir := filepath.Join(m.data.Workspace.Path, "recovered-drafts")
 		data, err := json.MarshalIndent(map[string]any{
-			"kind": m.editing, "node": m.editNode, "text": m.editor.Value(),
+			"kind": m.editing, "node": m.editNode, "evaluation": m.evalEditingID, "text": m.editor.Value(),
 			"offset": textOffset(m.editor.Value(), m.editor.Line(), m.editor.Column()),
 		}, "", "  ")
 		if err == nil {
@@ -39,6 +39,7 @@ func (m *model) exitSession(restart bool) tea.Cmd {
 			return nil
 		}
 	}
+	m.saveWorkspaceView()
 	m.restarting = restart
 	return tea.Quit
 }

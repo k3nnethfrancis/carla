@@ -52,7 +52,6 @@ func (m *model) openDialog(kind string) tea.Cmd {
 	case "settings":
 		d.title = "Generation settings"
 		s := m.data.Settings
-		d.add("Sibling branches", strconv.Itoa(s.Count))
 		output := strconv.Itoa(s.Tokens)
 		if s.Tokens == -1 {
 			output = "Max"
@@ -96,6 +95,9 @@ func (d *dialog) add(label, value string) {
 	d.fields = append(d.fields, field{label, i})
 }
 func (m *model) submitDialog() tea.Cmd {
+	if m.dialog != nil && (m.dialog.kind == "policy" || strings.HasPrefix(m.dialog.kind, "eval-")) {
+		return m.submitEvaluation(m.dialog)
+	}
 	if m.dialog != nil && strings.HasPrefix(m.dialog.kind, "setup-") {
 		return m.submitSetup(m.dialog)
 	}
@@ -196,11 +198,11 @@ func (m *model) submitDialog() tea.Cmd {
 		case "settings":
 			nums := make([]float64, len(values))
 			for i, v := range values {
-				if i == 1 && strings.EqualFold(strings.TrimSpace(v), "Max") {
+				if i == 0 && strings.EqualFold(strings.TrimSpace(v), "Max") {
 					nums[i] = -1
 					continue
 				}
-				if i == 4 && strings.EqualFold(strings.TrimSpace(v), "Default") {
+				if i == 3 && strings.EqualFold(strings.TrimSpace(v), "Default") {
 					nums[i] = 0
 					continue
 				}
@@ -211,15 +213,15 @@ func (m *model) submitDialog() tea.Cmd {
 				}
 				nums[i] = n
 			}
-			for _, i := range []int{0, 1, 4} {
+			for _, i := range []int{0, 3} {
 				if nums[i] != float64(int(nums[i])) {
-					m.status = "Branch, token and round counts must be whole numbers"
+					m.status = "Token and context counts must be whole numbers"
 					return nil
 				}
 			}
 			command = "configure"
-			args["model_context"] = int(nums[4])
-			args["settings"] = settings{int(nums[0]), int(nums[1]), nums[2], nums[3], m.data.Settings.Rounds}
+			args["model_context"] = int(nums[3])
+			args["settings"] = settings{m.data.Settings.Count, int(nums[0]), nums[1], nums[2], m.data.Settings.Rounds}
 		case "review":
 			start, e1 := strconv.Atoi(values[2])
 			end, e2 := strconv.Atoi(values[3])
@@ -240,7 +242,7 @@ func (m *model) submitDialog() tea.Cmd {
 	r := d.rows[d.index]
 	m.dialog = nil
 	switch d.kind {
-	case "sim-openings", "sim-opening-mode", "sim-config", "sim-speakers", "grow-config", "sim-model", "selector-pick", "sim-sampling":
+	case "loom-config", "sim-openings", "sim-opening-mode", "sim-config", "sim-speakers", "grow-config", "sim-model", "selector-pick", "sim-sampling":
 		return m.configureChoice(d, r)
 	case "conversation-edit":
 		index, _ := strconv.Atoi(r.id)
@@ -266,7 +268,7 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 	if d.kind == "config-number" {
 		return m.numberKey(msg)
 	}
-	if d.kind == "sim-documents" && (msg.Code == tea.KeySpace || msg.Code == tea.KeyEnter) {
+	if (d.kind == "sim-documents" || d.kind == "eval-judges" || d.kind == "eval-add-items") && (msg.Code == tea.KeySpace || msg.Code == tea.KeyEnter) {
 		if len(d.rows) == 0 {
 			return nil
 		}
@@ -315,6 +317,26 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 			d.index = (d.index + step + len(d.rows)) % len(d.rows)
 		}
 		return nil
+	}
+	if msg.Code == tea.KeySpace || msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight {
+		if d.choicePicker() && len(d.rows) > 0 {
+			if msg.Code == tea.KeySpace {
+				return m.submitDialog()
+			}
+			step := 1
+			if msg.Code == tea.KeyLeft {
+				step = -1
+			}
+			d.index = (d.index + step + len(d.rows)) % len(d.rows)
+			return nil
+		}
+		if _, ok := m.dialogChoice(); ok {
+			step := 1
+			if msg.Code == tea.KeyLeft {
+				step = -1
+			}
+			return m.cycleDialogChoice(step)
+		}
 	}
 	if m.filterDialog(msg) {
 		return nil

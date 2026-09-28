@@ -80,6 +80,12 @@ func (m *model) contextualActions() []action {
 	return actions
 }
 func (m *model) targetLabel() string {
+	if m.section == 3 && m.editing == "" {
+		if target := m.loomConversation; target != nil {
+			return fmt.Sprintf("Loom target · Conversation %d · %s · /clear for fresh", target.Conversation+1, target.Run)
+		}
+		return "Loom · new conversation · SPACE selects a continuation target"
+	}
 	if m.notesOpen && m.editing == "" {
 		return "Document · " + m.nodeTitle()
 	}
@@ -100,6 +106,9 @@ func (m *model) previewTarget() tea.Cmd {
 		return nil
 	}
 	r := m.targetRow()
+	if m.section == 4 && r.kind == "evaluation" && (m.evaluation == nil || m.evaluation.ID != r.id) {
+		return m.send("evaluation.item.open", map[string]any{"collection": m.evalCollection, "id": r.id})
+	}
 	if (m.section == 1 || m.section == 2) && r.kind == "node" && r.id != m.currentID() {
 		m.loomGrid = false
 		return m.send("node.open", map[string]any{"node": r.id})
@@ -190,4 +199,32 @@ func (m *model) collectionAction() string {
 		return "remove"
 	}
 	return "keep"
+}
+
+// The displayed action and the mutation must use the same visible selection.
+// Notes hides batch selection, so only its open document is an action target.
+func (m *model) actionNodeIDs() []string {
+	if m.selectionVisible() {
+		return m.selectedBranches()
+	}
+	if r := m.targetRow(); r.kind == "node" {
+		return []string{r.id}
+	}
+	return nil
+}
+
+func (m *model) selectDocument(id string) {
+	parents := map[string]string{}
+	for _, n := range m.data.Nodes {
+		parents[n.ID] = n.Parent
+	}
+	for parent := parents[id]; parent != ""; parent = parents[parent] {
+		delete(m.collapsed, parent)
+	}
+	for i, r := range m.rows() {
+		if r.kind == "node" && r.id == id {
+			m.selected = i
+			break
+		}
+	}
 }

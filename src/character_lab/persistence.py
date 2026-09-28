@@ -7,6 +7,7 @@ is an error. This protects process-crash recovery, not power-loss durability.
 """
 
 import json
+import os
 from pathlib import Path
 
 
@@ -65,3 +66,29 @@ class StreamJournal:
     def compact(self):
         # The full snapshot has already been atomically replaced by the caller.
         self.path.unlink(missing_ok=True)
+
+
+class WorkspaceStore:
+    """Own snapshot loading, journal replay and checkpoint ordering together.
+
+    Project mutates `data` and decides when to checkpoint. This class owns disk
+    mechanics only: the existing JSON schema and recovery sequence are unchanged.
+    Never compact the journal before the snapshot replacement succeeds.
+    """
+
+    def __init__(self, folder: Path, initial):
+        folder.mkdir(parents=True, exist_ok=True)
+        self.path = folder / "project.json"
+        self.data = json.loads(self.path.read_text()) if self.path.exists() else initial
+        self._journal = StreamJournal(folder, self.data)
+
+    def append(self, target, text, trace):
+        """Record a delta after Project has applied it to its in-memory data."""
+        self._journal.append(target, text, trace)
+
+    def checkpoint(self):
+        self.data["journal_sequence"] = self._journal.sequence
+        tmp = self.path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self.data, ensure_ascii=False, indent=2) + "\n")
+        os.replace(tmp, self.path)
+        self._journal.compact()

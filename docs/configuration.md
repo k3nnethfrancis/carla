@@ -61,10 +61,10 @@ For persistent defaults, place the array at `$CARLA_DATA_DIR/models.json`.
 Saved workspace model entries override matching registry entries; an explicit
 `--models FILE` replaces the workspace catalog. `/model` selects from that catalog.
 
-Grow needs a separate instruct model. `--policy-model FILE` accepts one object
-with the same fields and `kind: "instruct"`. Setup saves the persistent default at `$CARLA_DATA_DIR/policy-model.json`. Grow unloads
+Repeated Loom loops need a separate instruct selection model. `--policy-model FILE` accepts one object
+with the same fields and `kind: "instruct"`. Setup saves the persistent default at `$CARLA_DATA_DIR/policy-model.json`. Selection unloads
 the generator before loading the selector. Selection instructions never enter
-raw generation context. Without a configured policy model, Grow cannot run.
+raw generation context. Without a configured policy model, multi-loop Loom cannot run.
 
 ## Storage and launch
 
@@ -136,16 +136,62 @@ The texts are not covered by Carla’s MIT software license.
 
 ## Optional monitoring
 
-`/loom-policy` configures Jev via OpenRouter System One. Enable it only when you
+The Monitoring policy under `/policy` configures Jev via OpenRouter System One. Enable it only when you
 intend to send the full conversation history, including character output and
 human messages, to that external service. Its requests may incur charges.
-Set `OPENROUTER_API_KEY` in the launching environment; never put it in a workspace
-or model JSON file. The client stores request/response evidence but not the key.
+Monitoring defaults to Off. Choose Jev to open a masked OpenRouter API-key form;
+other monitoring controls appear only after a key is configured. Cancelling this
+step leaves monitoring Off. An existing `OPENROUTER_API_KEY` in the launching
+environment also satisfies setup.
 
-Checks apply to character replies. The default cadence is every 512 generated
-tokens plus the final reply; 0 means end-of-turn only. Only one check per
+Keys entered in Carla are saved in `credentials.json` under its application data
+home, outside all workspaces, with owner-only permissions (`0600`). This is a
+local file, not encrypted storage. A saved key takes precedence over the
+environment variable; the API key row lets you replace it. Turning monitoring Off
+retains the key for later use. Keys are not included in state events, generation
+configs, traces or dataset exports. Saving a key does not make a paid request or
+verify provider authentication; provider errors remain visible when used.
+
+Checks apply to character replies and document continuations. In `/policy` →
+Monitoring → Heartbeat, toggle after-reply and during-reply checks separately.
+Both default to on, with a 512-output-token interval when monitoring is enabled.
+Turning during-reply checks off preserves the interval. Legacy interval 0 still
+disables mid-reply checks. Only one check per
 conversation is in flight. Partial checks do not block token streaming; the
 conversation awaits its pending/final result before advancing so an explicit Stop
 can take effect. Sibling conversations on the same model can keep advancing.
 Provider errors fail open and remain visible. Scores are provider classifications,
 not a locally calibrated guarantee. A Stop affects only the flagged conversation.
+
+## Policy and evaluation configuration
+
+Use `/policy` for monitoring, selection and reusable judge configurations.
+Each judge chooses a local LLM or Jev, criteria, and (for Jev) a probability
+threshold. Local judging exposes its complete system prompt. Definitions are
+workspace-local and revisioned; results keep the definition used at execution.
+In Evaluate, `/config` configures the opened collection: its name, judges and
+active status. Elsewhere it configures generation. Adding collection items and
+running judges are separate actions. See
+[commands](commands.md#policies-and-evaluated-datasets) for targeting and exports.
+
+Choice rows in policy configuration support Space to cycle forward and Left/Right
+to cycle backward/forward, without opening a picker. Enter still opens the full
+picker. Heartbeat toggles use the same keys; Interval opens its numeric control.
+Typing filters the list, and the filter is retained after a setting changes.
+
+Monitoring's **Behaviors** panel lists each behavior's enabled state and action.
+**New behavior** shows the complete configuration before creation; edits stay in
+an unsaved draft until **Create behavior**. Specs use the multiline document
+editor (`/save` or the configured save binding; Escape cancels the text edit).
+Leaving the new-behavior panel discards its unsaved draft.
+
+The **Detection rule** determines whether a behavior is flagged: **Most likely**
+requires estimated probability above 50%; **Threshold** uses your chosen cutoff.
+The separate **Action** determines what follows a detection: warn or stop.
+Disabling a behavior skips it while retaining its settings.
+
+Long specs, criteria and prompts use the full document editor. Text wraps and
+scrolls with the cursor; use arrows, Page Up/Page Down or the mouse wheel to
+navigate. The heading shows the current line and total lines. New judges
+ask for a name first, then open this editor for criteria. Saving preserves the
+complete multiline text, including content outside the visible window.

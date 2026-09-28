@@ -8,19 +8,12 @@ import (
 	"testing"
 )
 
-func TestLoomOutsideSupportedTabsOnlyExplains(t *testing.T) {
-	for _, section := range []int{0, 2} {
+func TestLoomRejectsConversationOptionsInDocumentViews(t *testing.T) {
+	for _, section := range []int{0, 1, 2} {
 		m := fixture()
-		m.width, m.height = 120, 36
 		m.section = section
-		m.focus = 3
-		m.command.SetValue("/loom 4")
-		if choices := m.commandChoices(); len(choices) != 1 || choices[0].id != "loom" {
-			t.Fatal("loom not discoverable")
-		}
-		cmd := m.commandKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-		if cmd != nil || m.pending || m.section != section || !strings.Contains(m.status, "Branches or Simulator") {
-			t.Fatal("unsupported tab generated or navigated", m.status)
+		if m.loom(generationOptions{Turns: 2}) != nil || !strings.Contains(m.status, "--turns") {
+			t.Fatal("incompatible option accepted")
 		}
 	}
 }
@@ -36,7 +29,7 @@ func TestSimulatorLoomRoutesCountAndTokenOverride(t *testing.T) {
 	m.focus = 3
 	// A previously viewed document must never become the Simulator command target.
 	m.commandDocument = m.currentID()
-	m.command.SetValue("/loom 5 --turns 4 --tokens 64")
+	m.command.SetValue(`/loom 5 --turns 4 --tokens 64 --message "Where do paths meet?"`)
 	cmd := m.commandKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("no simulator command")
@@ -46,17 +39,18 @@ func TestSimulatorLoomRoutesCountAndTokenOverride(t *testing.T) {
 	var request struct {
 		Command string
 		Args    struct {
-			Count  int
-			Tokens int `json:"n_predict"`
-			Turns  int
-			Node   string
+			Count   int
+			Tokens  int `json:"n_predict"`
+			Turns   int
+			Node    string
+			Message string
 		}
 	}
 	if err := json.NewDecoder(right).Decode(&request); err != nil {
 		t.Fatal(err)
 	}
 	<-done
-	if request.Command != "simulator.run" || request.Args.Count != 5 || request.Args.Tokens != 64 || request.Args.Turns != 4 || request.Args.Node != "" {
+	if request.Command != "simulator.run" || request.Args.Count != 5 || request.Args.Tokens != 64 || request.Args.Turns != 4 || request.Args.Node != "" || request.Args.Message != "Where do paths meet?" {
 		t.Fatalf("wrong destination: %+v", request)
 	}
 }

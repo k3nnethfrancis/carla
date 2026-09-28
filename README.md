@@ -5,7 +5,7 @@ Carla (character lab) is a TUI for developing AI characters from base models ins
 Select from seed documents to generate base-model continuations, branch, edit, and curate an anthology of generations and explore how it behaves in simulated conversations. Prompts, model settings, source provenance and alternative branches remain inspectable.
 
 ```text
-Library → Branches → Anthology → Simulator
+Library → Branches → Anthology → Simulator → Evaluate
              │                      │
          fork / Loom           fork / Loom
              └── inspect, edit, compare ──┘
@@ -49,6 +49,8 @@ Use `/model` → `+ Add model`, or run `carla --setup-model`, to add another mod
 Once inside Carla, select a passage with Space, open it with Enter, and explore the
 panes with Tab / Shift+Tab. Type `/help` for commands or `/keys` for editable
 bindings. `/` focuses the command bar, including from the document editor.
+The Keys dialog covers listed actions and navigation; its own capture, reset,
+save and cancel controls stay fixed so you can always recover a binding.
 
 ## Commands at a glance
 
@@ -60,22 +62,25 @@ suggestion, and press Enter. Commands relevant to the current page appear first.
 | `/import` | Add a local text or Markdown seed to the shared Library. |
 | `/help` · `/keys` | Browse all commands or customize keyboard bindings. |
 | `/workspace` · `/model` | Choose a workspace or local model. |
-| `/configure` | Open settings for the current page. |
-| `/continue --tokens 512` | Continue a document from the cursor, up to 512 output tokens. |
+| `/config` | Generation models, prompts and sampling for this workflow. |
+| `/policy` | Monitoring, selection and reusable judge configurations. |
+| `/eval [name] --train-on-pass true` | Run active/named evaluation on selected material; optionally mark passes for training. |
+| `/evaluations` | Manage named evaluation collections, inspect judgments and export training items. |
+| `/loom` | Generate one continuation or the next Character reply. |
 | `/loom 3 --tokens 512` | In Branches, generate three alternative continuations. |
 | `/loom 3 --turns 4 --tokens 512` | In Simulator, generate three conversations, each with four new character replies. |
-| `/branch` | Fork the selected document or conversation without generating. |
+| `/fork` | Fork the selected document or conversation without generating. |
 | `/keep` · `/anthology` | Keep selected branches or browse the curated anthology. |
 | `/edit` · `/save` · `/cancel` | Edit, save a new version, or discard the draft. |
 | `/inspect` · `/notes` | Inspect exact inputs and provenance, or open document notes. |
-| `/simulator` · `/run` | Open Simulator or start fresh conversations with its settings. |
+| `/simulator` · `/visitor` | Open Simulator or write a Visitor message into a fork. |
 | `/grid` · `/active` | View Loom outputs together or jump to active generation. |
-| `/grow` · `/grow-policy` | Explore branches with a local selector, or edit its criteria. |
-| `/loom-policy` | Configure optional conversation monitoring; off by default. |
+| `/loom 3 --tokens 512 --loops 4` | Generate three alternatives per loop; selection advances one path for four loops. |
+| `/remove` | Deselect sources, unkeep anthology entries, or confirm branch deletion. Alias: `/delete`. |
 | `/snapshot` | Export anthology documents and their provenance. |
 | `/stop` · `/restart` · `/exit` | Stop generation, restart Carla, or exit. |
 
-`/help` has the full list. Generation needs a configured model; `--tokens` sets
+[Command system](docs/commands.md) explains the complete contract; `/help` lists commands. Generation needs a configured model; `--tokens` sets
 an output ceiling, and `--turns` counts character replies rather than both speakers.
 
 ## Set up generation
@@ -97,32 +102,32 @@ or downloaded automatically. A missing model does not prevent source browsing.
 
 - **Library:** select passages from shared documents; only selected text enters
   the workspace. [Import your own text](docs/configuration.md#document-library).
-- **Branches:** `/continue --tokens 512` samples one continuation from the cursor;
-  `/loom 3 --tokens 512` samples three alternatives. `/branch` forks the current
+- **Branches:** `/loom --tokens 512` samples one continuation from the cursor;
+  `/loom 3 --tokens 512` samples three alternatives. `/fork` forks the current
   version without generating. Edits preserve ancestry.
 - **Anthology:** `/keep` retains a document for curation. Keeping is a human
   selection, not an automatic quality verdict or training step.
-- **Simulator:** `/configure` chooses documents, speakers, openings and sampling.
+- **Simulator:** `/config` chooses documents, speakers, openings and sampling.
   `/loom 3 --turns 4 --tokens 512` produces three conversations with four new
   character replies each. A visitor replies between character turns. Selecting
   an existing conversation resumes its frozen document context and history.
-  `/run` starts fresh. Multi-output runs stream into a selectable grid.
+  Select the fresh-run row to start a new conversation; a selected batch asks you to choose a conversation. Multi-output runs stream into a selectable grid.
 
-`/grow` generates candidate branches and asks a separate local instruct model to
-select which to explore next. `/grow-policy` exposes that selection specification.
-It never silently accepts documents into the anthology. Configure its model with
-`--policy-model`; see [configuration](docs/configuration.md).
+`/loom 3 --tokens 512 --loops 4` repeats candidate generation and local selection.
+The selection policy lives under `/policy`; no policy instructions enter base-model
+prompts. It never automatically keeps documents. Configure a selector before
+starting repeated loops; see [configuration](docs/configuration.md).
 
-Optional `/loom-policy` monitoring sends conversation history to Jev through
-OpenRouter. It is **off by default**. Warn and Stop actions are explicit per
-condition; built-in actions default to Warn. This is separate from Grow selection.
+Optional monitoring under `/policy` sends document context or conversation history
+to Jev through OpenRouter. It is **off by default**. Warn and Stop actions are explicit
+per condition. Monitoring and selection have separate roles and specs.
 See [data and monitoring](docs/configuration.md#optional-monitoring) before enabling it.
 
 ## What to expect
 
 - Inference uses local llama.cpp raw completions. Base-model continuations have
   no hidden assistant prompt, RAG memories or reflection step. Simulator templates
-  are explicit and inspectable; the Grow selector uses a separate chat endpoint.
+  are explicit and inspectable; the selection classifier uses a separate chat endpoint.
 - Up to four requests share one resident model, subject to memory and full
   prompt/output context reservations. This is a conservative heuristic, not an
   optimal throughput scheduler. Large budgets can serialize requests. Same-model
@@ -145,7 +150,10 @@ See [data and monitoring](docs/configuration.md#optional-monitoring) before enab
 ## Develop and contribute
 
 Track bugs and features in [GitHub Issues](https://github.com/k3nnethfrancis/carla/issues)
-and submit changes through PRs. See [development and releases](docs/development.md)
+and submit feature/fix PRs to `dev`. Reviewed changes reach `main` through promotion PRs.
+Our current focus is [data-generation stabilization](https://github.com/k3nnethfrancis/carla/milestone/1):
+UX, functional reliability and focused code review. Later stages are on hold.
+See [development and releases](docs/development.md)
 and the [Carla TUI design skill](skills/tui-design/SKILL.md).
 Run `carla --version` when reporting a problem.
 

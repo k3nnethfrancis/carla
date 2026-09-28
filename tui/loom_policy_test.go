@@ -10,7 +10,8 @@ import (
 
 func policyFixture() *model {
 	m := fixture()
-	m.data.SimulatorConfig = map[string]any{"monitor_mode": "off", "monitor_model": "jev-latest", "monitor_dimensions": []any{
+	m.data.MonitorKeySource = "environment"
+	m.data.SimulatorConfig = map[string]any{"monitor_mode": "jev", "monitor_model": "jev-latest", "monitor_dimensions": []any{
 		map[string]any{"id": "looping", "name": "Looping", "spec": "Repeating without development", "enabled": true, "action": "warn", "color": "amber", "decision": "most_likely", "threshold": .8},
 		map[string]any{"id": "custom_1", "name": "Drift", "spec": "Loses voice", "enabled": false, "action": "stop", "color": "coral", "decision": "threshold", "threshold": .9},
 	}}
@@ -21,9 +22,14 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 	m.width, m.height = 120, 36
 	m.perform("loom-policy")
 	root := m.dialog
-	root.index = 2
+	root.index = 3
 	m.submitDialog()
-	if m.dialog.kind != "loom-policy-dimension" || m.dialog.parent != root {
+	if m.dialog.kind != "loom-policy-behaviors" {
+		t.Fatal("missing behaviors page")
+	}
+	behaviors := m.dialog
+	m.submitDialog()
+	if m.dialog.kind != "loom-policy-dimension" || m.dialog.parent != behaviors {
 		t.Fatal("dimension lost parent")
 	}
 	for _, r := range m.dialog.rows {
@@ -41,10 +47,10 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 		t.Fatal("Escape skipped dimension")
 	}
 	m.closeDialog()
-	if m.dialog != root {
-		t.Fatal("Escape skipped policy")
+	if m.dialog.kind != "loom-policy-behaviors" {
+		t.Fatal("Escape skipped behaviors")
 	}
-	root.index = 3
+	m.dialog.index = 1
 	m.submitDialog()
 	found := false
 	for _, r := range m.dialog.rows {
@@ -62,9 +68,11 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 		t.Fatal("model field not focused")
 	}
 	m.closeDialog()
+	m.dialog.index = 3
+	m.submitDialog()
 	m.dialog.index = len(m.dialog.rows) - 1
 	m.submitDialog()
-	if len(m.dialog.fields) != 2 || m.dialog.kind != "loom-policy-new" {
+	if m.behaviorDraft == nil || m.dialog.kind != "loom-policy-dimension" {
 		t.Fatal("missing creation form")
 	}
 	for _, size := range [][2]int{{80, 24}, {120, 36}, {60, 18}} {
@@ -101,11 +109,11 @@ func TestLoomPolicyAlias(t *testing.T) {
 	m.focus = 3
 	m.command.SetValue("/loom-control-policy")
 	choices := m.commandChoices()
-	if len(choices) == 0 || choices[0].id != "loom-policy" {
+	if len(choices) == 0 || choices[0].id != "policy" {
 		t.Fatal(choices)
 	}
 	m.commandKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if m.dialog == nil || m.dialog.kind != "loom-policy" {
+	if m.dialog == nil || m.dialog.kind != "policy" {
 		t.Fatal("alias did not open config")
 	}
 }
@@ -127,5 +135,83 @@ func TestPulseBackoffAndCheckpointIdentity(t *testing.T) {
 	m.detectPolicy(json.RawMessage(`{"run":"r","conversation":0,"turn":1,"id":"looping","check":1}`))
 	if m.policyPulses["r:0"].Started == first {
 		t.Fatal("new checkpoint did not restart pulses")
+	}
+}
+
+func TestMonitorTimingNavigationAndSavedInterval(t *testing.T) {
+	m := policyFixture()
+	m.width, m.height = 120, 36
+	m.data.SimulatorConfig["monitor_interval_tokens"] = float64(768)
+	m.openLoomPolicy()
+	root := m.dialog
+	root.index = 2
+	m.submitDialog()
+	timing := m.dialog
+	if timing.kind != "loom-policy-timing" || timing.parent != root || len(timing.rows) != 3 {
+		t.Fatal("missing timing page")
+	}
+	timing.index = 2
+	m.submitDialog()
+	if m.dialog.kind != "config-number" || m.dialog.parent != timing || m.dialog.fields[0].input.Value() != "768" {
+		t.Fatal("interval did not open")
+	}
+	m.closeDialog()
+	if m.dialog != timing {
+		t.Fatal("Escape skipped timing page")
+	}
+	m.data.SimulatorConfig["monitor_during_reply"] = false
+	m.refreshConfig()
+	if len(m.dialog.rows) != 2 || m.monitorInterval() != 768 {
+		t.Fatal("off discarded interval")
+	}
+	m.data.SimulatorConfig["monitor_during_reply"] = true
+	m.refreshConfig()
+	if len(m.dialog.rows) != 3 || !strings.Contains(m.dialog.rows[2].label, "768") {
+		t.Fatal("interval not restored")
+	}
+	m.closeDialog()
+	if m.dialog.kind != "loom-policy" {
+		t.Fatal("Escape skipped monitoring policy")
+	}
+	m.data.SimulatorConfig["monitor_interval_tokens"] = float64(0)
+	m.openMonitorTiming()
+	if !strings.Contains(m.dialog.rows[1].label, "Off") || len(m.dialog.rows) != 2 {
+		t.Fatal("legacy end-only not honored")
+	}
+}
+
+func TestMonitoringSetupGatesSettingsAndMasksKey(t *testing.T) {
+	m := policyFixture()
+	m.width, m.height = 100, 30
+	m.data.SimulatorConfig["monitor_mode"] = "off"
+	m.data.MonitorKeySource = ""
+	m.openLoomPolicy()
+	root := m.dialog
+	if len(root.rows) != 1 {
+		t.Fatal("Off exposed monitoring configuration")
+	}
+	m.submitDialog() // choose a provider
+	m.dialog.index = 1
+	m.submitDialog() // Jev needs a key first
+	if m.dialog.kind != "loom-policy-key" || m.simString("monitor_mode") != "off" {
+		t.Fatal("enabled before key setup")
+	}
+	m.dialog.fields[0].input.SetValue("secret-must-not-render")
+	if strings.Contains(m.View().Content, "secret-must-not-render") {
+		t.Fatal("key exposed in terminal")
+	}
+	m.closeDialog()
+	if m.dialog != root || m.simString("monitor_mode") != "off" {
+		t.Fatal("cancel changed configuration")
+	}
+	m.data.SimulatorConfig["monitor_mode"] = "jev"
+	m.openLoomPolicy()
+	if len(m.dialog.rows) != 2 || m.dialog.rows[1].id != "key" {
+		t.Fatal("legacy Jev without key exposed options")
+	}
+	m.data.MonitorKeySource = "environment"
+	m.openLoomPolicy()
+	if len(m.dialog.rows) < 4 || m.dialog.rows[2].id != "timing" {
+		t.Fatal("environment key did not unlock settings")
 	}
 }

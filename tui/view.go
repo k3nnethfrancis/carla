@@ -96,6 +96,9 @@ func box(title, body string, r rect, active bool) string {
 	return style.Render(strings.Join(contents, "\n"))
 }
 func (m *model) renderDocument(width int) string {
+	if m.section == 4 && m.editing == "" {
+		return m.evaluationView(width)
+	}
 	if m.section == 3 && m.editing == "" {
 		return m.conversationDocument(width)
 	}
@@ -157,6 +160,10 @@ func (m *model) reflow() {
 			}
 			m.editor.SetWidth(width)
 			m.editor.SetHeight(height)
+			if m.editing != "" {
+				// Rewrap changes visual row offsets; keep the cursor visible on resize.
+				m.editor, _ = m.editor.Update(nil)
+			}
 		case 2:
 			m.inspector.SetWidth(width)
 			m.inspector.SetHeight(height)
@@ -184,10 +191,17 @@ func (m *model) navigation(r rect) string {
 		item := rows[i]
 		label := strings.Repeat(" ", item.depth) + safe(item.label)
 		label = line(label, r.w-4)
+		if item.kind == "evaluation" {
+			if strings.Contains(item.label, "PASS") {
+				label = m.aiStyle().Render(label)
+			} else if strings.Contains(item.label, "FAIL") || strings.Contains(item.label, "ERROR") {
+				label = m.accent("#A84F39", "#DB937C").Render(label)
+			}
+		}
 		if i == mIndex {
 			label = selectedStyle.Render(label)
 		}
-		if item.kind == "conversation" {
+		if item.kind == "conversation" && strings.Contains(item.label, "! ") {
 			label = m.pulseLabel(item.id, label)
 		}
 		lines = append(lines, label)
@@ -201,6 +215,22 @@ func (m *model) navigation(r rect) string {
 	footer := fmt.Sprintf("%d selected · CTRL+F filter", len(m.data.Selected))
 	if m.section != 0 {
 		footer = fmt.Sprintf("%d items", len(rows))
+		if m.section == 3 {
+			count := 0
+			if m.loomConversation != nil {
+				count = 1
+			}
+			footer = fmt.Sprintf("%d selected · /clear", count)
+		}
+		if m.section == 4 {
+			count := 0
+			for _, selected := range m.evalSelection {
+				if selected {
+					count++
+				}
+			}
+			footer = fmt.Sprintf("%d selected · ENTER opens", count)
+		}
 		if m.section == 1 || m.section == 2 {
 			footer = fmt.Sprintf("%d selected · %s actions", len(m.selectedBranches()), m.keyLabel("nav.enter"))
 		}
@@ -283,12 +313,28 @@ func (m *model) renderDialog() string {
 		if d.kind == "keys" {
 			footer = "ENTER bind · CTRL+S save · ESC cancel"
 		}
-		if d.kind == "sim-documents" {
+		if d.kind == "loom-policy-timing" {
+			action := "toggle"
+			if len(d.rows) > 0 && d.rows[d.index].id == "interval" {
+				action = "edit interval"
+			}
+			footer = "↑↓ choose · " + m.keyLabel("nav.enter") + " " + action + " · " + m.keyLabel("nav.back") + " back"
+		}
+		if choice, ok := m.dialogChoice(); ok {
+			footer = "SPACE / ←→ change · ENTER open · ESC back"
+			if choice.toggle {
+				footer = "SPACE / ←→ / ENTER toggle · ESC back"
+			}
+		}
+		if d.choicePicker() {
+			footer = "←→ choose · SPACE / ENTER apply · ESC back"
+		}
+		if d.kind == "sim-documents" || d.kind == "eval-judges" || d.kind == "eval-add-items" {
 			footer = "SPACE select · CTRL+S save · ESC cancel"
 		}
 		if d.query != "" {
 			footer = "Filter: " + d.query + " · " + footer
-		} else if d.kind != "keys" && d.kind != "delete" && !strings.HasPrefix(d.kind, "setup-") {
+		} else if d.kind != "keys" && d.kind != "delete" && d.kind != "loom-policy-timing" && !strings.HasPrefix(d.kind, "setup-") {
 			footer = "Type to filter · " + footer
 		}
 		body = append(body, footer)
@@ -312,6 +358,9 @@ func (m *model) renderDialog() string {
 			body = append(body, bold.Render(label), value, "")
 		}
 		footer := m.keyLabel("nav.enter") + " next · " + m.keyLabel("save") + " save · " + m.keyLabel("nav.back") + " cancel"
+		if d.kind == "loom-policy-key" {
+			footer = m.keyLabel("nav.enter") + " save & enable · " + m.keyLabel("nav.back") + " cancel"
+		}
 		if d.kind == "import" {
 			footer = "ENTER next/import · CTRL+ENTER import · ESC cancel"
 			if message, ok := d.args["error"].(string); ok {
@@ -334,7 +383,16 @@ func (m *model) renderDialog() string {
 		if d.kind == "config-number" {
 			footer = "↑↓ adjust · ←→ ×10 · ENTER save · ESC cancel"
 		}
-		if d.kind == "sim-documents" {
+		if choice, ok := m.dialogChoice(); ok {
+			footer = "SPACE / ←→ change · ENTER open · ESC back"
+			if choice.toggle {
+				footer = "SPACE / ←→ / ENTER toggle · ESC back"
+			}
+		}
+		if d.choicePicker() {
+			footer = "←→ choose · SPACE / ENTER apply · ESC back"
+		}
+		if d.kind == "sim-documents" || d.kind == "eval-judges" || d.kind == "eval-add-items" {
 			footer = "No anthology documents. Keep a branch first. ESC close"
 		}
 		body = append(body, line(footer, r.w-4))
@@ -355,7 +413,7 @@ func (m *model) View() tea.View {
 	}
 	l := m.layout()
 	parts := []string{}
-	sections := []string{"Library", "Branches", "Anthology", "Simulator"}
+	sections := []string{"Library", "Branches", "Anthology", "Simulator", "Evaluate"}
 	for _, p := range l.panels {
 		title, body := "", ""
 		switch p.kind {
@@ -374,15 +432,15 @@ func (m *model) View() tea.View {
 			if m.section == 3 && m.editing == "" {
 				title = "Simulator"
 				if m.conversationOpen {
-					title = fmt.Sprintf("Conversation %d", m.gridSelection+1)
+					title = m.conversationHeading(p.box.w - 6)
 				}
 			}
 			body = m.document.View() + "\n" + "Source · " + m.aiStyle().Render("AI") + " · " + m.humanStyle().Render("Human edits")
-			if m.section == 3 {
+			if m.section == 3 || m.section == 4 {
 				body = m.document.View()
 			}
 			if m.editing != "" {
-				title += " · editing"
+				title += fmt.Sprintf(" · line %d/%d", m.editor.Line()+1, m.editor.LineCount())
 				body = m.editor.View()
 			}
 		case 2:
@@ -421,6 +479,22 @@ func (m *model) View() tea.View {
 	} else {
 		modelName = "Next: " + modelName
 	}
+	if m.section == 4 {
+		items, training := 0, 0
+		for _, group := range m.data.EvaluationSets {
+			if m.evalCollection != "" && group.ID != m.evalCollection {
+				continue
+			}
+			for _, item := range group.Items {
+				items++
+				if item.Training {
+					training++
+				}
+			}
+		}
+		modelName = fmt.Sprintf("%d collections · %d items · %d training", len(m.data.EvaluationSets), items, training)
+	}
+
 	header := line(bold.Render(heading), max(20, m.width/2)) + dim.Render(line(safe(modelName), max(1, m.width-2-max(20, m.width/2))))
 	lines := []string{"", " " + header, m.sectionBar(), lipgloss.NewStyle().PaddingLeft(1).Render(lipgloss.JoinHorizontal(lipgloss.Top, joinPanels(parts)...)), " " + dim.Render(line(m.targetLabel(), m.width-2))}
 	if m.section == 0 && m.editing == "" {
@@ -452,6 +526,13 @@ func (m *model) View() tea.View {
 	if !m.sectionFocus && m.editing == "" && m.focus != 3 {
 		if m.section == 0 {
 			legend = m.keyLabel("select") + " select · " + m.keyLabel("nav.enter") + " to Branches · " + m.keyLabel("nav.next") + " next"
+		} else if m.section == 4 {
+			legend = m.keyLabel("select") + " select · " + m.keyLabel("nav.enter") + " opens · /eval · /config"
+			if m.focus == 1 {
+				legend = "↑↓ scroll · TAB next · /inspect · /notes"
+			}
+		} else if m.section == 3 {
+			legend = m.keyLabel("select") + " select/clear · " + m.keyLabel("nav.enter") + " select & open · /clear"
 		} else if m.section == 1 || m.section == 2 {
 			legend = m.keyLabel("select") + " select · " + m.keyLabel("nav.enter") + " open/actions · " + m.keyLabel("nav.next") + " next"
 			if m.focus == 1 {
@@ -462,9 +543,15 @@ func (m *model) View() tea.View {
 
 	if m.gridVisible() && m.focus == 1 && !m.sectionFocus {
 		legend = "Arrows select · " + m.keyLabel("nav.enter") + " open · /grid return · " + m.keyLabel("nav.next") + " next"
+		if m.section == 3 {
+			legend = "Arrows browse · " + m.keyLabel("select") + " select/clear · " + m.keyLabel("nav.enter") + " open · ESC list"
+		}
 	}
-	if m.section == 3 && m.conversationOpen && m.focus == 1 {
-		legend = "ESC grid/list · /loom continue · /branch fork · /edit · /visitor"
+	if m.section == 3 && m.conversationOpen && m.focus == 1 && m.editing == "" {
+		legend = "ESC grid/list · SPACE select/clear · /loom · /fork · /edit · /visitor"
+	}
+	if m.editing != "" && m.editing != "document" {
+		legend = "↑↓ / PGUP/PGDN scroll · /save · ESC cancel"
 	}
 	if m.notesOpen && m.focus == 0 {
 		legend = "↑↓ notes · ENTER edit note · + new · PGUP/PGDN scroll · TAB document"
@@ -499,7 +586,7 @@ func joinPanels(parts []string) []string {
 	return out
 }
 
-var sectionNames = []string{"Library", "Branches", "Anthology", "Simulator"}
+var sectionNames = []string{"Library", "Branches", "Anthology", "Simulator", "Evaluate"}
 
 func (m *model) sectionLabels() []string {
 	labels := []string{}

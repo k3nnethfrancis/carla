@@ -9,6 +9,29 @@ import (
 )
 
 func (m *model) toggleTarget() tea.Cmd {
+	if m.section == 3 {
+		if target, ok := m.conversationTarget(); ok {
+			chosen := conversationParent{Run: target["run"].(string), Conversation: target["conversation"].(int)}
+			if m.loomConversation != nil && *m.loomConversation == chosen {
+				m.loomConversation = nil
+			} else {
+				m.loomConversation = &chosen
+			}
+		}
+		m.reflow()
+		return nil
+	}
+	if m.section == 4 && !m.data.Busy {
+		r := m.targetRow()
+		if r.kind == "evaluation" {
+			if m.evalSelection == nil {
+				m.evalSelection = map[string]bool{}
+			}
+			m.evalSelection[r.id] = !m.evalSelection[r.id]
+		}
+		m.reflow()
+		return nil
+	}
 	if m.notesOpen {
 		return nil
 	}
@@ -196,6 +219,7 @@ func (m *model) forkDocument() tea.Cmd {
 		m.editor.Blur()
 		m.commandDocument = ""
 		m.enterLoom = true
+		m.section = 1
 	}
 	return cmd
 }

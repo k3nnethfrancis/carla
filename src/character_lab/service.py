@@ -5,20 +5,21 @@ emission, so a slow frontend applies backpressure rather than dropping tokens.
 """
 
 import asyncio
-import copy
 import json
 import math
 import random
+from contextlib import aclosing
 from pathlib import Path
-from uuid import uuid4
 
-from . import monitor, simulator
+from . import credentials, evaluation, evaluation_sets, simulator
 from .domain import Project, display_title, generation_status, library, now
+from .exploration import explore, require_selector
 from .model_metadata import native_context
 from .models import available_models
-from .policy import DEFAULT_PROMPT, DEFAULT_SPEC, default_model, grow
+from .policy import DEFAULT_PROMPT, DEFAULT_SPEC, default_model
 from .runtime import Runtime
 from .scheduling import parallel_map
+from .stream_monitor import DocumentMonitor
 from .workspaces import Workspaces, acquire
 
 DEFAULT_SETTINGS = dict(count=3, n_predict=-1, temperature=1.0, top_p=0.98, rounds=1)
@@ -73,6 +74,7 @@ class Session:
             project.data["models"] = catalog
             project.data["model_alias"] = model["alias"]
             project.data["selected"] = []
+            evaluation_sets.migrate(project)
             project.save()
         except Exception:
             lock.close()
@@ -146,6 +148,11 @@ class Session:
             settings={**DEFAULT_SETTINGS, **p.data.get("settings", {})},
             model_context=self.runtime.model["context"],
             native_context=native_context(self.runtime.model),
+            evaluators=evaluation.definitions(p),
+            evaluations=evaluation.summaries(p),
+            evaluation_sets=evaluation_sets.summaries(p),
+            active_evaluation=p.data.get("active_evaluation", ""),
+            evaluation_prompt=evaluation.DEFAULT_PROMPT,
             policy_spec=p.data.get("policy_spec", DEFAULT_SPEC),
             policy_prompt=p.data.get("policy_prompt", DEFAULT_PROMPT),
             policy_model=self.policy_model["name"],
@@ -155,6 +162,7 @@ class Session:
                 for r in p.data.get("policy_runs", [])
             ],
             simulator_config=simulator.configuration(p, self.runtime.model["alias"]),
+            monitor_key_source=credentials.openrouter_key()[1],
             simulation_runs=[
                 simulator.summary(r) for r in p.data.get("simulation_runs", [])
             ],
@@ -169,8 +177,8 @@ class Session:
             active_node=self.active_node,
         )
 
-    async def snapshot(self):
-        await self.emit("state", self.state())
+    async def snapshot(self, request_id=None):
+        await self.emit("state", self.state(), request_id)
 
     async def execute(self, command, args, request_id):
         """Short mutations are serialized by the socket reader; jobs run separately."""
@@ -183,10 +191,15 @@ class Session:
             "node.open",
             "simulator.open",
             "simulator.inspect",
+            "evaluation.open",
+            "evaluation.item.open",
         }:
             raise ValueError(
                 "Stop the active operation before changing the workspace or document"
             )
+        if command.startswith("evaluation."):
+            await evaluation.dispatch(self, command, args, request_id)
+            return
         if command.startswith("setup."):
             from .setup_service import dispatch
 
@@ -203,7 +216,7 @@ class Session:
             )
             self.sources = library()
             await self.emit("library", self.sources, request_id)
-            await self.snapshot()
+            await self.snapshot(request_id)
             await self.emit(
                 "library.imported",
                 {"key": source["key"], "title": source["title"]},
@@ -218,119 +231,18 @@ class Session:
             or (args["n_predict"] != -1 and args["n_predict"] < 1)
         ):
             raise ValueError("Output tokens must be a positive integer or Max (-1)")
-        if command.startswith("loom-policy."):
-            config = simulator.configuration(p, self.runtime.model["alias"])
-            items = monitor.dimensions(config)
-            if command == "loom-policy.add":
-                items.append(
-                    dict(
-                        id="custom_" + uuid4().hex,
-                        name=args["name"],
-                        spec=args["spec"],
-                        enabled=True,
-                        action="warn",
-                        color="amber",
-                        decision="most_likely",
-                        threshold=0.8,
-                    )
-                )
-            else:
-                item = next((d for d in items if d["id"] == args["id"]), None)
-                if item is None:
-                    raise ValueError("Dimension not found")
-                if command == "loom-policy.delete":
-                    if item["id"] in monitor.BUILTINS:
-                        raise ValueError("Default dimensions cannot be deleted")
-                    items.remove(item)
-                elif command == "loom-policy.update":
-                    item.update({k: v for k, v in args.items() if k != "id"})
-                else:
-                    raise ValueError("Unknown policy operation")
-            args = {"monitor_dimensions": items}
-            command = "simulator.configure"
-        if command == "simulator.configure":
-            config = {**simulator.configuration(p, self.runtime.model["alias"]), **args}
-            simulator.validate(config, p, self.validate_settings)
-            p.data["simulator_config"] = config
-            p.save()
-            await self.snapshot()
+        if command.startswith("simulator.") or command.startswith("loom-policy."):
+            from .simulator_commands import dispatch
+
+            await dispatch(self, command, args, request_id)
             return
-        if command == "simulator.fork":
-            seed = simulator.conversation_seed(p, args["run"], args["conversation"])
-            run = simulator.fork_conversation(p, seed, args)
-            await self.snapshot()
-            await self.emit(
-                "simulation",
-                simulator.view(run) | {"opened": True, "open_conversation": 0},
-                request_id,
-            )
-            return
-        if command == "simulator.open":
-            run = next(
-                (
-                    r
-                    for r in p.data.get("simulation_runs", [])
-                    if r["id"] == args["run"]
-                ),
-                None,
-            )
-            if run is None:
-                raise ValueError("Simulation run not found")
-            index = args.get("conversation")
-            if index is not None and (
-                type(index) is not int or not 0 <= index < len(run["conversations"])
-            ):
-                raise ValueError("Conversation not found")
-            await self.emit(
-                "simulation",
-                simulator.view(run)
-                | {"opened": True, "open_conversation": args.get("conversation")},
-                request_id,
-            )
-            return
-        if command == "simulator.inspect":
-            run = next(
-                r for r in p.data.get("simulation_runs", []) if r["id"] == args["run"]
-            )
-            await self.emit("inspection", run, request_id)
-            return
-        if command in {"simulator.run", "simulator.preview"}:
-            self.active_node = None
-            config = copy.deepcopy(
-                simulator.configuration(p, self.runtime.model["alias"])
-            )
-            seed = None
-            if command == "simulator.run" and "run" in args:
-                seed = simulator.conversation_seed(p, args["run"], args["conversation"])
-                config[
-                    "documents"
-                ] = []  # The frozen ancestor anthology is carried by seed.
-            if command == "simulator.preview":
-                config.update(
-                    preview=True,
-                    opening_mode="generated",
-                    conversations=3,
-                    documents=[],
-                )
-            if "count" in args:
-                config["conversations"] = args["count"]
-            if "turns" in args:
-                config["turns"] = args["turns"]
-            if "n_predict" in args:
-                for role in ("character", "visitor"):
-                    config[role + "_settings"]["n_predict"] = args["n_predict"]
-            simulator.validate(config, p, self.validate_settings)
-            if not config["documents"] and not config.get("preview") and not seed:
-                raise ValueError("Select at least one anthology document in Simulator")
-            self.runtime.close()
-            self.job_id = request_id
-            self.job = asyncio.create_task(self.simulate(config, seed))
-            await self.snapshot()
-            return
+        eval_plan = (
+            evaluation_sets.plan(self, args["eval"]) if args.get("eval") else None
+        )
         if command == "grow.selector":
             if args["alias"] != self.policy_model["alias"]:
                 raise ValueError("Selector model is not configured")
-            await self.snapshot()
+            await self.snapshot(request_id)
             return
         if command == "grow.configure":
             settings = {
@@ -342,7 +254,7 @@ class Session:
             self.validate_settings(settings)
             p.data["grow_settings"] = settings
             p.save()
-            await self.snapshot()
+            await self.snapshot(request_id)
             return
         if command == "cancel":
             if self.busy:
@@ -351,9 +263,10 @@ class Session:
                 try:
                     await job
                 except asyncio.CancelledError:
+                    evaluation.interrupt_pending(self.project)
                     # Cancellation can arrive before the task's first instruction.
                     self.job = None
-                    await self.snapshot()
+                    await self.snapshot(request_id)
                     await self.emit("operation", {"stage": "stopped"}, self.job_id)
             return
         if command == "quit":
@@ -554,6 +467,18 @@ class Session:
             await self.emit("inspection", record, request_id)
             return
         elif command in {"continue", "grow"}:
+            loops = args.get(
+                "loops",
+                p.data.get("grow_settings", {}).get(
+                    "rounds", p.data.get("settings", {}).get("rounds", 1)
+                )
+                if command == "grow"
+                else 1,
+            )
+            if type(loops) is not int or loops < 1:
+                raise ValueError("Loops must be a positive integer")
+            if loops > 1:
+                require_selector(self.policy_model)
             override = args.get("count")
             if override is not None and (type(override) is not int or override < 1):
                 raise ValueError("Generation count must be a positive integer")
@@ -589,13 +514,22 @@ class Session:
             settings["count"] = count
             if "n_predict" in args:
                 settings["n_predict"] = args["n_predict"]
+            self.validate_settings(settings)
             self.job_id = request_id
             self.job = asyncio.create_task(
-                self.generate(command, node["id"], node["text"][:end], settings, count)
+                self.document_loom(
+                    command,
+                    node["id"],
+                    node["text"][:end],
+                    settings,
+                    count,
+                    loops,
+                    eval_plan,
+                )
             )
         else:
             raise ValueError("Unknown command: " + command)
-        await self.snapshot()
+        await self.snapshot(request_id)
 
     @staticmethod
     def validate_settings(s):
@@ -622,7 +556,7 @@ class Session:
             raise ValueError("Document changed before the edit was saved")
         self.project.edit(node["id"], args["text"])
 
-    async def generate(self, command, parent, prefix, settings, count):
+    async def generate(self, command, parent, prefix, settings, count, *, nested=False):
         p = self.project
         self.view_node = None
         job_id = self.job_id
@@ -634,135 +568,121 @@ class Session:
         message = ""
         try:
             await self.emit("operation", dict(stage="loading", command=command), job_id)
-            if command == "grow":
-                seen = {}
+            await self.emit("loom.start", dict(count=count), job_id)
+            branches = []
 
-                async def progress(_message, candidate):
-                    if candidate:
-                        key = candidate["id"]
-                        self.active_node = key
-                        if key not in seen:
-                            seen[key] = len(candidate["prompt"])
-                            await self.snapshot()
-                        delta = candidate["text"][seen[key] :]
-                        seen[key] = len(candidate["text"])
-                        if delta:
-                            await self.emit("token", dict(node=key, text=delta), job_id)
-                    step = p.data["policy_runs"][-1]["steps"][-1]
-                    await self.emit(
-                        "operation",
-                        dict(
-                            stage=step["status"],
-                            round=len(p.data["policy_runs"][-1]["steps"]),
-                        ),
-                        job_id,
-                    )
+            async def schedule(data):
+                await self.emit("capacity", data, job_id)
 
-                await grow(
-                    p,
-                    parent,
+            self.runtime.on_schedule = schedule
+
+            async def sample(i):
+                nonlocal empty_count, output_chars
+                branch_settings = {**settings, "seed": random.randrange(2**31)}
+                node = p.add(
                     prefix,
-                    self.runtime,
-                    self.policy_model,
-                    p.data.get("policy_spec", DEFAULT_SPEC),
-                    p.data.get("policy_prompt", DEFAULT_PROMPT),
-                    count,
-                    settings["rounds"],
-                    settings,
-                    progress,
-                    runtime_factory=self.runtime_factory,
+                    parent=parent,
+                    fork_offset=len(prefix),
+                    prompt=prefix,
+                    settings=branch_settings,
+                    trace={},
+                )
+                branches.append(node)
+                node["loom_index"] = i
+                node["status"] = "generating"
+                self.active_node = node["id"]
+                p.save()
+                await self.emit(
+                    "loom.branch",
+                    dict(
+                        index=i,
+                        id=node["id"],
+                        title=f"Branch {i + 1} · {node['id'][:6]}",
+                        text="",
+                        status="generating",
+                    ),
+                    job_id,
+                )
+                await self.snapshot()
+                await self.emit(
+                    "operation",
+                    dict(stage="generating", index=i + 1, count=count),
+                    job_id,
+                )
+                try:
+                    config = simulator.configuration(p, self.runtime.model["alias"])
+
+                    async def monitor_event(kind, data):
+                        await self.emit(kind, data, job_id)
+
+                    async with DocumentMonitor(
+                        config, p, node, monitor_event
+                    ) as watcher:
+                        async with aclosing(
+                            self.runtime.stream(prefix, node["settings"], node["trace"])
+                        ) as stream:
+                            while True:
+                                try:
+                                    chunk = await watcher.next_chunk(stream)
+                                except StopAsyncIteration:
+                                    break
+                                node["text"] += chunk
+                                watcher.turn["text"] += chunk
+                                p.stream_delta(
+                                    {"node": node["id"]}, chunk, node["trace"]
+                                )
+                                await self.emit(
+                                    "token",
+                                    dict(node=node["id"], text=chunk),
+                                    job_id,
+                                )
+                                watcher.checkpoint()
+                        await watcher.finish()
+                        node["policy_stopped"] = watcher.stopped
+                except asyncio.CancelledError:
+                    node.update(status="stopped", finished=now())
+                    p.save()
+                    raise
+                except Exception as exc:
+                    node.update(status="failed", error=str(exc), finished=now())
+                    p.save()
+                    raise
+                node["status"] = "complete"
+                node["status"] = (
+                    "policy_stopped"
+                    if node.get("policy_stopped")
+                    else generation_status(node)
+                )
+                empty_count += node["status"] == "empty"
+                output_chars += len(node["text"]) - len(prefix)
+                node["finished"] = now()
+                p.save()
+                await self.emit(
+                    "loom.branch",
+                    dict(
+                        index=i,
+                        id=node["id"],
+                        title=f"Branch {i + 1} · {node['id'][:6]}",
+                        text=node["text"][len(prefix) :],
+                        status=node["status"],
+                    ),
+                    job_id,
+                )
+
+            await parallel_map(range(count), sample)
+            node = branches[-1]
+            if empty_count == count:
+                events = node.get("trace", {}).get("events", [])
+                eos = count == 1 and events and events[-1].get("stop_type") == "eos"
+                message = (
+                    "No new text — model ended immediately (EOS)"
+                    if eos
+                    else "No new text — all continuations were empty"
                 )
             else:
-                await self.emit("loom.start", dict(count=count), job_id)
-                branches = []
-
-                async def schedule(data):
-                    await self.emit("capacity", data, job_id)
-
-                self.runtime.on_schedule = schedule
-
-                async def sample(i):
-                    nonlocal empty_count, output_chars
-                    branch_settings = {**settings, "seed": random.randrange(2**31)}
-                    node = p.add(
-                        prefix,
-                        parent=parent,
-                        fork_offset=len(prefix),
-                        prompt=prefix,
-                        settings=branch_settings,
-                        trace={},
-                    )
-                    branches.append(node)
-                    node["loom_index"] = i
-                    node["status"] = "generating"
-                    self.active_node = node["id"]
-                    p.save()
-                    await self.emit(
-                        "loom.branch",
-                        dict(
-                            index=i,
-                            id=node["id"],
-                            title=f"Branch {i + 1} · {node['id'][:6]}",
-                            text="",
-                            status="generating",
-                        ),
-                        job_id,
-                    )
-                    await self.snapshot()
-                    await self.emit(
-                        "operation",
-                        dict(stage="generating", index=i + 1, count=count),
-                        job_id,
-                    )
-                    try:
-                        async for chunk in self.runtime.stream(
-                            prefix, node["settings"], node["trace"]
-                        ):
-                            node["text"] += chunk
-                            p.stream_delta({"node": node["id"]}, chunk, node["trace"])
-                            await self.emit(
-                                "token", dict(node=node["id"], text=chunk), job_id
-                            )
-                    except asyncio.CancelledError:
-                        node.update(status="stopped", finished=now())
-                        p.save()
-                        raise
-                    except Exception as exc:
-                        node.update(status="failed", error=str(exc), finished=now())
-                        p.save()
-                        raise
-                    node["status"] = "complete"
-                    node["status"] = generation_status(node)
-                    empty_count += node["status"] == "empty"
-                    output_chars += len(node["text"]) - len(prefix)
-                    node["finished"] = now()
-                    p.save()
-                    await self.emit(
-                        "loom.branch",
-                        dict(
-                            index=i,
-                            id=node["id"],
-                            title=f"Branch {i + 1} · {node['id'][:6]}",
-                            text=node["text"][len(prefix) :],
-                            status=node["status"],
-                        ),
-                        job_id,
-                    )
-
-                await parallel_map(range(count), sample)
-                node = branches[-1]
-                if empty_count == count:
-                    events = node.get("trace", {}).get("events", [])
-                    eos = count == 1 and events and events[-1].get("stop_type") == "eos"
-                    message = (
-                        "No new text — model ended immediately (EOS)"
-                        if eos
-                        else "No new text — all continuations were empty"
-                    )
-                else:
-                    message = f"Added {output_chars} characters across {count - empty_count} continuation(s)"
-                    if empty_count:
-                        message += f"; {empty_count} empty"
+                message = f"Added {output_chars} characters across {count - empty_count} continuation(s)"
+                if empty_count:
+                    message += f"; {empty_count} empty"
         except asyncio.CancelledError:
             status = "stopped"
         except Exception as exc:
@@ -799,7 +719,8 @@ class Session:
             if status != "complete":
                 self.runtime.close()
             # Clear ownership before the final snapshot so controls become available.
-            self.job = None
+            if not nested:
+                self.job = None
             if self.view_node:
                 p.data["current"] = self.view_node
                 self.view_node = None
@@ -811,6 +732,72 @@ class Session:
                 job_id,
             )
 
+        if nested and status == "stopped":
+            raise asyncio.CancelledError
+        if nested and status == "failed":
+            raise ValueError("Loom batch failed; partial outputs retained")
+        return branches
+
+    async def document_loom(
+        self, command, parent, prefix, settings, count, loops, eval_plan=None
+    ):
+        if loops == 1 and not eval_plan:
+            return await self.generate("continue", parent, prefix, settings, count)
+        before = {n["id"] for n in self.project.data["nodes"]}
+
+        async def emit(kind, data):
+            await self.emit(kind, data, self.job_id)
+
+        async def batch(run_id, index):
+            candidates = await self.generate(
+                "continue", parent, prefix, settings, count, nested=True
+            )
+            # A selector cannot compete with an externally owned model server.
+            if self.runtime.process is None:
+                raise ValueError(
+                    "Stop the externally managed generator before switching to selection"
+                )
+            self.runtime.close()
+            for candidate in candidates:
+                candidate.update(policy_run=run_id, loop=index + 1)
+            self.project.save()
+            return [c for c in candidates if c["status"] == "complete"]
+
+        async def advance(key):
+            nonlocal parent, prefix
+            node = self.project.node(key)
+            parent, prefix = key, node["text"]
+
+        try:
+            if loops == 1:
+                await self.generate(
+                    "continue", parent, prefix, settings, count, nested=True
+                )
+            else:
+                await explore(
+                    self.project,
+                    loops,
+                    self.policy_model,
+                    self.runtime_factory,
+                    batch,
+                    advance,
+                    emit,
+                )
+            if eval_plan and not asyncio.current_task().cancelling():
+                targets = [
+                    {"node": n["id"]}
+                    for n in self.project.data["nodes"]
+                    if n["id"] not in before and n.get("status") == "complete"
+                ]
+                await evaluation_sets.after_generation(self, eval_plan, targets)
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            await emit("error", dict(message=str(exc)))
+        finally:
+            self.job = None
+            await self.snapshot()
+
     async def close(self):
         try:
             if self.busy:
@@ -819,6 +806,7 @@ class Session:
                 try:
                     await job
                 except asyncio.CancelledError:
+                    evaluation.interrupt_pending(self.project)
                     self.job = None
         finally:
             self.runtime.close()
@@ -826,16 +814,86 @@ class Session:
                 self.lock.close()
                 self.lock = None
 
-    async def simulate(self, config, seed=None):
+    async def start_simulation(self, config, seed, request_id, eval_plan=None):
+        """Take ownership of a validated run before returning to the command reader."""
+        self.active_node = None
+        self.runtime.close()
+        self.job_id = request_id
+        self.job = asyncio.create_task(self.simulate(config, seed, eval_plan))
+        await self.snapshot(request_id)
+
+    async def simulate(self, config, seed=None, eval_plan=None):
         p = self.project
+        before = {r["id"] for r in p.data.get("simulation_runs", [])}
 
         async def emit(kind, data):
             await self.emit(kind, data, self.job_id)
 
         try:
-            await simulator.generate(
-                self.project, config, self.runtime_factory, emit, seed
-            )
+            loops = config.get("loops", 1)
+            if loops == 1:
+                await simulator.generate(
+                    self.project, config, self.runtime_factory, emit, seed
+                )
+            else:
+                current_seed = seed
+                latest = None
+
+                def transcript(turns):
+                    return "".join(f"{t['role']}: {t['text']}\n\n" for t in turns)
+
+                async def batch(run_id, index):
+                    nonlocal latest
+                    latest = await simulator.generate(
+                        self.project, config, self.runtime_factory, emit, current_seed
+                    )
+                    latest.update(policy_run=run_id, loop=index + 1)
+                    p.save()
+                    if latest["status"] == "stopped":
+                        raise asyncio.CancelledError
+                    if latest["status"] != "complete":
+                        raise ValueError(
+                            latest.get("error", "Conversation batch failed")
+                        )
+                    prefix = transcript(current_seed["turns"]) if current_seed else ""
+                    return [
+                        dict(
+                            id=str(c["index"]),
+                            prompt=prefix,
+                            text=transcript(c["turns"]),
+                        )
+                        for c in latest["conversations"]
+                        if c["status"] == "complete"
+                    ]
+
+                async def advance(key):
+                    nonlocal current_seed
+                    current_seed = simulator.conversation_seed(
+                        p, latest["id"], int(key)
+                    )
+
+                await explore(
+                    p,
+                    loops,
+                    self.policy_model,
+                    self.runtime_factory,
+                    batch,
+                    advance,
+                    emit,
+                )
+            if eval_plan and not asyncio.current_task().cancelling():
+                targets = [
+                    {"run": r["id"], "conversation": c["index"]}
+                    for r in p.data.get("simulation_runs", [])
+                    if r["id"] not in before
+                    for c in r["conversations"]
+                    if c["status"] == "complete"
+                ]
+                await evaluation_sets.after_generation(self, eval_plan, targets)
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            await emit("error", dict(message=str(exc)))
         finally:
             self.job = None
             if self.view_node:

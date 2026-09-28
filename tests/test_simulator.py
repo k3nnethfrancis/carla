@@ -581,3 +581,178 @@ async def test_slow_monitor_does_not_block_sibling_progress(setup, monkeypatch):
     finally:
         release.set()
         await task
+
+
+@pytest.mark.asyncio
+async def test_policy_stop_interrupts_stalled_read_without_stopping_sibling(
+    setup, monkeypatch
+):
+    from character_lab import monitor
+
+    project, config, emit, events = setup
+    config.update(
+        conversations=2, turns=2, monitor_mode="jev", monitor_interval_tokens=1
+    )
+    config["monitor_dimensions"][0]["action"] = "stop"
+    stalled, closed = asyncio.Event(), asyncio.Event()
+    calls = 0
+
+    class Streaming(Runtime):
+        async def stream(self, prompt, settings, trace):
+            nonlocal calls
+            calls += 1
+            first = calls == 1
+            try:
+                trace["generated_tokens"] = 1
+                yield "partial" if first else "sibling reply"
+                if first:
+                    stalled.set()
+                    await asyncio.Event().wait()
+            finally:
+                if first:
+                    closed.set()
+
+    async def scan(cfg, conversation, turn):
+        if conversation["index"] == 0:
+            await stalled.wait()
+        scores = {"looping": 0.99 if conversation["index"] == 0 else 0}
+        turn["monitor"] = dict(
+            status="complete", scores=scores, detections=monitor.detections(cfg, scores)
+        )
+
+    monkeypatch.setattr(monitor, "scan", scan)
+    run = await asyncio.wait_for(
+        simulator.generate(project, config, Streaming, emit), 1
+    )
+    assert closed.is_set()
+    stopped, sibling = run["conversations"]
+    assert run["status"] == "complete"
+    assert stopped["status"] == "policy_stopped"
+    assert len(stopped["turns"]) == 2
+    assert stopped["turns"][-1]["text"] == "partial"
+    assert stopped["turns"][-1]["status"] == "policy_stopped"
+    assert sibling["status"] == "complete"
+    assert len(sibling["turns"]) == 4
+    assert (
+        Project(project.folder).data["simulation_runs"][0]["conversations"][0]["turns"][
+            -1
+        ]["text"]
+        == "partial"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("persistent_disconnect", [False, True])
+async def test_terminal_disconnect_stops_incomplete_conversations(
+    setup, persistent_disconnect
+):
+    from character_lab.backend import write_event
+
+    project, config, _, _ = setup
+    config.update(conversations=2, turns=3)
+
+    class ClosedTerminal:
+        def write(self, data):
+            pass
+
+        async def drain(self):
+            raise ConnectionResetError("Connection lost")
+
+    disconnected = False
+
+    async def emit(kind, data):
+        nonlocal disconnected
+        if kind == "simulation.token" or (persistent_disconnect and disconnected):
+            disconnected = True
+            await write_event(ClosedTerminal(), {"type": kind, "data": data})
+
+    if persistent_disconnect:
+        with pytest.raises(asyncio.CancelledError):
+            await simulator.generate(project, config, Runtime, emit)
+        run = project.data["simulation_runs"][-1]
+    else:
+        run = await simulator.generate(project, config, Runtime, emit)
+    assert run["status"] == "stopped"
+    assert "error" not in run
+    assert all(c["status"] == "stopped" for c in run["conversations"])
+    assert any(
+        t.get("text") == " A new path."
+        for c in run["conversations"]
+        for t in c["turns"]
+    )
+    assert all(
+        t["status"] in {"complete", "stopped"}
+        for c in run["conversations"]
+        for t in c["turns"]
+    )
+    assert all(r.closed for r in Runtime.instances)
+    assert (
+        json.loads(project.path.read_text())["simulation_runs"][-1]["status"]
+        == "stopped"
+    )
+
+
+@pytest.mark.asyncio
+async def test_inference_connection_failure_is_still_a_failure(setup):
+    project, config, emit, _ = setup
+
+    class BrokenModel(Runtime):
+        async def stream(self, prompt, settings, trace):
+            raise ConnectionResetError("Model connection lost")
+            yield  # Keep the runtime's asynchronous stream interface.
+
+    run = await simulator.generate(project, config, BrokenModel, emit)
+    assert run["status"] == "failed"
+    assert run["error"] == "Model connection lost"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "after,during", [(True, True), (True, False), (False, True), (False, False)]
+)
+async def test_monitor_timing_switches_are_independent(
+    setup, monkeypatch, after, during
+):
+    from character_lab import monitor
+
+    project, config, emit, _ = setup
+    config.update(
+        turns=1,
+        monitor_mode="jev",
+        monitor_interval_tokens=2,
+        monitor_after_reply=after,
+        monitor_during_reply=during,
+    )
+
+    class Tokens(Runtime):
+        async def stream(self, prompt, settings, trace):
+            for count in range(1, 4):
+                trace["generated_tokens"] = count
+                yield "x"
+                await asyncio.sleep(0)
+
+    async def scan(config, conversation, turn):
+        turn["monitor"] = {"status": "complete", "scores": {}, "detections": []}
+
+    monkeypatch.setattr(monitor, "scan", scan)
+    run = await simulator.generate(project, config, Tokens, emit)
+    turn = run["conversations"][0]["turns"][-1]
+    checks = turn.get("monitor_checks", [])
+    assert any(c["phase"] == "partial" for c in checks) == during
+    assert (
+        any(c["phase"] == "complete" or c.get("end_of_turn") for c in checks) == after
+    )
+    assert turn["text"] == "xxx" and run["status"] == "complete"
+
+
+def test_monitor_timing_defaults_and_validation(setup):
+    project, config, _, _ = setup
+    project.data["simulator_config"] = {"monitor_interval_tokens": 0}
+    restored = simulator.configuration(project, "base")
+    assert restored["monitor_interval_tokens"] == 0
+    assert restored["monitor_after_reply"] is True
+    for key in ("monitor_after_reply", "monitor_during_reply"):
+        with pytest.raises(ValueError, match="boolean"):
+            simulator.validate(
+                {**config, key: "false"}, project, Session.validate_settings
+            )

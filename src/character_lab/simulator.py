@@ -29,6 +29,8 @@ def defaults(alias):
     return dict(
         monitor_mode="off",
         monitor_interval_tokens=512,
+        monitor_after_reply=True,
+        monitor_during_reply=True,
         monitor_model="jev-latest",
         monitor_dimensions=monitor.dimensions({}),
         documents=[],
@@ -69,6 +71,9 @@ def validate(config, project, validate_settings):
     ):
         raise ValueError("Supply a monitor model")
     monitor.validate_dimensions(monitor.dimensions(config))
+    for key in ("monitor_after_reply", "monitor_during_reply"):
+        if type(config.get(key, True)) is not bool:
+            raise ValueError("Monitor timing switches must be boolean")
     interval = config.get("monitor_interval_tokens", 512)
     if type(interval) is not int or interval < 0:
         raise ValueError(
@@ -310,7 +315,11 @@ async def generate(project, config, runtime_factory, emit, seed=None):
                     runtime.stream(prompt, settings, turn["trace"])
                 ) as stream:
                     first_chunk = True
-                    async for chunk in stream:
+                    while True:
+                        try:
+                            chunk = await watcher.next_chunk(stream)
+                        except StopAsyncIteration:
+                            break
                         if first_chunk:
                             await emit(
                                 "simulation.progress",
@@ -418,6 +427,10 @@ async def generate(project, config, runtime_factory, emit, seed=None):
         for conversation in run["conversations"]:
             if conversation["status"] in {"queued", "running"}:
                 conversation["status"] = "complete"
+        if config.get("loops", 1) > 1 and runtime and runtime.process is None:
+            raise ValueError(
+                "Stop the externally managed generator before switching to selection"
+            )
         run["status"] = "complete"
     except asyncio.CancelledError:
         run["status"] = "stopped"

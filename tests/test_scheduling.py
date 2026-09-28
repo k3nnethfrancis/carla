@@ -64,7 +64,7 @@ async def test_cancel_drains_running_and_waiting_tasks():
     assert gate.active == 1 and gate.waiting == 3
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await task
+        await asyncio.wait_for(task, timeout=5)
     assert gate.active == gate.waiting == gate.tokens == 0
 
 
@@ -80,5 +80,5 @@ async def test_worker_failure_drains_other_tasks():
             await asyncio.sleep(60)
 
     with pytest.raises(ValueError, match="provider failed"):
-        await parallel_map(range(8), work)
+        await asyncio.wait_for(parallel_map(range(8), work), timeout=5)
     assert gate.active == gate.waiting == gate.tokens == 0

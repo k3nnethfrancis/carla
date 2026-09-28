@@ -9,8 +9,10 @@ For UI work, use only the relevant guidance in
 - `tui/` owns the frontend and Go interaction tests.
 - `.github/` and `scripts/` own contribution, build and release operations.
 
-Use GitHub Issues for actionable bugs/features and a focused branch/PR for changes.
-Keep research notes and experiments local; don't create a parallel repo task ledger.
+Use GitHub Issues for actionable bugs/features. Start feature/fix branches from `dev`
+and target PRs at `dev`. Promote tested changes with a separate `dev` → `main` PR.
+Current scope is data-generation stabilization; later phases are on hold. Review
+existing boundaries before proposing focused refactors. Keep research notes and experiments local; don't create a parallel repo task ledger.
 Before handing off, run `make test lint build`, exercise changed terminal journeys,
 and report the outcome, evidence and remaining gaps. Don't publish releases or
 change repository visibility merely because checks pass.

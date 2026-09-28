@@ -25,9 +25,33 @@ var allActions = []action{
 	{"visitor", "Write a visitor message in a conversation fork", ""}, {"grid", "Show Loom grid", ""}, {"loom-policy", "Configure conversation warnings and stop rules", ""},
 	{"character-sampling", "Character temperature, top-p and output tokens", ""}, {"visitor-sampling", "Visitor temperature, top-p and output tokens", ""},
 	{"import", "Import a document into Library", ""},
+	{"policy", "Monitoring, selection and evaluation criteria", ""}, {"eval", "Evaluate selected material", ""}, {"evaluations", "Evaluation datasets", "6"},
 }
 
 func (m *model) perform(id string) tea.Cmd {
+	if id == "policy" {
+		return m.openPolicy()
+	}
+	if id == "eval" {
+		return m.openEval("/eval")
+	}
+	if m.section == 4 && (id == "keep" || id == "remove" || id == "delete" || id == "notes" || id == "inspect" || id == "snapshot") {
+		if id == "delete" {
+			id = "remove"
+		}
+		return m.evalAction(id)
+	}
+	// Legacy keybindings enter the same generation operation as the command bar.
+	if id == "continue" || id == "generate" || id == "run" || id == "simulate" || id == "grow" {
+		return m.loom(generationOptions{})
+	}
+	if id == "remove" && m.section == 1 {
+		id = "delete"
+	}
+	if id == "configure" {
+		return m.openConfig()
+	}
+
 	if m.section == 3 && id == "edit" {
 		return m.editConversation(false)
 	}
@@ -46,20 +70,6 @@ func (m *model) perform(id string) tea.Cmd {
 			m.status = "Run a Loom with multiple outputs to show the grid"
 		}
 		return nil
-	}
-	if id == "configure" {
-		if m.section == 3 {
-			id = "sim-config"
-		} else {
-			id = "settings"
-		}
-	}
-	if id == "run" {
-		if m.section != 3 {
-			m.status = "Open Simulator to use /" + id
-			return nil
-		}
-		id = "simulate"
 	}
 	if id == "restart" {
 		return m.exitSession(true)
@@ -83,7 +93,7 @@ func (m *model) perform(id string) tea.Cmd {
 	if id == "cancel" {
 		return m.send("cancel", nil)
 	}
-	if m.data.Busy && !readOnlyAction(id) {
+	if m.data.Busy && !m.readOnlyAction(id) {
 		m.status = "Operation running · /stop cancels it"
 		return nil
 	}
@@ -94,7 +104,7 @@ func (m *model) perform(id string) tea.Cmd {
 		}
 		return m.send("simulator.inspect", map[string]any{"run": m.simulation.ID})
 	}
-	if documentAction(id) && (m.targetRow().kind != "node" || m.targetRow().id != m.currentID() || m.pending) {
+	if documentAction(id) && !(m.section == 3 && id == "branch") && (m.targetRow().kind != "node" || m.targetRow().id != m.currentID() || m.pending) {
 		m.status = "Select a branch and wait for its preview before /" + id
 		return m.previewTarget()
 	}
@@ -117,11 +127,6 @@ func (m *model) perform(id string) tea.Cmd {
 		return m.toggleTarget()
 	case "open":
 		return m.activate()
-	case "continue":
-		if m.cursorActive() {
-			return m.generateAtCursor(false)
-		}
-		return m.contextualAction(id)
 	case "keep", "add", "remove":
 		return m.contextualAction(id)
 	case "grow-config":
@@ -130,21 +135,16 @@ func (m *model) perform(id string) tea.Cmd {
 		return m.beginEdit("policy_spec")
 	case "sim-config":
 		return m.openSimulatorConfig()
-	case "simulate":
-		m.switchSection(3)
-		m.simulation = nil
-		m.conversationOpen = false
-		m.activeSimulation = nil
-		return m.send("simulator.run", nil)
-	case "grow":
-		m.focus = 1
-		m.section = 1
-		return m.send("grow", nil)
 	case "branch":
 		return m.forkDocument()
 	case "loom":
 		return m.loom(generationOptions{})
 	case "clear":
+		if m.section == 3 {
+			m.loomConversation = nil
+			m.reflow()
+			return nil
+		}
 		if m.selectionVisible() {
 			return m.selectionAction("clear")
 		}
@@ -184,14 +184,20 @@ func (m *model) perform(id string) tea.Cmd {
 		return m.openDialog(id)
 	case "notes":
 		return m.openNotes(true)
-	case "library", "branches", "kept", "simulator":
-		modes := map[string]int{"library": 0, "branches": 1, "kept": 2, "simulator": 3}
+	case "library", "branches", "kept", "simulator", "evaluations":
+		modes := map[string]int{"library": 0, "branches": 1, "kept": 2, "simulator": 3, "evaluations": 4}
 		return m.switchSection(modes[id])
 	}
 	return nil
 }
 
 func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	before, workspace := m.workspaceView(), m.data.Workspace.Path
+	defer func() {
+		if workspace == m.data.Workspace.Path && before != m.workspaceView() {
+			m.saveWorkspaceView()
+		}
+	}()
 	switch msg := message.(type) {
 	case policyTick:
 		return m, m.advancePolicyPulse(time.Time(msg))
@@ -207,6 +213,8 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		reset := m.flushSeedReset()
 		return m, tea.Batch(cmd, reset, m.previewTarget(), m.client.read())
 	case failure:
+		m.restoringView = false
+		m.editRequest = ""
 		m.pending = false
 		m.disconnected = true
 		if !strings.HasPrefix(m.status, "Error:") {
@@ -221,6 +229,10 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		raw := msg.String()
+		if m.editRequest != "" && raw != "ctrl+c" && m.boundAction(raw, "global") != "quit" {
+			m.status = "Saving edit…"
+			return m, nil
+		}
 		key := m.navigationKey(raw)
 		if raw == "/" && !(m.dialog != nil && (strings.HasPrefix(m.dialog.kind, "setup-") || m.dialog.kind == "import")) && (m.focus != 3 || m.dialog != nil || m.searching || m.sectionFocus) && !m.keyCapture {
 			m.editor.Blur()
@@ -243,6 +255,10 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.dialog != nil {
 			return m, m.dialogKey(msg)
+		}
+		if key == "nav.back" && m.section == 4 && m.evalCollection != "" && m.focus == 0 && !m.sectionFocus {
+			m.enterCollection("")
+			return m, nil
 		}
 		if m.sectionFocus {
 			if m.boundAction(raw, "panels") == "commands" {
@@ -408,6 +424,9 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 	case tea.PasteMsg:
+		if m.editRequest != "" {
+			return m, nil
+		}
 		if m.focus == 3 {
 			m.historyPosition = 0
 		}
@@ -416,6 +435,9 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case tea.MouseClickMsg:
+		if m.editRequest != "" {
+			return m, nil
+		}
 		if msg.Button != tea.MouseLeft {
 			return m, nil
 		}
@@ -521,6 +543,22 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.MouseWheelMsg:
+		if m.editing != "" && m.focus == 1 && m.dialog == nil && m.editRequest == "" {
+			code := tea.KeyDown
+			if msg.Button == tea.MouseWheelUp {
+				code = tea.KeyUp
+			}
+			var cmds []tea.Cmd
+			for i := 0; i < 3; i++ {
+				var cmd tea.Cmd
+				m.editor, cmd = m.editor.Update(tea.KeyPressMsg{Code: code})
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
+		if m.editRequest != "" {
+			return m, nil
+		}
 		var cmd tea.Cmd
 		if m.focus == 1 {
 			m.document, cmd = m.document.Update(msg)
@@ -587,6 +625,15 @@ func (m *model) dialogClick(x, y int) tea.Cmd {
 }
 
 func (m *model) nodeTitle() string {
+	if m.editing == "evaluation-new-spec" {
+		return "Evaluation criteria"
+	}
+	if strings.HasPrefix(m.editing, "evaluation-") {
+		return strings.ReplaceAll(m.editing, "-", " ")
+	}
+	if m.section == 4 {
+		return "Evaluate"
+	}
 	switch m.editing {
 	case "conversation":
 		if m.conversationEdit < 0 {
@@ -601,6 +648,12 @@ func (m *model) nodeTitle() string {
 		return "Opening generation prompt"
 	case "visitor_brief":
 		return "Visitor brief"
+	}
+	if m.editing == "monitor_spec" {
+		if name := m.dimension(m.behaviorEditID).Name; name != "" {
+			return "Behavior spec · " + name
+		}
+		return "Behavior spec"
 	}
 	if m.editing == "policy_spec" {
 		return "Selection spec"
