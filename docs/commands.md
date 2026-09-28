@@ -53,7 +53,7 @@ While typing `/lo`, the highlighted `/loom` completion already shows its argumen
 | Parameter | Meaning | Availability |
 |---|---|---|
 | Alternatives | Number of alternatives generated from the same starting point. | Library, Branches, Anthology, Simulator |
-| `--tokens N|Max` | Maximum new tokens per generation; not a required length or total conversation budget. | Library, Branches, Anthology, Simulator |
+| `--tokens N\|Max` | Maximum new tokens per generation; not a required length or total conversation budget. | Library, Branches, Anthology, Simulator |
 | `--turns N` | New Character replies per conversation alternative per loop, with Visitor messages as needed. | Simulator only |
 | `--msg "text"` / `--message "text"` | Override the first Visitor message for this fresh run; preserves the saved opener. | Simulator only, no conversation selected |
 | `--eval "name"` | Judge completed outputs using that named evaluation after generation; does not change generation prompts. | Library, Branches, Anthology, Simulator |

@@ -157,17 +157,11 @@ func (m *model) commandChoices() []action {
 		if m.section == 3 && a.id == "edit" {
 			a.label = "Edit a message in a new conversation fork"
 		}
-		if a.id == "settings" {
-			a.label = "Loom temperature, top-p, output tokens and context"
-		}
 		if a.id == "configure" {
 			a.label = "Generation models, prompts and sampling"
 			if m.section == 4 {
 				a.label = "Configure the opened evaluation and its judges"
 			}
-		}
-		if a.id == "continue" && m.section > 0 {
-			a.label = "Continue current document at cursor"
 		}
 		if a.id == "remove" && m.section == 1 {
 			a.label = fmt.Sprintf("Remove %d versions and descendants…", m.collectionCount())

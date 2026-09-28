@@ -282,7 +282,7 @@ func (m *model) renderDialog() string {
 		for len(body) < height {
 			body = append(body, "")
 		}
-		body = append(body, "↑↓ / PGUP/PGDN scroll · "+m.keyLabel("nav.back")+" back")
+		body = append(body, m.keyLabel("nav.up")+"/"+m.keyLabel("nav.down")+" scroll · "+m.keyLabel("nav.back")+" back")
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box(d.title, strings.Join(body, "\n"), r, true))
 	}
 	if len(d.rows) > 0 || d.allRows != nil {
@@ -319,7 +319,7 @@ func (m *model) renderDialog() string {
 			footer = "ESC cancel"
 		}
 		if d.kind == "help" {
-			footer = m.keyLabel("nav.up") + "/" + m.keyLabel("nav.down") + " · ENTER details · " + m.keyLabel("nav.back") + " return"
+			footer = m.keyLabel("nav.up") + "/" + m.keyLabel("nav.down") + " · " + m.keyLabel("nav.enter") + " details · " + m.keyLabel("nav.back") + " return"
 		}
 		if d.kind == "keys" {
 			footer = "ENTER bind · CTRL+S save · ESC cancel"

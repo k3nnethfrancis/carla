@@ -95,3 +95,52 @@ func TestFullCommandHelpScrollsAndReturns(t *testing.T) {
 		t.Fatal("lost command list")
 	}
 }
+
+func TestHelpWheelDoesNotMoveBackgroundTarget(t *testing.T) {
+	m := evalFixture()
+	m.width, m.height = 60, 18
+	m.section = 4
+	m.evalCollection = "set"
+	m.focus = 0
+	m.selected = 0
+	m.openHelp()
+	m.dialog.index = 1
+	m.submitDialog()
+	m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+	if m.dialog.index != 3 || m.selected != 0 {
+		t.Fatalf("help=%d background=%d", m.dialog.index, m.selected)
+	}
+	m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelUp})
+	if m.dialog.index != 0 {
+		t.Fatal(m.dialog.index)
+	}
+	m.closeDialog()
+	m.Update(tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+	if m.dialog.index != 4 || m.selected != 0 {
+		t.Fatal("help list wheel leaked")
+	}
+}
+
+func TestHelpHintsUseConfiguredBindings(t *testing.T) {
+	m := evalFixture()
+	m.data.Bindings = map[string]string{"nav.up": "k", "nav.down": "j", "nav.enter": "o", "nav.back": "q"}
+	m.openHelp()
+	frame := ansi.Strip(m.View().Content)
+	if !strings.Contains(frame, "O details") || !strings.Contains(frame, "Q return") {
+		t.Fatal(frame)
+	}
+	m.dialog.index = 1
+	m.dialogKey(tea.KeyPressMsg{Code: 'o', Text: "o"})
+	frame = ansi.Strip(m.View().Content)
+	if !strings.Contains(frame, "K/J scroll") || !strings.Contains(frame, "Q back") {
+		t.Fatal(frame)
+	}
+	m.dialogKey(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	if m.dialog.index != 1 {
+		t.Fatal("configured scroll key ignored")
+	}
+	m.dialogKey(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if m.dialog.kind != "help" {
+		t.Fatal("configured back key ignored")
+	}
+}

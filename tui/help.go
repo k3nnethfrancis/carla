@@ -93,3 +93,8 @@ func (m *model) helpKey(msg tea.KeyPressMsg) tea.Cmd {
 	m.dialog.index = max(0, min(m.dialog.index, limit))
 	return nil
 }
+
+func (m *model) scrollHelp(delta int) {
+	limit := max(0, len(m.helpLines())-(m.dialogRect().h-5))
+	m.dialog.index = max(0, min(m.dialog.index+delta, limit))
+}
