@@ -279,3 +279,12 @@ Code is [MIT licensed](LICENSE). Imported texts, model weights and generated
 artifacts retain their own applicable terms. The starter library includes third-party texts; see [source attribution](src/character_lab/seeds/README.md).
 For optional hosted monitoring and stored trace details, see
 [configuration](docs/configuration.md#optional-monitoring).
+
+## Releases
+
+Carla uses versioned source releases: `v0.1.0`, `v0.1.1`, and so on. Each reviewed
+promotion to `main` receives a new version and publishes a matching GitHub release
+after macOS/Linux checks pass. `dev` is ongoing work. See
+[GitHub releases](https://github.com/k3nnethfrancis/carla/releases) for pinned
+versions and release notes, and the [release workflow](docs/development.md#app-releases)
+for contributor instructions. Training is not yet implemented.

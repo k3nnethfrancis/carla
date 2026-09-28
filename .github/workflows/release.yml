@@ -1,15 +1,14 @@
-name: Draft release
+name: Release
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      version:
-        description: Exact app version from pyproject.toml
-        required: true
-        type: string
 permissions:
   contents: read
 concurrency:
-  group: release-${{ inputs.version }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   validate:
@@ -19,46 +18,27 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - name: Validate release identity
+      - name: Require an unused, increasing app version
         env:
-          REQUESTED_VERSION: ${{ inputs.version }}
-        run: |
-          test "$GITHUB_REF" = refs/heads/main
-          python3 - <<'PYCODE'
-          import os, re, tomllib
-          version = tomllib.load(open("pyproject.toml", "rb"))["project"]["version"]
-          if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
-              raise SystemExit("Use a numeric major.minor.patch app version")
-          if os.environ["REQUESTED_VERSION"] != version:
-              raise SystemExit("Requested release does not match pyproject.toml")
-          PYCODE
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 scripts/release.py
   checks:
+    if: github.event_name != 'pull_request'
     needs: validate
     uses: ./.github/workflows/checks.yml
-  draft:
+  publish:
     needs: checks
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: write
     steps:
-      - name: Create a draft for the tested commit
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Tag and publish the tested main commit
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          VERSION: ${{ inputs.version }}
-        run: |
-          python3 - <<'PYCODE'
-          import json, os, subprocess
-          def api(path):
-              return json.loads(subprocess.check_output(["gh", "api", "repos/" + os.environ["GH_REPO"] + path]))
-          tag = "v" + os.environ["VERSION"]
-          # Both calls must succeed: an API failure must never look like an empty list.
-          tags = json.loads(subprocess.check_output(["gh", "api", "--paginate", "--slurp", "repos/" + os.environ["GH_REPO"] + "/tags?per_page=100"]))
-          releases = json.loads(subprocess.check_output(["gh", "api", "--paginate", "--slurp", "repos/" + os.environ["GH_REPO"] + "/releases?per_page=100"]))
-          if any(t["name"] == tag for page in tags for t in page) or any(r["tag_name"] == tag for page in releases for r in page):
-              raise SystemExit("This version already has a tag or release")
-          if api("/commits/main")["sha"] != os.environ["GITHUB_SHA"]:
-              raise SystemExit("main moved during validation; rerun on current main")
-          subprocess.run(["gh", "release", "create", tag, "--target", os.environ["GITHUB_SHA"], "--title", "Carla " + tag, "--generate-notes", "--draft"], check=True)
-          PYCODE
+        run: python3 scripts/release.py --publish
