@@ -171,3 +171,8 @@ Jev judge, criteria, and (for Jev) a pass-probability threshold. Local judging a
 exposes its complete system prompt. Definitions are workspace-local and revisioned;
 existing results keep the definition used at execution time. See
 [commands](commands.md#policies-and-evaluated-datasets) for targeting and exports.
+
+Choice rows in policy configuration support Space to cycle forward and Left/Right
+to cycle backward/forward, without opening a picker. Enter still opens the full
+picker. Heartbeat toggles use the same keys; Interval opens its numeric control.
+Typing filters the list, and the filter is retained after a setting changes.

@@ -316,6 +316,15 @@ func (m *model) renderDialog() string {
 			}
 			footer = "↑↓ choose · " + m.keyLabel("nav.enter") + " " + action + " · " + m.keyLabel("nav.back") + " back"
 		}
+		if choice, ok := m.dialogChoice(); ok {
+			footer = "SPACE / ←→ change · ENTER open · ESC back"
+			if choice.toggle {
+				footer = "SPACE / ←→ / ENTER toggle · ESC back"
+			}
+		}
+		if d.choicePicker() {
+			footer = "←→ choose · SPACE / ENTER apply · ESC back"
+		}
 		if d.kind == "sim-documents" {
 			footer = "SPACE select · CTRL+S save · ESC cancel"
 		}
@@ -369,6 +378,15 @@ func (m *model) renderDialog() string {
 		}
 		if d.kind == "config-number" {
 			footer = "↑↓ adjust · ←→ ×10 · ENTER save · ESC cancel"
+		}
+		if choice, ok := m.dialogChoice(); ok {
+			footer = "SPACE / ←→ change · ENTER open · ESC back"
+			if choice.toggle {
+				footer = "SPACE / ←→ / ENTER toggle · ESC back"
+			}
+		}
+		if d.choicePicker() {
+			footer = "←→ choose · SPACE / ENTER apply · ESC back"
 		}
 		if d.kind == "sim-documents" {
 			footer = "No anthology documents. Keep a branch first. ESC close"

@@ -121,7 +121,21 @@ func (m *model) refreshConfig() {
 		return
 	}
 	m.dialog.parent = d.parent
+	// Keep a filtered choice stable when its saved value refreshes the panel.
+	if d.query != "" {
+		m.dialog.query = d.query
+		m.dialog.allRows = append([]row{}, m.dialog.rows...)
+		m.dialog.rows = filterRows(m.dialog.rows, d.query)
+	}
 	m.dialog.index = min(d.index, max(0, len(m.dialog.rows)-1))
+	if len(d.rows) > 0 {
+		for i, r := range m.dialog.rows {
+			if r.id == d.rows[d.index].id {
+				m.dialog.index = i
+				break
+			}
+		}
+	}
 }
 func (m *model) saveDialog(d *dialog, command string, args map[string]any) tea.Cmd {
 	m.dialog = d.parent

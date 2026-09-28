@@ -49,7 +49,7 @@ func (m *model) openLoomPolicy() tea.Cmd {
 	}
 	d.rows = append(d.rows,
 		row{id: "model", label: "Model · " + m.simString("monitor_model")},
-		row{id: "timing", label: "When to check · " + m.monitorTimingSummary(), preview: "Shared with document continuations; Visitor messages are not checked."},
+		row{id: "timing", label: "Heartbeat · " + m.monitorTimingSummary(), preview: "Shared with document continuations; Visitor messages are not checked."},
 	)
 	for _, item := range m.dimensions() {
 		status := "Off"
@@ -250,7 +250,7 @@ func (m *model) monitorTimingSummary() string {
 	return strings.Join(parts, " + ")
 }
 func (m *model) openMonitorTiming() tea.Cmd {
-	d := &dialog{kind: "loom-policy-timing", title: "When to check", rows: []row{}}
+	d := &dialog{kind: "loom-policy-timing", title: "Heartbeat", rows: []row{}}
 	if m.simString("monitor_mode") != "jev" {
 		d.title += " · monitoring off"
 	}
@@ -265,7 +265,7 @@ func (m *model) openMonitorTiming() tea.Cmd {
 		d.rows = append(d.rows, row{id: entry.key, label: entry.label + " · " + value, preview: entry.preview})
 	}
 	if m.monitorTimingEnabled("monitor_during_reply") {
-		d.rows = append(d.rows, row{id: "interval", label: fmt.Sprintf("Check interval · %.0f output tokens", m.monitorInterval()), preview: "Enter adjusts the interval. One check at a time; if the judge is busy, checks are coalesced rather than queued."})
+		d.rows = append(d.rows, row{id: "interval", label: fmt.Sprintf("Interval · %.0f output tokens", m.monitorInterval()), preview: "Enter adjusts the interval. One check at a time; if the judge is busy, checks are coalesced rather than queued."})
 	}
 	m.dialog = d
 	return nil
