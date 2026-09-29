@@ -707,7 +707,10 @@ func TestSlashGenerationPreservesCursorAndDraft(t *testing.T) {
 			m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 			m.command.SetValue("/" + name)
 			choices := m.commandChoices()
-			canonical := "loom"
+			canonical := "continue"
+			if name == "loom" {
+				canonical = "loom"
+			}
 			if len(choices) == 0 || choices[0].id != canonical {
 				t.Fatal("missing command", name, draft)
 			}
@@ -748,7 +751,7 @@ func TestGenerateSearchIncludesContinue(t *testing.T) {
 		for _, a := range m.commandChoices() {
 			found[a.id]++
 		}
-		if found["generate"] != 0 || found["loom"] != 1 {
+		if found["generate"] != 0 || found["continue"] != 1 {
 			t.Fatal("alias discovery missing or duplicated", query, found)
 		}
 	}
@@ -977,7 +980,7 @@ func TestSettingsPickersAndSteppers(t *testing.T) {
 
 func TestGenerationTokenArguments(t *testing.T) {
 	for input, want := range map[string]generationOptions{
-		"/continue 512":                     {Tokens: 512},
+		"/continue --tokens 512":            {Tokens: 512},
 		"/generate --tokens=90":             {Tokens: 90},
 		"/loom 5 --tokens 1024":             {Count: 5, Tokens: 1024},
 		"/loom --tokens Max -n 3 --turns 4": {Count: 3, Tokens: -1, Turns: 4},

@@ -23,7 +23,9 @@ type origin struct {
 	Kind       string
 }
 type node struct {
-	ChangeOffset                                                 int `json:"change_offset"`
+	DocumentID                                                   string `json:"document_id"`
+	RevisionOf                                                   string `json:"revision_of"`
+	ChangeOffset                                                 int    `json:"change_offset"`
 	ID, Parent, Kind, Status, Title, Text, Preview, Model, Label string
 	Kept                                                         bool
 	Origins                                                      []origin
@@ -62,7 +64,10 @@ type simulationConversation struct {
 	Turns  []simulationTurn
 }
 type simulationRun struct {
-	OpenConversation  *int `json:"open_conversation"`
+	AlternativeGroup  string `json:"alternative_group"`
+	AlternativeIndex  int    `json:"alternative_index"`
+	AlternativeCount  int    `json:"alternative_count"`
+	OpenConversation  *int   `json:"open_conversation"`
 	Parent            *conversationParent
 	ID, Status, Error string
 	Opened            bool
@@ -70,7 +75,17 @@ type simulationRun struct {
 	Preview           bool
 	Conversations     []simulationConversation
 }
+type documentSet struct {
+	ID      string
+	SetID   string `json:"set_id"`
+	Members []string
+	Parent  string
+	Action  string
+}
 type state struct {
+	DocumentHeads    map[string]string      `json:"document_heads"`
+	DocumentSetHeads map[string]string      `json:"document_set_heads"`
+	DocumentSets     []documentSet          `json:"document_sets"`
 	EvaluationSets   []evaluationCollection `json:"evaluation_sets"`
 	ActiveEvaluation string                 `json:"active_evaluation"`
 	MonitorKeySource string                 `json:"monitor_key_source"`
@@ -125,82 +140,87 @@ type dialog struct {
 type loomTile struct{ ID, Title, Text, Status string }
 
 type model struct {
-	evalCollection         string
-	evalCreating           bool
-	behaviorDraft          *loomDimension
-	behaviorEditID         string
-	behaviorCreating       string
-	evalViewedID           string
-	evaluation             *evaluationRecord
-	evaluationRaw          json.RawMessage
-	evalSelection          map[string]bool
-	evalFilter             string
-	evalEditingID          string
-	dialogRequest          string // Correlates local service form validation with its backend reply.
-	savingDialog           *dialog
-	editRequest            string // A draft stays owned by the editor until this request succeeds.
-	setupReturn            *dialog
-	conversationOpen       bool
-	simSelection           *simulationSelection
-	conversationEdit       int
-	policyPulses           map[string]policyPulse
-	policySeen             map[string]bool
-	loomTiles              []loomTile
-	loomGrid               bool
-	gridSelection          int
-	gridPinned             bool
-	commandOrigin          *commandOrigin
-	pages                  [5]*pagePosition
-	restorePage            *pagePosition
-	activeSimulation       *simulationRun
-	backgroundStatus       string
-	capacityStatus         string
-	editReturn             *dialog
-	simulation             *simulationRun
-	notesOpen              bool
-	notePending            bool
-	notesAfterOpen         bool
-	noteScroll             int
-	commandDocument        string
-	commandHistory         []string
-	historyPosition        int
-	historyDraft           string
-	resetSeeds             bool
-	branchSelection        map[string]bool
-	navigator              textarea.Model
-	cursorNode             string
-	enterLoom              bool
-	keySaving              bool
-	keyDraft               map[string]string
-	keyCapture             bool
-	keyNotice              string
-	restarting             bool
-	sectionFocus           bool
-	collapsed              map[string]bool
-	dark                   bool
-	client                 *client
-	data                   state
-	sources                []source
-	width, height          int
-	focus                  int // navigation, document, inspector, command
-	restoringView          bool
-	section                int // library, branches, anthology, simulator
-	selected, commandIndex int
-	command                textinput.Model
-	expanded               map[string]bool
-	filter                 string
-	searching              bool
-	search                 textinput.Model
-	document, inspector    viewport.Model
-	previewChangePending   bool
-	inspection             string
-	showInspector          bool
-	editor                 textarea.Model
-	editing                string
-	editNode               string
-	dialog                 *dialog
-	status                 string
-	pending, disconnected  bool
+	pendingDocumentNodes        map[string]bool
+	preserveSimulationSelection bool
+	pendingDocumentSelection    map[string]bool
+	pendingDocumentSet          string
+	evalCollection              string
+	evalCreating                bool
+	behaviorDraft               *loomDimension
+	behaviorEditID              string
+	behaviorCreating            string
+	evalViewedID                string
+	evaluation                  *evaluationRecord
+	evaluationRaw               json.RawMessage
+	evalSelection               map[string]bool
+	evalFilter                  string
+	evalEditingID               string
+	dialogRequest               string // Correlates local service form validation with its backend reply.
+	savingDialog                *dialog
+	editRequest                 string // A draft stays owned by the editor until this request succeeds.
+	setupReturn                 *dialog
+	conversationOpen            bool
+	simSelection                *simulationSelection
+	conversationEdit            int
+	policyPulses                map[string]policyPulse
+	policySeen                  map[string]bool
+	loomTiles                   []loomTile
+	loomGrid                    bool
+	gridSelection               int
+	gridPinned                  bool
+	commandOrigin               *commandOrigin
+	pages                       [5]*pagePosition
+	restorePage                 *pagePosition
+	activeSimulation            *simulationRun
+	backgroundStatus            string
+	capacityStatus              string
+	editReturn                  *dialog
+	simulation                  *simulationRun
+	notesOpen                   bool
+	notePending                 bool
+	notesAfterOpen              bool
+	noteScroll                  int
+	commandDocument             string
+	commandHistory              []string
+	historyPosition             int
+	historyDraft                string
+	resetSeeds                  bool
+	branchSelection             map[string]bool
+	navigator                   textarea.Model
+	cursorNode                  string
+	awaitingSimulation          bool
+	enterLoom                   bool
+	keySaving                   bool
+	keyDraft                    map[string]string
+	keyCapture                  bool
+	keyNotice                   string
+	restarting                  bool
+	sectionFocus                bool
+	collapsed                   map[string]bool
+	dark                        bool
+	client                      *client
+	data                        state
+	sources                     []source
+	width, height               int
+	focus                       int // navigation, document, inspector, command
+	restoringView               bool
+	section                     int // library, branches, anthology, simulator
+	selected, commandIndex      int
+	command                     textinput.Model
+	expanded                    map[string]bool
+	filter                      string
+	searching                   bool
+	search                      textinput.Model
+	document, inspector         viewport.Model
+	previewChangePending        bool
+	inspection                  string
+	showInspector               bool
+	editor                      textarea.Model
+	editing                     string
+	editNode                    string
+	dialog                      *dialog
+	status                      string
+	pending, disconnected       bool
 }
 
 func newModel(c *client) *model {
@@ -351,7 +371,7 @@ func (m *model) activate() tea.Cmd {
 		return m.perform("sim-config")
 	case "sim-run":
 		m.simSelection = nil
-		return m.perform("simulate")
+		return m.perform("loom")
 	case "conversation":
 		args, ok := m.conversationTarget()
 		if ok {
@@ -361,6 +381,15 @@ func (m *model) activate() tea.Cmd {
 			}
 			return cmd
 		}
+		return nil
+	case "simulation-group":
+		m.awaitingSimulation = false
+		m.simSelection = &simulationSelection{Group: r.id}
+		m.simulation = nil
+		m.loomGrid = false
+		m.conversationOpen = false
+		m.collapsed[r.id] = false
+		m.status = m.simulationActionLabel()
 		return nil
 	case "simulation":
 		m.selectSimulation(r.id)
@@ -376,6 +405,13 @@ func (m *model) activate() tea.Cmd {
 			m.enterLoom = true
 		}
 		return cmd
+	case "document-set":
+		m.collapsed[r.id] = false
+		m.branchSelection = map[string]bool{}
+		for _, id := range m.documentSetMembers(r.id) {
+			m.branchSelection[id] = true
+		}
+		return nil
 	case "node":
 		if r.id == m.currentID() {
 			return m.openDocumentWithNotes()
@@ -557,7 +593,25 @@ func (m *model) apply(e event) tea.Cmd {
 		if err := json.Unmarshal(e.Data, &run); err != nil {
 			return func() tea.Msg { return failure{err} }
 		}
-		newView := run.Opened || m.simulation == nil
+		if !run.Opened {
+			updated := false
+			for i := range m.data.SimulationRuns {
+				if m.data.SimulationRuns[i].ID == run.ID {
+					m.data.SimulationRuns[i].Conversations = run.Conversations
+					m.data.SimulationRuns[i].Status = run.Status
+					updated = true
+				}
+			}
+			if !updated {
+				m.data.SimulationRuns = append(m.data.SimulationRuns, runSummary{ID: run.ID, Count: len(run.Conversations), Status: run.Status, Conversations: run.Conversations, Parent: run.Parent, AlternativeGroup: run.AlternativeGroup, AlternativeIndex: run.AlternativeIndex, AlternativeCount: run.AlternativeCount})
+			}
+		}
+		newView := run.Opened || m.simulation == nil && (m.awaitingSimulation || m.simSelection == nil)
+		preserveSelection := m.preserveSimulationSelection
+		if newView {
+			m.awaitingSimulation = false
+			m.preserveSimulationSelection = false
+		}
 		if newView {
 			m.conversationOpen = run.OpenConversation != nil || len(run.Conversations) == 1
 			m.gridSelection = 0
@@ -580,12 +634,15 @@ func (m *model) apply(e event) tea.Cmd {
 			m.pending = false
 		}
 		if !run.Opened {
-			if newView {
+			if newView && !preserveSelection {
 				m.selectSimulation(run.ID)
+				if run.AlternativeGroup != "" {
+					m.simSelection = &simulationSelection{Group: run.AlternativeGroup}
+				}
 			}
 			m.activeSimulation = &run
 		}
-		if run.Opened || m.simulation == nil || m.simulation.ID == run.ID {
+		if run.Opened || newView || m.simulation != nil && m.simulation.ID == run.ID {
 			m.simulation = &run
 		}
 		if newView && !m.conversationOpen {
@@ -685,6 +742,7 @@ func (m *model) apply(e event) tea.Cmd {
 			}
 		}
 		if !m.data.Busy {
+			m.finishDocumentSelection()
 			m.capacityStatus = ""
 		}
 		createdBehavior := ""

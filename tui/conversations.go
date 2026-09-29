@@ -9,30 +9,19 @@ import (
 )
 
 type conversationParent struct {
-	Run          string
-	Conversation int
+	Run          string `json:"run"`
+	Conversation int    `json:"conversation"`
 }
 
 // A run groups sibling alternatives; a one-conversation run is a leaf. Forks
 // remain nested beneath their originating conversation, including on reload.
 func (m *model) simulationRows() []row {
 	rows := []row{{id: "config", kind: "sim-config", label: "Configure"}, {id: "run", kind: "sim-run", label: "▶ New conversation · /loom"}}
-	runs := append([]runSummary{}, m.data.SimulationRuns...)
-	if m.simulation != nil {
-		found := false
-		for i := range runs {
-			if runs[i].ID == m.simulation.ID {
-				runs[i].Conversations = m.simulation.Conversations
-				runs[i].Status = m.simulation.Status
-				found = true
-			}
-		}
-		if !found {
-			runs = append(runs, runSummary{ID: m.simulation.ID, Status: m.simulation.Status, Count: len(m.simulation.Conversations), Conversations: m.simulation.Conversations, Parent: m.simulation.Parent})
-		}
-	}
+	runs := m.simulationSummaries()
 	seen := map[string]bool{}
+	groups := map[string]bool{}
 	var addRun func(runSummary, int)
+	var addLeafRun func(runSummary, int)
 	var addChildren func(string, int, int)
 	addChildren = func(run string, index, depth int) {
 		for _, r := range runs {
@@ -42,6 +31,55 @@ func (m *model) simulationRows() []row {
 		}
 	}
 	addRun = func(r runSummary, depth int) {
+		if r.AlternativeGroup == "" {
+			addLeafRun(r, depth)
+			return
+		}
+		group := r.AlternativeGroup
+		if groups[group] {
+			return
+		}
+		groups[group] = true
+		mark := "  "
+		if m.simSelection != nil && m.simSelection.Group == group {
+			mark = "✓ "
+		}
+		arrow := "▾ "
+		if m.collapsed[group] {
+			arrow = "▸ "
+		}
+		rows = append(rows, row{id: group, kind: "simulation-group", depth: depth, label: mark + arrow + fmt.Sprintf("Loom · %d alternative sets", r.AlternativeCount)})
+		if m.collapsed[group] {
+			for _, peer := range runs {
+				if peer.AlternativeGroup == group {
+					seen[peer.ID] = true
+				}
+			}
+			return
+		}
+		for alternative := 0; alternative < r.AlternativeCount; alternative++ {
+			key := fmt.Sprintf("%s/%d", group, alternative)
+			mark = "  "
+			if m.simSelection != nil && m.simSelection.Group == key {
+				mark = "✓ "
+			}
+			arrow = "▾ "
+			if m.collapsed[key] {
+				arrow = "▸ "
+			}
+			rows = append(rows, row{id: key, kind: "simulation-group", depth: depth + 1, label: mark + arrow + fmt.Sprintf("Alternative %d", alternative+1)})
+			for _, peer := range runs {
+				if peer.AlternativeGroup == group && peer.AlternativeIndex == alternative {
+					if m.collapsed[key] {
+						seen[peer.ID] = true
+					} else {
+						addLeafRun(peer, depth+2)
+					}
+				}
+			}
+		}
+	}
+	addLeafRun = func(r runSummary, depth int) {
 		if seen[r.ID] {
 			return
 		}
@@ -171,7 +209,7 @@ func (m *model) simulatorBack() bool {
 }
 func (m *model) conversationArrow(direction string) {
 	r := m.targetRow()
-	if r.kind != "simulation" && r.kind != "conversation" {
+	if r.kind != "simulation" && r.kind != "conversation" && r.kind != "simulation-group" {
 		return
 	}
 	if direction == "right" {
@@ -378,4 +416,27 @@ func (m *model) conversationHeading(width int) string {
 	}
 	flags = ansi.Truncate(flags, max(1, width-ansi.StringWidth(title)-2), "…")
 	return title + strings.Repeat(" ", max(2, width-ansi.StringWidth(title)-ansi.StringWidth(flags))) + m.accent("#A84F39", "#DB937C").Render(flags)
+}
+
+// Merge the live run into persisted summaries without losing alternative-set metadata.
+func (m *model) simulationSummaries() []runSummary {
+	runs := append([]runSummary{}, m.data.SimulationRuns...)
+	if m.simulation != nil {
+		s := m.simulation
+		found := false
+		for i := range runs {
+			if runs[i].ID == s.ID {
+				runs[i].Conversations = s.Conversations
+				runs[i].Status = s.Status
+				found = true
+			}
+		}
+		if !found {
+			runs = append(runs, runSummary{ID: s.ID, Status: s.Status, Count: len(s.Conversations), Conversations: s.Conversations, Parent: s.Parent, AlternativeGroup: s.AlternativeGroup, AlternativeIndex: s.AlternativeIndex, AlternativeCount: s.AlternativeCount})
+		}
+	}
+	return runs
+}
+func alternativeKey(r runSummary) string {
+	return fmt.Sprintf("%s/%d", r.AlternativeGroup, r.AlternativeIndex)
 }

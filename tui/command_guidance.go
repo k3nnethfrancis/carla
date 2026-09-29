@@ -10,23 +10,27 @@ import (
 // documentation, not a second parser; regression tests exercise the shown syntax.
 func (m *model) commandArguments(id string) []string {
 	switch id {
-	case "loom":
-		count := "[branches]"
-		if m.section == 3 {
-			count = "[conversations]"
-			if m.simSelection != nil {
-				if len(m.selectedConversations()) == 1 {
-					count = "[alternatives]"
-				} else {
-					count = "selected conversations (count inferred)"
-				}
+	case "loom", "continue":
+		args := []string{}
+		if id == "loom" {
+			noun := "[alternatives]"
+			if m.section == 3 && m.simSelection == nil {
+				noun = "[conversations]"
 			}
+			if m.section == 3 && len(m.selectedConversations()) > 1 {
+				noun = "[alternative sets]"
+			}
+			args = append(args, noun)
 		}
-		args := []string{count, "--tokens N|Max"}
+		args = append(args, "--tokens N|Max", "--model alias")
 		if m.section == 3 {
-			args = append(args, "--turns N", "--msg/--message \"text\"")
+			args = append(args, "--turns N", "--visitor \"text\"", "--visitor-model alias")
 		}
-		return append(args, "--eval \"name\"", "--loops N")
+		args = append(args, "--eval \"name\"")
+		if id == "loom" {
+			args = append(args, "--loops N")
+		}
+		return args
 	case "eval":
 		return []string{"[\"evaluation name\"]", "--train-on-pass true|false"}
 	case "models":

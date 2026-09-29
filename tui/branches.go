@@ -1,6 +1,9 @@
 package main
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Walk parent links, rather than insertion order: new siblings may arrive after
 // their cousins. Collapse is UI state and never deletes a saved continuation.
@@ -18,9 +21,20 @@ func (m *model) branchRows() []row {
 		children[parent] = append(children[parent], n)
 	}
 	var rows []row
+	grouped := map[string]bool{}
+	if m.section == 1 {
+		for _, set := range m.visibleDocumentSets() {
+			for _, id := range set.Members {
+				grouped[id] = true
+			}
+		}
+	}
 	var walk func(string, int)
 	walk = func(parent string, depth int) {
 		for _, n := range children[parent] {
+			if grouped[n.ID] {
+				continue
+			}
 			label := documentLabel(n)
 			// The parent tree supplies source context; detached anthology rows
 			// and document headings retain the complete identifier.
@@ -58,10 +72,79 @@ func (m *model) branchRows() []row {
 			}
 		}
 	}
+	if m.section == 1 {
+		sets := m.visibleDocumentSets()
+		logical := []string{}
+		for _, set := range sets {
+			id := set.SetID
+			if id == "" {
+				id = set.ID
+			}
+			found := false
+			for _, old := range logical {
+				found = found || old == id
+			}
+			if !found {
+				logical = append(logical, id)
+			}
+		}
+		var addSet func(documentSet, int, string)
+		addSet = func(set documentSet, depth int, label string) {
+			arrow := "▾ "
+			if m.collapsed[set.ID] {
+				arrow = "▸ "
+			}
+			mark := "  "
+			all := len(set.Members) > 0
+			for _, id := range set.Members {
+				all = all && m.branchSelection[id]
+			}
+			if all {
+				mark = "✓ "
+			}
+			rows = append(rows, row{id: set.ID, kind: "document-set", depth: depth, label: mark + arrow + label + fmt.Sprintf(" · %d documents", len(set.Members))})
+			if m.collapsed[set.ID] {
+				return
+			}
+			for _, id := range set.Members {
+				for _, n := range m.data.Nodes {
+					if n.ID == id {
+						rows = append(rows, row{id: id, kind: "node", label: m.selectionMark(id) + documentLabel(n), depth: depth + 1, preview: n.Preview})
+						walk(id, depth+2)
+					}
+				}
+			}
+		}
+		for i, id := range logical {
+			var versions []documentSet
+			for _, set := range sets {
+				if set.SetID == id || set.SetID == "" && set.ID == id {
+					versions = append(versions, set)
+				}
+			}
+			head := versions[len(versions)-1]
+			for _, set := range versions {
+				if set.ID == m.data.DocumentSetHeads[id] {
+					head = set
+				}
+			}
+			addSet(head, 0, fmt.Sprintf("Set %d · %s", i+1, head.Action))
+			if !m.collapsed[head.ID] {
+				for _, old := range versions {
+					if old.ID != head.ID {
+						addSet(old, 1, "Previous version")
+					}
+				}
+			}
+		}
+	}
 	walk("", 0)
 	return rows
 }
 func (m *model) hasChildren(id string) bool {
+	if len(m.documentSetMembers(id)) > 0 {
+		return true
+	}
 	for _, n := range m.data.Nodes {
 		if n.Parent == id {
 			return true
@@ -100,4 +183,33 @@ func (m *model) branchArrow(key string) {
 			}
 		}
 	}
+}
+
+func (m *model) documentSetMembers(id string) []string {
+	for _, s := range m.data.DocumentSets {
+		if s.ID == id {
+			return s.Members
+		}
+	}
+	return nil
+}
+
+// Provenance retains removed members. Only complete saved groups are actionable;
+// surviving documents from incomplete groups remain reachable in their ancestry tree.
+func (m *model) visibleDocumentSets() []documentSet {
+	known := map[string]bool{}
+	for _, n := range m.data.Nodes {
+		known[n.ID] = true
+	}
+	var out []documentSet
+	for _, s := range m.data.DocumentSets {
+		complete := len(s.Members) > 0
+		for _, id := range s.Members {
+			complete = complete && known[id]
+		}
+		if complete {
+			out = append(out, s)
+		}
+	}
+	return out
 }

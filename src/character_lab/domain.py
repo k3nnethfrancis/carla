@@ -147,6 +147,12 @@ class Project:
         self.store.append(target, text, trace)
 
     def save(self):
+        # Legacy nodes were already durable versions. Give each its own logical
+        # identity without guessing that an ancestry edge meant a continuation.
+        heads = self.data.setdefault("document_heads", {})
+        for node in self.data["nodes"]:
+            node.setdefault("document_id", node["id"])
+            heads.setdefault(node["document_id"], node["id"])
         assign_labels(self.data)
         self.store.checkpoint()
 
@@ -168,7 +174,17 @@ class Project:
     def node(self, node_id):
         return next(n for n in self.data["nodes"] if n["id"] == node_id)
 
-    def add(self, text, parent=None, fork_offset=None, kind="generated", **extra):
+    def add(
+        self,
+        text,
+        parent=None,
+        fork_offset=None,
+        kind="generated",
+        *,
+        checkpoint=True,
+        status="complete",
+        **extra,
+    ):
         node = dict(
             id=uuid.uuid4().hex[:12],
             text=text,
@@ -177,12 +193,15 @@ class Project:
             kind=kind,
             kept=False,
             created=now(),
-            status="complete",
+            status=status,
             **extra,
         )
         self.data["nodes"].append(node)
+        node.setdefault("document_id", node["id"])
+        self.data.setdefault("document_heads", {})[node["document_id"]] = node["id"]
         self.data["current"] = node["id"]
-        self.save()
+        if checkpoint:
+            self.save()
         return node
 
     def root(self, source):
@@ -275,6 +294,18 @@ class Project:
             return False
 
         self.data["nodes"] = [n for n in self.data["nodes"] if n["id"] not in removed]
+        # Deleting a revision restores its logical head to the newest surviving
+        # revision. Anthology membership stays pinned to individual node IDs.
+        heads = self.data.setdefault("document_heads", {})
+        for identity, head in list(heads.items()):
+            if head in removed:
+                survivors = [
+                    n for n in self.data["nodes"] if n["document_id"] == identity
+                ]
+                if survivors:
+                    heads[identity] = survivors[-1]["id"]
+                else:
+                    del heads[identity]
         self.data["annotations"] = [
             a for a in self.data.get("annotations", []) if a["node"] not in removed
         ]

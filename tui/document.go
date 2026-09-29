@@ -9,8 +9,28 @@ import (
 )
 
 func (m *model) toggleTarget() tea.Cmd {
+	if r := m.targetRow(); r.kind == "document-set" {
+		if m.branchSelection == nil {
+			m.branchSelection = map[string]bool{}
+		}
+		all := true
+		for _, id := range m.documentSetMembers(r.id) {
+			all = all && m.branchSelection[id]
+		}
+		for _, id := range m.documentSetMembers(r.id) {
+			m.branchSelection[id] = !all
+		}
+		m.reflow()
+		return nil
+	}
 	if m.section == 3 {
-		if r := m.targetRow(); m.focus == 0 && r.kind == "simulation" {
+		if r := m.targetRow(); m.focus == 0 && r.kind == "simulation-group" {
+			if m.simSelection != nil && m.simSelection.Group == r.id {
+				m.simSelection = nil
+			} else {
+				m.simSelection = &simulationSelection{Group: r.id}
+			}
+		} else if m.focus == 0 && r.kind == "simulation" {
 			if m.simSelection != nil && m.simSelection.Run == r.id && m.simSelection.All {
 				m.simSelection = nil
 			} else {
@@ -197,14 +217,20 @@ func documentInput(msg tea.KeyPressMsg) bool {
 // generation alone consumes a prefix, and the original remains immutable.
 func (m *model) forkDocument() tea.Cmd {
 	if m.section == 3 {
-		if targets := m.selectedConversations(); len(targets) == 1 {
-			return m.send("simulator.fork", map[string]any{"run": targets[0].Run, "conversation": targets[0].Conversation})
+		if targets := m.selectedConversations(); len(targets) > 0 {
+			if len(targets) == 1 {
+				return m.send("simulator.fork", map[string]any{"run": targets[0].Run, "conversation": targets[0].Conversation})
+			}
+			return m.send("simulator.fork", map[string]any{"targets": targets})
 		}
-		m.status = "Select exactly one conversation to fork"
+		m.status = "Select conversations to branch"
 		return nil
 	}
 	if m.pending || m.data.Busy {
 		return nil
+	}
+	if m.selectionVisible() || m.targetRow().kind == "document-set" {
+		return m.send("node.fork", m.documentGroupArgs())
 	}
 	id := m.currentID()
 	args := map[string]any{"node": id}

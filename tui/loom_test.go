@@ -43,7 +43,7 @@ func TestSimulatorLoomRoutesCountAndTokenOverride(t *testing.T) {
 			Tokens  int `json:"n_predict"`
 			Turns   int
 			Node    string
-			Message string
+			Message string `json:"visitor"`
 		}
 	}
 	if err := json.NewDecoder(right).Decode(&request); err != nil {

@@ -56,7 +56,7 @@ func (m *model) contextualActions() []action {
 			}
 		}
 		if count < len(refs) {
-			actions = append(actions, action{id: "add", label: "Add to seeds"})
+			actions = append(actions, action{id: "add", label: "Import a source document"})
 		}
 		if count > 0 {
 			actions = append(actions, action{id: "remove", label: "Remove from seeds"})
@@ -128,7 +128,7 @@ func (m *model) contextualAction(id string) tea.Cmd {
 	}
 	switch id {
 	case "add":
-		return m.send("seed.add", map[string]any{"refs": m.targetRefs()})
+		return m.addItem()
 	case "remove":
 		if m.section == 0 {
 			return m.send("seed.remove", map[string]any{"refs": m.targetRefs()})
@@ -207,7 +207,9 @@ func (m *model) actionNodeIDs() []string {
 	if m.selectionVisible() {
 		return m.selectedBranches()
 	}
-	if r := m.targetRow(); r.kind == "node" {
+	if r := m.targetRow(); r.kind == "document-set" {
+		return m.documentSetMembers(r.id)
+	} else if r.kind == "node" {
 		return []string{r.id}
 	}
 	return nil

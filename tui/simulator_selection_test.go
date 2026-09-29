@@ -131,8 +131,9 @@ func TestVisitorMessageArguments(t *testing.T) {
 	}
 	m := simulatorFixture()
 	m.selectLoomConversation(map[string]any{"run": "batch", "conversation": 0})
-	if m.loom(generationOptions{Message: "Hi"}) != nil || !strings.Contains(m.status, "/clear") {
-		t.Fatal("silently replaced transcript")
+	args, _, err := m.simulationLoomPlan(generationOptions{Message: "Hi"})
+	if err != nil || args["visitor"] != "Hi" {
+		t.Fatal(args, err)
 	}
 }
 
@@ -202,7 +203,7 @@ func TestLoomParentAndSubsetUseOneSelectionResolver(t *testing.T) {
 	if !ok || len(targets) != 2 || len(args["conversations"].([]int)) != 2 {
 		t.Fatal(targets, args)
 	}
-	if !strings.Contains(m.targetLabel(), "2 selected conversations · 2 turns each") {
+	if !strings.Contains(m.targetLabel(), "set of 2 conversations · 2 turns each") {
 		t.Fatal(m.targetLabel())
 	}
 	m.toggleConversation("batch", 0)
@@ -241,7 +242,7 @@ func TestContinueSelectedLoomDispatchesBatchWithConfiguredTurns(t *testing.T) {
 		<-done
 		left.Close()
 		right.Close()
-		if request.Command != "simulator.run" || request.Args["run"] != "batch" || len(request.Args["conversations"].([]any)) != 2 || request.Args["turns"] != nil || request.Args["count"] != nil {
+		if request.Command != "simulator.run" || request.Args["run"] != "batch" || len(request.Args["conversations"].([]any)) != 2 || request.Args["turns"] != nil {
 			t.Fatal(request)
 		}
 	}
@@ -251,14 +252,15 @@ func TestSimulationPlanMatchesPreviewAndRejectsAmbiguousCount(t *testing.T) {
 	m := simulatorFixture()
 	m.selectSimulation("batch")
 	m.command.SetValue("/continue --turns 3")
-	args, label, err := m.simulationLoomPlan(generationOptions{Turns: 3})
+	args, label, err := m.simulationLoomPlan(generationOptions{Action: "continue", Turns: 3})
 	if err != nil || args["turns"] != 3 || label != m.simulationActionLabel() {
 		t.Fatal(args, label, err)
 	}
-	if _, _, err := m.simulationLoomPlan(generationOptions{Count: 4}); err == nil {
-		t.Fatal("ambiguous count accepted")
+	args, _, err = m.simulationLoomPlan(generationOptions{Count: 4})
+	if err != nil || args["count"] != 4 {
+		t.Fatal(args, err)
 	}
-	if cmd := m.forkDocument(); cmd != nil || !strings.Contains(m.status, "exactly one") {
-		t.Fatal("fork silently selected one sibling")
+	if _, _, err = m.simulationLoomPlan(generationOptions{Action: "continue", Count: 4}); err == nil {
+		t.Fatal("continue accepted alternatives")
 	}
 }

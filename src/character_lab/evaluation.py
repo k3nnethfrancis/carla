@@ -134,7 +134,11 @@ def capture(project, target):
         conversation = run["conversations"][index]
         text = "\n\n".join(f"{t['role']}:\n{t['text']}" for t in conversation["turns"])
         # Run metadata carries frozen anthology/settings; exclude sibling traces.
-        source = {k: copy.deepcopy(v) for k, v in run.items() if k != "conversations"}
+        source = {
+            k: copy.deepcopy(v)
+            for k, v in run.items()
+            if k not in {"conversations", "revisions"}
+        }
         source["conversation"] = copy.deepcopy(conversation)
         return dict(
             target={"run": run["id"], "conversation": index},

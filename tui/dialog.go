@@ -246,11 +246,20 @@ func (m *model) submitDialog() tea.Cmd {
 	m.dialog = nil
 	switch d.kind {
 	case "loom-config", "sim-openings", "sim-opening-mode", "sim-config", "sim-speakers", "grow-config", "sim-model", "selector-pick", "sim-sampling":
+		if r.id == "workspaces" || r.id == "keys" {
+			cmd := m.perform(r.id)
+			if m.dialog != nil {
+				m.dialog.parent = d
+			}
+			return cmd
+		}
 		return m.configureChoice(d, r)
 	case "conversation-edit":
 		index, _ := strconv.Atoi(r.id)
 		m.conversationEdit = index
 		return m.startConversationEdit(m.simulation.Conversations[m.gridSelection].Turns[index].Text)
+	case "anthology-add":
+		return m.send("node.keep", map[string]any{"node": r.id, "kept": true})
 	case "document-actions":
 		if r.id == "edit" {
 			return m.editDocumentWithNotes()

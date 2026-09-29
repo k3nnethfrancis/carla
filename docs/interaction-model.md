@@ -1,69 +1,110 @@
 # Interaction model
 
-Carla is a workspace for exploring and shaping model-generated material. Its
-commands are actions on that material, not a second navigation system to memorize.
+Carla's actions operate on saved objects and explicit selections. Tabs expose
+those objects; they do not redefine the commands. Commands, buttons and keyboard
+bindings should resolve the same target and invoke the same operation.
+
+## Actions
+
+| Command | Intent |
+| --- | --- |
+| `/add` | Add material to the current collection. |
+| `/remove` | Remove selected membership or content, showing the consequence. |
+| `/branch` | Make an independent alternative without generating. Preserve ancestry. |
+| `/continue` | Advance the existing item or selected set, retaining its history. |
+| `/loom N` | Generate N alternative futures of the selected item or set. |
+| `/eval` | Judge exact saved versions using the active or named evaluation. |
+| `/export` | Write a frozen copy of selected saved items, or the current collection. |
+
+The shared command palette contains `/config`, `/policy`, `/stop` and `/help`.
+Stage navigation uses `/library`, `/branches`, `/anthology`, `/simulator` and
+`/evaluate`. Editor controls, selection controls, notes and inspection remain
+available through their owning interfaces. Compatibility aliases need not be
+separate entries in the palette.
+
+`/config` owns execution defaults, model selection, workspace selection and key
+bindings. `/policy` owns monitoring, selection and evaluation definitions. A model
+flag overrides the default for one operation; it does not change future defaults.
+
+## Focus, selection and scope
+
+Arrows preview; Space selects. Enter opens an object and targets it. Moving to the
+command bar preserves that context. A visible selection wins over the preview.
+In Simulator, clearing selection explicitly returns to fresh generation; merely
+hovering a previous conversation must not make it a generation target.
+
+A conversation set **contains** its members. A document parent represents
+**ancestry**. Anthology **references** kept versions. Those relationships must not
+be treated as the same recursive selection operation. Batch curation can include
+descendants explicitly; generation must preserve the selected starting versions.
+
+Library passage selection composes a seed document, following the same document
+generation path as Branches. Anthology points to kept document versions: generating
+from one produces material in Branches which still needs separate curation.
+
+## Continue, Loom and Branch
+
+For one selected set A containing four conversations:
 
 ```text
-Where am I?       What am I acting on?       What will happen?
-view + focus  →   explicit selection    →    action + settings → result
-   preview        item / parent / set        visible scope       selected
+/continue   A → A with four advanced conversations (prior revisions retained)
+/loom       A → B with four alternative continuations
+/loom 3     A → B, C, D; each contains four alternative continuations
+/branch     A → B with four copied conversations; no generation
 ```
 
-## The contract
+For a single item, the same rules apply at item scope. Loom 1 and Continue can
+produce the same amount of text; they differ in identity and ancestry. A document
+continuation from an old revision or an earlier cursor position preserves the
+existing future by branching instead of rewriting it. Exact saved versions remain
+available to Anthology and evaluations.
 
-**Focus** is the object under the cursor and the pane receiving keys. Arrows move
-focus and change the preview. **Selection** is the checked target of an operation.
-The two must remain distinct: looking at another item must not redirect a batch.
-**Editing** is a separate mode, with a draft and explicit Save/Cancel.
+A subset advances only those members. Loom preserves the subset as an alternative
+set; it never concatenates conversations into one model prompt. Selection policies
+between Loom loops select complete alternatives at that grouping level, rather
+than silently assembling winning children from different alternatives.
 
-Parents are useful operation targets. Selecting a parent means its children;
-selecting a child from that scope narrows it to that child. Additional Space presses
-build a subset. Enter opens an object and explicitly targets it. Returning outward
-with Escape changes the view, not the selected set. Clear removes the target.
+## Inputs and overrides
 
-The selected object, its cardinality and the operation determine capability:
+```text
+/continue --tokens 512
+/loom 4 --tokens 512
+/continue --visitor "What matters to you?" --model base-alias
+/loom 3 --visitor "What matters to you?" --turns 2 --loops 4
+```
 
-| Object / scope | Generate | Inspect or edit | Evaluate |
-|---|---|---|---|
-| Source / document prefix | Continue into new versions | Inspect source; edit a version | Saved document versions |
-| Single conversation | Extend, or generate alternatives | Open transcript; edit into a fork | Full saved transcript |
-| Loom parent | Extend each child independently | Open comparison grid | Every child transcript |
-| Explicit conversation subset | Extend just those members | Preview without changing set | Those transcripts |
-| Evaluation collection | No generation operation | Inspect judgments and notes | Run configured judges |
+`--visitor` supplies the next visitor message before generation, once per selected
+conversation. The preview states that scope. An existing unanswered visitor turn
+is a conflict: it is not silently replaced. Without a supplied message, an already
+pending visitor turn receives the next character response. The flag applies only
+to Simulator. Long visitor text can be entered through the conversation editor.
 
-This is an interaction contract, not a claim that every action already accepts
-every kind of set. Document generation still uses one active prefix; multi-document
-generation is not implemented. Fork and message editing require one conversation.
-The Simulator now supports parent and sibling-subset generation and evaluation.
+`--model` selects the document/character generator for this operation;
+`--visitor-model` selects the simulated visitor. Saved traces record effective
+settings and models. `--tokens` caps each generation; it is not a target length.
+`--turns` controls new character replies in Simulator. `--loops` repeats Loom's
+generate-and-select cycle; it is not a Continue option.
 
-## Code ownership
+## Evidence and persistence
 
-- `tui/simulation_selection.go` owns explicit Simulator selection and resolves it
-  into concrete conversation references. Rendering, command requests and evaluation
-  targets use it. No inference or persistence occurs there.
-- `tui/command.go`, `command_guidance.go` and `loom.go` expose actions, describe their
-  flags and dispatch the resolved target. Aliases reach the same operation.
-- `src/character_lab/simulator_commands.py` validates references, settings and scope.
-  `simulator.py` freezes each selected history and generates its descendants.
-- Domain state and exact ancestry live in Python. The UI never fabricates a merged
-  transcript or silently chooses one conversation as the source for a group.
+Continue must retain original text, turns, prompts, settings and model identities.
+Judgments and training marks apply to the frozen content they evaluated. Advancing
+an item does not transfer a passing label to its new content. Branch and Loom
+preserve ancestry; editing does not rewrite downstream replies based on old text.
 
-A future shared capability registry should describe **action × object type ×
-cardinality × mode**, including its label and constraints. It should feed command
-availability, buttons, keybindings and help rather than duplicate execution logic.
-Extend the current resolvers when a concrete workflow needs it; avoid a generic
-framework that claims unsupported combinations work.
+Exports contain exact text, structured messages, metadata and provenance. They do
+not select a training framework, tokenization scheme, loss mask or preference
+objective. They do not train a model or upload data. An export is not a workspace
+backup or a supported workspace restore format.
 
-## Acceptance journey
+## Ownership and verification
 
-1. Run `/loom 4` in Simulator with nothing checked.
-2. The resulting parent is selected; `/continue` extends all four histories.
-3. Enter its grid, arrow to a child and Space-select it. Only that child is checked.
-4. Arrow to another child and Space-select it. Both are targets; previews are not.
-5. `/loom` advances those two using current turns and sampling settings. `/eval`
-   addresses the same two if used instead.
-6. `/clear` makes the next `/loom` fresh. Nothing is deleted.
+Go owns focus, selection, editors, command completion and rendering. Python owns
+validated operations, grouping, revisions, inference, persistence and evidence.
+The same operation plan should explain the request before it runs. One session
+owns an active job with bounded model concurrency; set structure survives queueing,
+streaming, stopping and recovery.
 
-Command previews must describe the selected scope before execution. Tests cover
-arrows versus checks, parent-to-subset transitions, alias dispatch, independent
-history preservation and stale targets; terminal QA covers the same journey.
+Acceptance covers single items, subsets and parents; clear-to-fresh behavior;
+Continue versus Loom identity; visitor/model overrides; policies over complete
+sets; frozen judgments; command/editor navigation; and restart with partial work.

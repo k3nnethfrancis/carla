@@ -11,7 +11,14 @@ import random
 from contextlib import aclosing
 from pathlib import Path
 
-from . import credentials, evaluation, evaluation_sets, simulator
+from . import (
+    credentials,
+    document_actions,
+    evaluation,
+    evaluation_sets,
+    exports,
+    simulator,
+)
 from .domain import Project, display_title, generation_status, library, now
 from .exploration import explore, require_selector
 from .model_metadata import native_context
@@ -132,6 +139,10 @@ class Session:
                         "title",
                         "label",
                         "created",
+                        "document_id",
+                        "revision_of",
+                        "document_set",
+                        "set_member",
                     )
                 }
                 | {
@@ -142,6 +153,9 @@ class Session:
                 }
                 for n in p.data["nodes"]
             ],
+            document_sets=p.data.get("document_sets", []),
+            document_set_heads=p.data.get("document_set_heads", {}),
+            document_heads=p.data.get("document_heads", {}),
             current=node,
             models=p.data["models"],
             model_alias=self.runtime.model["alias"],
@@ -325,6 +339,16 @@ class Session:
             self.view_node = args["node"] if self.busy else None
             p.data["current"] = p.node(args["node"])["id"]
             p.save()
+        elif command == "node.fork" and ("nodes" in args or "set" in args):
+            offsets = args.get("offsets")
+            if "offset" in args:
+                if len(args.get("nodes", [])) != 1 or "offsets" in args:
+                    raise ValueError("A cursor position requires one selected document")
+                offsets = {args["nodes"][0]: args["offset"]}
+            plan = document_actions.plan(
+                p, "branch", args.get("nodes"), set_id=args.get("set"), offsets=offsets
+            )
+            document_actions.branch(p, plan)
         elif command == "node.fork":
             original = p.node(args["node"])
             parent = (
@@ -396,6 +420,9 @@ class Session:
                 args["verdict"],
                 args["note"],
             )
+        elif command == "export":
+            path = exports.export(p, self.sources, args)
+            await self.emit("result", {"path": str(path)}, request_id)
         elif command == "snapshot":
             await self.emit("result", {"path": str(p.snapshot())}, request_id)
         elif command == "configure":
@@ -466,6 +493,10 @@ class Session:
                 )
             await self.emit("inspection", record, request_id)
             return
+        elif command in {"continue", "grow"} and "action" in args:
+            from .document_generation import start
+
+            await start(self, args, request_id, eval_plan)
         elif command in {"continue", "grow"}:
             loops = args.get(
                 "loops",
@@ -556,7 +587,9 @@ class Session:
             raise ValueError("Document changed before the edit was saved")
         self.project.edit(node["id"], args["text"])
 
-    async def generate(self, command, parent, prefix, settings, count, *, nested=False):
+    async def generate(
+        self, command, parent, prefix, settings, count, *, nested=False, candidates=None
+    ):
         p = self.project
         self.view_node = None
         job_id = self.job_id
@@ -570,6 +603,21 @@ class Session:
             await self.emit("operation", dict(stage="loading", command=command), job_id)
             await self.emit("loom.start", dict(count=count), job_id)
             branches = []
+            # Reserve every member before awaiting inference. A cancelled queue
+            # still has the complete selected set, with honest stopped members.
+            if candidates is not None:
+                for i, candidate in enumerate(candidates):
+                    item = document_actions.create_revision(
+                        p,
+                        candidate,
+                        prompt=candidate.target.prefix,
+                        settings={**settings, "seed": random.randrange(2**31)},
+                        trace={},
+                        status="queued",
+                        loom_index=i,
+                    )
+                    branches.append(item)
+                await self.snapshot()
 
             async def schedule(data):
                 await self.emit("capacity", data, job_id)
@@ -579,15 +627,21 @@ class Session:
             async def sample(i):
                 nonlocal empty_count, output_chars
                 branch_settings = {**settings, "seed": random.randrange(2**31)}
-                node = p.add(
-                    prefix,
-                    parent=parent,
-                    fork_offset=len(prefix),
-                    prompt=prefix,
-                    settings=branch_settings,
-                    trace={},
-                )
-                branches.append(node)
+                candidate = candidates[i] if candidates is not None else None
+                sample_prefix = candidate.target.prefix if candidate else prefix
+                if candidate:
+                    node = branches[i]
+                else:
+                    node = p.add(
+                        sample_prefix,
+                        parent=parent,
+                        fork_offset=len(sample_prefix),
+                        prompt=sample_prefix,
+                        settings=branch_settings,
+                        trace={},
+                    )
+                if candidate is None:
+                    branches.append(node)
                 node["loom_index"] = i
                 node["status"] = "generating"
                 self.active_node = node["id"]
@@ -619,7 +673,9 @@ class Session:
                         config, p, node, monitor_event
                     ) as watcher:
                         async with aclosing(
-                            self.runtime.stream(prefix, node["settings"], node["trace"])
+                            self.runtime.stream(
+                                sample_prefix, node["settings"], node["trace"]
+                            )
                         ) as stream:
                             while True:
                                 try:
@@ -654,7 +710,7 @@ class Session:
                     else generation_status(node)
                 )
                 empty_count += node["status"] == "empty"
-                output_chars += len(node["text"]) - len(prefix)
+                output_chars += len(node["text"]) - len(sample_prefix)
                 node["finished"] = now()
                 p.save()
                 await self.emit(
@@ -663,7 +719,7 @@ class Session:
                         index=i,
                         id=node["id"],
                         title=f"Branch {i + 1} · {node['id'][:6]}",
-                        text=node["text"][len(prefix) :],
+                        text=node["text"][len(node.get("prompt", prefix)) :],
                         status=node["status"],
                     ),
                     job_id,
@@ -692,7 +748,7 @@ class Session:
             await self.emit("error", dict(message=str(exc)), job_id)
         finally:
             for branch in branches:
-                if branch["status"] == "generating":
+                if branch["status"] in {"generating", "queued"}:
                     branch.update(status=status, finished=now())
             if branches:
                 p.save()
@@ -704,7 +760,7 @@ class Session:
                             index=i,
                             id=branch["id"],
                             title=f"Branch {i + 1} · {branch['id'][:6]}",
-                            text=branch["text"][len(prefix) :],
+                            text=branch["text"][len(branch.get("prompt", prefix)) :],
                             status=branch["status"],
                         ),
                         job_id,
@@ -824,6 +880,8 @@ class Session:
 
     async def simulate(self, config, seed=None, eval_plan=None):
         p = self.project
+        if config.get("action"):
+            return await self.simulate_action(config, seed, eval_plan)
         before = {r["id"] for r in p.data.get("simulation_runs", [])}
 
         async def emit(kind, data):
@@ -900,6 +958,69 @@ class Session:
                     if c["status"] == "complete"
                 ]
                 await evaluation_sets.after_generation(self, eval_plan, targets)
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            await emit("error", dict(message=str(exc)))
+        finally:
+            self.job = None
+            if self.view_node:
+                p.data["current"] = self.view_node
+                self.view_node = None
+                p.save()
+            await self.snapshot()
+
+    async def simulate_action(self, config, seed=None, eval_plan=None):
+        """Run one action over a preserved item/set shape, then judge exact outputs."""
+        from . import simulator_actions
+
+        p = self.project
+        latest = []
+        generated_targets = []
+        current_seed = seed
+
+        async def emit(kind, data):
+            await self.emit(kind, data, self.job_id)
+
+        async def batch(policy_id=None, index=0):
+            nonlocal latest
+            latest = await simulator.generate_alternatives(
+                p, config, self.runtime_factory, emit, current_seed
+            )
+            generated_targets.extend(simulator_actions.affected_targets(latest))
+            if policy_id:
+                for run in latest:
+                    run.update(policy_run=policy_id, loop=index + 1)
+                p.save()
+            if any(r["status"] == "stopped" for r in latest):
+                raise asyncio.CancelledError
+            if any(r["status"] != "complete" for r in latest):
+                raise ValueError(
+                    "Conversation generation incomplete; partial outputs retained"
+                )
+            return simulator_actions.group_candidates(latest)
+
+        async def advance(key):
+            nonlocal current_seed
+            current_seed = simulator_actions.selected_seed(p, latest, key)
+
+        try:
+            if config.get("loops", 1) == 1:
+                await batch()
+            else:
+                await explore(
+                    p,
+                    config["loops"],
+                    self.policy_model,
+                    self.runtime_factory,
+                    batch,
+                    advance,
+                    emit,
+                )
+            if eval_plan and not asyncio.current_task().cancelling():
+                await evaluation_sets.after_generation(
+                    self, eval_plan, generated_targets
+                )
         except asyncio.CancelledError:
             pass
         except Exception as exc:

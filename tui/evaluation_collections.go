@@ -189,6 +189,12 @@ func (m *model) submitCollection(d *dialog) tea.Cmd {
 			return nil
 		}
 		switch d.rows[d.index].id {
+		case "workspaces", "keys":
+			cmd := m.perform(d.rows[d.index].id)
+			if m.dialog != nil {
+				m.dialog.parent = d
+			}
+			return cmd
 		case "name":
 			m.dialog = &dialog{kind: "eval-collection-name", title: "Evaluation name", parent: d}
 			m.dialog.add("Name", c.Name)

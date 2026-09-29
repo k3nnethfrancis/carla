@@ -239,13 +239,21 @@ def attach_policy_evidence(project, item):
             if step.get("status") == "complete" and (
                 (
                     item["kind"] == "document"
-                    and item["target"].get("node") in step.get("candidates", [])
+                    and (
+                        item["target"].get("node") in step.get("candidates", [])
+                        or item["source"].get("document_set")
+                        in step.get("candidates", [])
+                    )
                 )
                 or (
                     item["kind"] == "conversation"
                     and run["id"] == item["source"].get("policy_run")
                     and step["loop"] == item["source"].get("loop")
-                    and str(item["target"]["conversation"])
+                    and str(
+                        item["source"].get(
+                            "alternative_index", item["target"]["conversation"]
+                        )
+                    )
                     in step.get("candidates", [])
                 )
             ):
@@ -306,6 +314,22 @@ async def dispatch(session, command, args, request_id):
                     item["judgments"].append(target["evaluation"])
                 if args.get("attach_evidence"):
                     attach_policy_evidence(p, item)
+        elif command == "evaluation.collection.remove":
+            ids = args.get("ids")
+            if (
+                not isinstance(ids, list)
+                or not ids
+                or any(not isinstance(key, str) for key in ids)
+            ):
+                raise ValueError("Select evaluation items to remove")
+            items = [evaluation.find(group["items"], key) for key in dict.fromkeys(ids)]
+            # Removal changes membership, never destroys judgments or frozen
+            # research evidence. Keep a recoverable record outside active items.
+            for item in items:
+                group.setdefault("removed_items", []).append(
+                    {"removed": now(), "item": copy.deepcopy(item)}
+                )
+            group["items"] = [i for i in group["items"] if i["id"] not in ids]
         elif command == "evaluation.collection.run":
             group, definitions = plan(session, group["id"])
             auto = args.get("train_on_pass", False)

@@ -526,3 +526,63 @@ async def test_diffusion_evaluation_freezes_endpoint_and_failure_cannot_train(
     definition = define(s, **definition)
     await run(s, definition, [{"node": doc["id"]}], train_on_pass=True)
     assert records[-1]["status"] == "failed" and not records[-1]["training"]
+
+
+@pytest.mark.asyncio
+async def test_collection_remove_preserves_frozen_evidence_and_is_atomic(lab):
+    from character_lab import evaluation_sets
+
+    s = lab
+    node = s.project.add("Exact frozen input")
+    group = dict(id="collection", name="Examples", judges=[], items=[])
+    s.project.data["evaluation_sets"] = [group]
+    item = evaluation_sets.add_capture(
+        group, evaluation.capture(s.project, {"node": node["id"]})
+    )
+    item.update(training=True, judgments=["saved-judgment"])
+    before = copy.deepcopy(group)
+    with pytest.raises(ValueError):
+        await s.execute(
+            "evaluation.collection.remove",
+            {"collection": "collection", "ids": [item["id"], "missing"]},
+            "bad",
+        )
+    assert group == before
+    await s.execute(
+        "evaluation.collection.remove",
+        {"collection": "collection", "ids": [item["id"]]},
+        "remove",
+    )
+    assert group["items"] == []
+    assert group["removed_items"][0]["item"] == item
+    assert s.project.node(node["id"])["text"] == "Exact frozen input"
+
+
+def test_group_selection_evidence_attaches_by_set_not_leaf(tmp_path):
+    from character_lab import evaluation_sets
+
+    p = Project(tmp_path)
+    p.data["policy_runs"] = [
+        dict(
+            id="policy",
+            spec="coherence",
+            prompt="judge",
+            policy_model={},
+            steps=[dict(status="complete", loop=1, candidates=["0", "1"])],
+        )
+    ]
+    item = dict(
+        evidence=[],
+        kind="conversation",
+        target={"run": "r", "conversation": 3},
+        source=dict(
+            policy_run="policy",
+            loop=1,
+            alternative_group="g",
+            alternative_index=1,
+            conversation={"turns": []},
+        ),
+    )
+    evaluation_sets.attach_policy_evidence(p, item)
+    assert len(item["evidence"]) == 1
+    assert item["evidence"][0]["scope"] == "candidate set"

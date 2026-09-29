@@ -29,6 +29,22 @@ var allActions = []action{
 }
 
 func (m *model) perform(id string) tea.Cmd {
+	if m.inNotesContext() {
+		switch id {
+		case "remove", "delete", "branch", "keep", "eval", "snapshot", "continue", "loom", "grow", "generate":
+			m.status = "This action applies to documents; focus the document or return to Branches"
+			return nil
+		}
+	}
+	if id == "grow" {
+		return m.loom(generationOptions{Action: "loom"})
+	}
+	if id == "add" {
+		return m.addItem()
+	}
+	if id == "snapshot" {
+		return m.exportItems()
+	}
 	if id == "policy" {
 		return m.openPolicy()
 	}
@@ -43,7 +59,7 @@ func (m *model) perform(id string) tea.Cmd {
 	}
 	// Legacy keybindings enter the same generation operation as the command bar.
 	if id == "continue" || id == "generate" || id == "run" || id == "simulate" || id == "grow" {
-		return m.loom(generationOptions{})
+		return m.loom(generationOptions{Action: "continue"})
 	}
 	if id == "remove" && m.section == 1 {
 		id = "delete"
@@ -104,7 +120,7 @@ func (m *model) perform(id string) tea.Cmd {
 		}
 		return m.send("simulator.inspect", map[string]any{"run": m.simulation.ID})
 	}
-	if documentAction(id) && !(m.section == 3 && id == "branch") && (m.targetRow().kind != "node" || m.targetRow().id != m.currentID() || m.pending) {
+	if documentAction(id) && !(id == "branch" && len(m.actionNodeIDs()) > 0) && !(m.section == 3 && id == "branch") && (m.targetRow().kind != "node" || m.targetRow().id != m.currentID() || m.pending) {
 		m.status = "Select a branch and wait for its preview before /" + id
 		return m.previewTarget()
 	}

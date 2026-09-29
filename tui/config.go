@@ -4,8 +4,17 @@ import tea "charm.land/bubbletea/v2"
 
 // Configuration is a contextual view, not a separate settings copy per tab.
 func (m *model) openConfig() tea.Cmd {
+	defer func() {
+		if m.dialog != nil {
+			m.dialog.rows = append(m.dialog.rows, row{id: "workspaces", label: "Workspace"}, row{id: "keys", label: "Keybindings"})
+		}
+	}()
 	if m.section == 4 {
-		return m.openCollectionConfig()
+		cmd := m.openCollectionConfig()
+		if m.dialog == nil {
+			m.dialog = &dialog{kind: "loom-config", title: "Configuration"}
+		}
+		return cmd
 	}
 	if m.section == 3 {
 		return m.openSimulatorConfig()

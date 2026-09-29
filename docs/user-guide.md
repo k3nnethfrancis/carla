@@ -10,13 +10,13 @@ See the [README](../README.md#quick-start) for installation and model setup.
    a supported model, or skip setup to explore the Library. Generation requires
    a compatible `llama-server`; Carla does not install it.
 2. In **Library**, select a document/passage with Space. Enter brings selected
-   material into Branches. `/import` adds a local text/Markdown file to the shared
+   material into Branches. `/add` adds a local text/Markdown file to the shared
    library; importing does not select it in every workspace.
 3. In **Branches**, choose a version, position the document cursor and run
    `/loom 3 --tokens 512`. This creates three continuations of the same prefix.
    Outputs stream into a comparison grid. Enter opens one; `/grid` returns.
    `/inspect` shows its actual input, settings and provenance.
-4. Select promising versions with Space and `/keep`. They appear in **Anthology**,
+4. Select promising versions with Space and `/add`. They appear in **Anthology**,
    a curated view of the branch tree. There is no required anthology size; choose
    coherent material that fits the context budget and your experiment.
 5. Open **Simulator**, then `/config`. Explicitly select anthology versions,
@@ -26,8 +26,8 @@ See the [README](../README.md#quick-start) for installation and model setup.
    Each adds two Character replies, with Visitor messages between them. Open a
    conversation to inspect its text, prompts, settings and policy evidence.
 7. In **Evaluate**, create a named evaluation and configure its judges. Add the
-   saved conversations, then run them. Review evidence, `/keep` desired training
-   items and `/snapshot` to export them. The [evaluation guide](evaluations.md)
+   saved conversations, then run them. Review evidence, mark desired training
+   items with the collection controls and use `/export` to save the selected items or collection. The [evaluation guide](evaluations.md)
    covers reuse, reruns, pass rules and metadata.
 
 A conversation conditioned on anthology text is an experiment with a base model,
@@ -36,12 +36,12 @@ not a newly trained model. Carla currently ends at dataset curation/export.
 ## Navigate and edit
 
 - Tab/Shift+Tab move between panes and the command bar; arrows move within a pane.
-  Escape moves outward one level. `/` opens commands. `/keys` shows and edits bindings.
+  Escape moves outward one level. `/` opens commands. `/config` includes keybindings.
 - Command suggestions show arguments for the highlighted command. `/help` → Enter
   opens scrollable details. Use arrows, Page Up/Page Down or the mouse wheel.
 - Space selects items; entering a document opens it for navigation. Use `/edit`
   to write, `/save` to commit a new version, and `/cancel` or Escape to discard
-  the draft. `/fork` creates a version without generating.
+  the draft. `/branch` creates a version without generating.
 - `/notes` opens document notes or an evaluation-item note. Notes are metadata;
   they are not inserted into generation prompts. `/review` records a document
   verdict/quoted passage separately from automated judgments.
@@ -51,17 +51,20 @@ not a newly trained model. Carla currently ends at dataset curation/export.
 In Simulator, Space selects a Loom parent (all conversations) or toggles children.
 Selecting a child replaces the parent scope; further children build a subset.
 Enter opens and selects a parent or one conversation. Arrows browse without
-changing the checked set. `/loom` and `/continue` advance that set using configured
-turns; `--turns` overrides them. A finished Loom selects its outputs so you can
-continue immediately. `/clear` makes the next Loom fresh. `/loom 4` with one
-conversation selected creates four alternatives from it. `/eval` shares the same
-selection. `/visitor` writes a Visitor message into a fork; `/loom` responds.
+changing the checked set. `/continue` advances those existing conversations using
+configured turns; `--turns` overrides them. `/loom N` creates N alternative futures:
+for a selected parent containing four conversations, `/loom 3` creates three sets
+of four. A finished Loom selects its outputs so you can continue immediately.
+Clear selection to make the next Loom fresh. `/eval` shares the same selected
+scope. Use `/continue --visitor "Your message"` to supply the next visitor turn,
+or `/loom 4 --visitor "Your message"` to explore four alternative responses.
+
 
 Library/Anthology Loom actions use the same document workflow as Branches and
 return new output there. New descendants are not automatically kept.
 
 `/remove` is contextual: deselect Library sources, remove Anthology membership,
-confirm branch/subtree deletion, or unmark Evaluate training items. Branch
+confirm branch/subtree deletion, or remove Evaluate collection membership. Branch
 removal displays consequences and writes a recovery snapshot. It is not a
 universal filesystem-delete command. See [commands](commands.md) for exact scope.
 
@@ -95,9 +98,10 @@ model registry, keybindings and credentials live at application level.
 - Startup restores the last tab/document with the command bar focused. It does
   not restore editing mode or checked Loom targets. Exit recovery drafts are
   separate from committed versions; inspect them before deleting recovery data.
-- Anthology `/snapshot` creates text files plus a provenance manifest under
-  `snapshots/`. Evaluate `/snapshot` writes training-marked items and their
-  judgments under `datasets/`. Neither export is a replacement for a full backup.
+- `/export` writes selected items or the current collection under `exports/`, with
+  a versioned JSON manifest and text reading copies. Conversations retain structured
+  turns; evaluation exports include judgments and training metadata. Exports are
+  not a replacement for a full workspace backup.
 - Raw prompts, outputs, source text and judgments can contain private material.
   Inspect exports before sharing. Credentials are stored separately, not in traces.
 
@@ -114,7 +118,7 @@ Use `carla --version` with bug reports.
 | Multi-loop Loom cannot start | Configure the separate instruct policy model and selection spec. A one-loop Loom does not need a selector. |
 | Wrong conversation is continued | Inspect the checked target; `/clear` starts fresh. Hover is not selection. |
 | Evaluation opens but cannot run | Create/select a collection, assign judges, add nonempty items and use Run or `/eval`. Local judges currently use the configured policy model. |
-| Local judge unavailable | Start `scripts/local-judge.sh` in a second terminal, then check Server under `/policy`. See [local judge setup](local-judge.md). |
+| Local judge unavailable | Complete the one-time cache setup with `scripts/local-judge.sh`, then select DiffusionGemma under `/policy`. Carla manages the local server automatically. See [local judge setup](local-judge.md). |
 | Jev authentication/provider error | Check saved credential versus launching environment, provider access and quota. Saving a key does not validate it. |
 | Workspace already open | Close the owning Carla process; each workspace permits one writer. Do not edit its JSON while running. |
 | Terminal layout unavailable | Resize to at least 60×18; use a UTF-8 terminal. |
