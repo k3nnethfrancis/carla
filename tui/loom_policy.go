@@ -60,7 +60,7 @@ func (m *model) openLoomPolicy() tea.Cmd {
 	)
 	d.rows = append(d.rows,
 		row{id: "behaviors", label: "Behaviors", preview: "Define what to detect and what happens when it is detected."},
-		row{id: "monitor_call_mode", label: "Behavior calls · " + strings.Title(m.monitorCallMode()), preview: "Separate sends one request per behavior. Bundled checks all enabled behaviors in one request."},
+		row{id: "monitor_call_mode", label: "Judge call mode · " + strings.Title(m.monitorCallMode()), preview: "Separate sends one request per behavior. Bundled checks all enabled behaviors in one request."},
 	)
 	if provider == "jev" {
 		d.rows = append(d.rows, row{id: "key", label: "API key · " + m.data.MonitorKeySource, preview: "Replace the saved key. Keys stay outside workspaces and exported traces."})
@@ -284,7 +284,7 @@ func (m *model) policyPicker(parent *dialog, id, field string, values []string) 
 			label = monitorLabel(v)
 		}
 		if field == "monitor_call_mode" {
-			d.title = "Behavior calls"
+			d.title = "Judge call mode"
 			preview = "One request per behavior."
 			if v == "bundled" {
 				preview = "All enabled behaviors in one request."

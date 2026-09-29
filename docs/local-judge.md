@@ -52,7 +52,7 @@ in each judgment, even when the saved setting is `auto`.
 **Live monitoring:** `/policy` → Monitoring → **DiffusionGemma (local)**.
 The local worker starts automatically using `openjev-latest`. No API key is requested.
 Heartbeat, behavior specs, detection thresholds and Warn/Stop actions work exactly
-as for Jev. Behavior calls default to Separate (one request per enabled behavior).
+as for Jev. Judge call mode defaults to Separate (one request per enabled behavior).
 Bundled is available after a warning confirmation; fewer requests can be faster,
 but shared question context can change judgments. Monitoring remains Off in a new
 workspace until explicitly enabled.
