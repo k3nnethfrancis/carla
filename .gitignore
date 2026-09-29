@@ -26,3 +26,6 @@ docs/internal/
 .codex/
 
 *.local.json
+
+# Standalone monitoring eval output (created on demand).
+evals/monitoring/results/
