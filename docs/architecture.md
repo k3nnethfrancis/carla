@@ -101,7 +101,7 @@ Each turn records model, settings, prompt, response events and observations.
 The policy selector has a separate instruct-model chat request; its specification
 is never added to the character context.
 
-`stream_monitor.py` snapshots character prefixes for optional OpenRouter scans.
+`stream_monitor.py` snapshots character prefixes for optional local OpenJev or hosted OpenRouter scans.
 It permits one in-flight check per conversation, coalesces additional tokens,
 and keeps exact request/response evidence. Final checks are awaited before that
 conversation advances; other conversations can proceed. Explicit Stop actions
@@ -134,10 +134,19 @@ weights. The transfer runs in a child process so cancellation stops the Hub's
 worker threads and leaves its partial cache reusable. Registration and model
 selection happen in the owning Session only after a successful transfer.
 
+The optional DiffusionGemma classifier runs in a Carla-owned OpenJev MLX process.
+`local_judge.py` starts its cached runtime on a kernel-assigned loopback port, shares
+it across checks, and stops it when its owning backend disconnects. It is separate
+from the generator admission/swap system;
+its memory and GPU work coexist with llama.cpp. Local HTTP endpoints are loopback
+only, with redirects/proxy inheritance disabled, no credentials and no remote
+fallback. The pinned launcher disables OpenJev routing and loads cached weights
+offline after setup. See [local judge setup](local-judge.md).
+
 ## Evaluation records
 
-`evaluation.py` owns versioned judge definitions and execution. Local judging
-reuses `Runtime.judge`; Jev evaluation and monitoring share `monitor.classify`,
+`evaluation.py` owns versioned judge definitions and execution. Instruct judging
+reuses `Runtime.judge`; DiffusionGemma/Jev evaluation and monitoring share `monitor.classify`,
 retaining exact requests and provider results. Evaluation prompts never enter
 generation context. Monitoring and selection retain their operational owners.
 

@@ -142,6 +142,15 @@ func (m *model) refreshConfig() {
 	}
 }
 func (m *model) saveDialog(d *dialog, command string, args map[string]any) tea.Cmd {
+	// Keep the local model field visible until backend validation succeeds.
+	if len(d.fields) > 0 && d.args["field"] == "monitor_local_model" {
+		id, cmd := m.dispatch(command, args)
+		if cmd != nil {
+			delete(d.args, "error")
+			m.dialogRequest, m.savingDialog = id, d
+		}
+		return cmd
+	}
 	m.dialog = d.parent
 	if command == "loom-policy.update" {
 		return m.updateBehavior(args)

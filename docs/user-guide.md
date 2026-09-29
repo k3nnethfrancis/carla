@@ -48,12 +48,14 @@ not a newly trained model. Carla currently ends at dataset curation/export.
 - `/rename` changes a document title. `/find` filters the current list. `/active`
   returns to a running generation. `/stop` cancels work while retaining partial text.
 
-In Simulator, **Space checks/unchecks one conversation; Enter selects and opens
-it**. Hovering previews it but does not make it a Loom target. `/loom 4` creates
-four alternatives from that checked conversation, or four fresh conversations if
-nothing is checked. Starting a Loom consumes the previous selection. `/clear`
-resets the target. `/visitor` writes a Visitor message into a fork; `/loom` then
-supplies the next Character reply. `/edit` changes a saved message in a new fork.
+In Simulator, Space selects a Loom parent (all conversations) or toggles children.
+Selecting a child replaces the parent scope; further children build a subset.
+Enter opens and selects a parent or one conversation. Arrows browse without
+changing the checked set. `/loom` and `/continue` advance that set using configured
+turns; `--turns` overrides them. A finished Loom selects its outputs so you can
+continue immediately. `/clear` makes the next Loom fresh. `/loom 4` with one
+conversation selected creates four alternatives from it. `/eval` shares the same
+selection. `/visitor` writes a Visitor message into a fork; `/loom` responds.
 
 Library/Anthology Loom actions use the same document workflow as Branches and
 return new output there. New descendants are not automatically kept.
@@ -112,6 +114,7 @@ Use `carla --version` with bug reports.
 | Multi-loop Loom cannot start | Configure the separate instruct policy model and selection spec. A one-loop Loom does not need a selector. |
 | Wrong conversation is continued | Inspect the checked target; `/clear` starts fresh. Hover is not selection. |
 | Evaluation opens but cannot run | Create/select a collection, assign judges, add nonempty items and use Run or `/eval`. Local judges currently use the configured policy model. |
+| Local judge unavailable | Start `scripts/local-judge.sh` in a second terminal, then check Server under `/policy`. See [local judge setup](local-judge.md). |
 | Jev authentication/provider error | Check saved credential versus launching environment, provider access and quota. Saving a key does not validate it. |
 | Workspace already open | Close the owning Carla process; each workspace permits one writer. Do not edit its JSON while running. |
 | Terminal layout unavailable | Resize to at least 60×18; use a UTF-8 terminal. |

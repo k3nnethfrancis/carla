@@ -177,8 +177,10 @@ These use criteria to judge text, but serve different purposes:
 | Evaluation | On saved items, or after `/loom --eval "name"` | Records whole-item judgments in a named collection for review and dataset curation. |
 
 Use `/policy` to configure monitoring, selection and reusable judges. Selection
-uses a local instruct model. Monitoring uses optional Jev through OpenRouter;
-evaluation judges can use either the configured local instruct model or Jev.
+uses a local instruct model. Monitoring can use local DiffusionGemma through OpenJev, or optional Jev through
+OpenRouter. Evaluation judges also support the configured local instruct model.
+After [one-time setup](docs/local-judge.md), Carla starts and stops the Apple Silicon
+classifier automatically on an available local port.
 Hosted classification sends the assessed text to an external service and can
 incur charges. Local generation itself uses llama.cpp.
 
@@ -219,6 +221,7 @@ shows the defaults, allowed fields and inspection behavior.
 - [User guide](docs/user-guide.md): first experiment, editing, comparison, data storage and recovery.
 - [Commands](docs/commands.md): all commands, flags, targeting and keyboard behavior.
 - [Configuration](docs/configuration.md): models, sampling, prompts, source imports and credentials.
+- [Local DiffusionGemma judge](docs/local-judge.md): Apple Silicon setup, behavior specs and resource limits.
 - [Policies and evaluations](docs/evaluations.md): monitoring, selection, judging and training exports.
 - [Architecture](docs/architecture.md), [development](docs/development.md) and
   [research references](docs/resources.md): implementation and contributor context.

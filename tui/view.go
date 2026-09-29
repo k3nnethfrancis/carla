@@ -216,10 +216,7 @@ func (m *model) navigation(r rect) string {
 	if m.section != 0 {
 		footer = fmt.Sprintf("%d items", len(rows))
 		if m.section == 3 {
-			count := 0
-			if m.loomConversation != nil {
-				count = 1
-			}
+			count := len(m.selectedConversations())
 			footer = fmt.Sprintf("%d selected · /clear", count)
 		}
 		if m.section == 4 {
@@ -249,7 +246,11 @@ func (m *model) dialogRect() rect {
 		height = min(height, len(m.dialog.rows)+8)
 	}
 	if m.dialog != nil && len(m.dialog.fields) > 0 {
-		height = min(m.height-4, len(m.dialog.fields)*3+6)
+		extra := 0
+		if message, ok := m.dialog.args["error"].(string); ok {
+			extra = len(strings.Split(ansi.Wrap(safe("Error: "+message), width-4, ""), "\n"))
+		}
+		height = min(m.height-4, len(m.dialog.fields)*3+6+extra)
 	}
 	return rect{(m.width - width) / 2, (m.height - height) / 2, width, height}
 }
@@ -376,9 +377,9 @@ func (m *model) renderDialog() string {
 		}
 		if d.kind == "import" {
 			footer = "ENTER next/import · CTRL+ENTER import · ESC cancel"
-			if message, ok := d.args["error"].(string); ok {
-				body = append(body, m.accent("#A84F39", "#DB937C").Render(line("Error: "+message, r.w-4)))
-			}
+		}
+		if message, ok := d.args["error"].(string); ok {
+			body = append(body, m.accent("#A84F39", "#DB937C").Render(ansi.Wrap(safe("Error: "+message), r.w-4, "")))
 		}
 		if d.kind == "setup-input" {
 			footer = "ENTER continue · ESC back"

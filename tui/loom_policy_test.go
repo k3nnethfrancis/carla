@@ -191,7 +191,7 @@ func TestMonitoringSetupGatesSettingsAndMasksKey(t *testing.T) {
 		t.Fatal("Off exposed monitoring configuration")
 	}
 	m.submitDialog() // choose a provider
-	m.dialog.index = 1
+	m.dialog.index = 2
 	m.submitDialog() // Jev needs a key first
 	if m.dialog.kind != "loom-policy-key" || m.simString("monitor_mode") != "off" {
 		t.Fatal("enabled before key setup")
@@ -213,5 +213,67 @@ func TestMonitoringSetupGatesSettingsAndMasksKey(t *testing.T) {
 	m.openLoomPolicy()
 	if len(m.dialog.rows) < 4 || m.dialog.rows[2].id != "timing" {
 		t.Fatal("environment key did not unlock settings")
+	}
+}
+
+func TestLocalMonitorHasNoKeyGateAndRetainsNavigation(t *testing.T) {
+	m := policyFixture()
+	m.data.MonitorKeySource = ""
+	m.data.SimulatorConfig["monitor_mode"] = "diffusion"
+	m.data.SimulatorConfig["monitor_local_url"] = "http://127.0.0.1:8080"
+	m.data.SimulatorConfig["monitor_local_model"] = "openjev-latest"
+	m.openLoomPolicy()
+	root := m.dialog
+	for _, r := range root.rows {
+		if r.id == "key" || r.id == "monitor_local_url" {
+			t.Fatal("local mode requested infrastructure configuration")
+		}
+	}
+	if !strings.Contains(root.rows[0].label, "DiffusionGemma") {
+		t.Fatal(root.rows)
+	}
+	root.index = 1 // local API model
+	m.submitDialog()
+	if len(m.dialog.fields) != 1 || m.dialog.parent != root {
+		t.Fatal(m.dialog)
+	}
+	m.dialog.fields[0].input.SetValue("openjev-latest")
+	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
+	if req.Command != "simulator.configure" || string(req.Args["monitor_local_model"]) != `"openjev-latest"` {
+		t.Fatal(req)
+	}
+	m.pending = false
+	m.dialog = root
+	m.openMonitorTiming()
+	if strings.Contains(m.dialog.title, "off") {
+		t.Fatal("local heartbeat labeled off")
+	}
+	for _, size := range [][2]int{{60, 18}, {120, 36}} {
+		m.width, m.height = size[0], size[1]
+		m.reflow()
+		_ = m.View()
+	}
+}
+
+func TestLocalModelSavePreservesRejectedDraftUntilAcknowledged(t *testing.T) {
+	m := policyFixture()
+	m.width, m.height = 60, 18
+	m.openLoomPolicy()
+	parent := m.dialog
+	m.policyForm(parent, "", "monitor_local_model", "")
+	draft := m.dialog
+	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
+	if m.dialog != draft {
+		t.Fatal("closed before validation")
+	}
+	m.apply(event{Type: "error", ID: req.ID, Data: json.RawMessage(`{"message":"Local judge model must not be empty"}`)})
+	if m.dialog != draft || draft.fields[0].input.Value() != "" || !strings.Contains(m.View().Content, "must not be empty") {
+		t.Fatal("lost validation or draft")
+	}
+	draft.fields[0].input.SetValue("openjev-latest")
+	req = captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
+	m.apply(stateEvent(t, m, req.ID))
+	if m.dialog.kind != "loom-policy" || m.dialogRequest != "" {
+		t.Fatal("successful save did not go back")
 	}
 }

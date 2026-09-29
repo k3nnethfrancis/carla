@@ -485,3 +485,44 @@ async def test_cancel_generation_never_starts_chained_judge(lab, monkeypatch):
     assert not group["items"]
     assert not s.project.data.get("evaluations")
     assert not s.busy
+
+
+async def test_diffusion_evaluation_freezes_endpoint_and_failure_cannot_train(
+    lab, monkeypatch
+):
+    import httpx
+
+    from character_lab import monitor
+
+    s = lab
+    doc = s.project.add("A coherent document.")
+    definition = define(
+        s, kind="diffusion", model=monitor.LOCAL_MODEL, endpoint="http://localhost:8080"
+    )
+    requests = []
+
+    def handle(request):
+        requests.append(request)
+        assert "authorization" not in request.headers
+        assert str(request.url) == "http://127.0.0.1:8080/v1/systemone"
+        if len(requests) > 1:
+            return httpx.Response(503)
+        return httpx.Response(
+            200, json={"model": "openjev-0.1", "answers": {"passes": {"noul": 0.91}}}
+        )
+
+    real = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kw: real(transport=httpx.MockTransport(handle), **kw),
+    )
+    records = await run(s, definition, [{"node": doc["id"]}], train_on_pass=True)
+    assert records[0]["passed"] and records[0]["training"]
+    assert records[0]["trace"]["provider"] == "openjev"
+    define(s, **(definition | {"endpoint": "http://localhost:8081"}))
+    assert records[0]["definition"]["endpoint"] == "http://127.0.0.1:8080"
+    # Restore the endpoint; a server failure must not become a pass/training signal.
+    definition = define(s, **definition)
+    await run(s, definition, [{"node": doc["id"]}], train_on_pass=True)
+    assert records[-1]["status"] == "failed" and not records[-1]["training"]

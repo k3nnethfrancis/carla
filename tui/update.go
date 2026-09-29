@@ -141,7 +141,7 @@ func (m *model) perform(id string) tea.Cmd {
 		return m.loom(generationOptions{})
 	case "clear":
 		if m.section == 3 {
-			m.loomConversation = nil
+			m.simSelection = nil
 			m.reflow()
 			return nil
 		}
@@ -234,7 +234,9 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		key := m.navigationKey(raw)
-		if raw == "/" && !(m.dialog != nil && (strings.HasPrefix(m.dialog.kind, "setup-") || m.dialog.kind == "import")) && (m.focus != 3 || m.dialog != nil || m.searching || m.sectionFocus) && !m.keyCapture {
+		// File/URL setup forms need literal slashes.
+		literalSlash := m.dialog != nil && (strings.HasPrefix(m.dialog.kind, "setup-") || m.dialog.kind == "import")
+		if raw == "/" && !literalSlash && (m.focus != 3 || m.dialog != nil || m.searching || m.sectionFocus) && !m.keyCapture {
 			m.editor.Blur()
 			m.search.Blur()
 			return m, m.focusCommand(true)

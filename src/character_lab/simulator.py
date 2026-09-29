@@ -32,6 +32,8 @@ def defaults(alias):
         monitor_after_reply=True,
         monitor_during_reply=True,
         monitor_model="jev-latest",
+        monitor_local_url=monitor.LOCAL_URL,
+        monitor_local_model=monitor.LOCAL_MODEL,
         monitor_dimensions=monitor.dimensions({}),
         documents=[],
         character_alias=alias,
@@ -63,8 +65,15 @@ def configuration(project, alias):
 def validate(config, project, validate_settings):
     if "token_range" in config:
         raise ValueError("Token ranges were removed; use a single maximum")
-    if config["monitor_mode"] not in {"off", "jev"}:
-        raise ValueError("Monitor mode must be off or jev")
+    if config["monitor_mode"] not in {"off", "jev", "diffusion"}:
+        raise ValueError("Choose Off, Jev or DiffusionGemma monitoring")
+    if config["monitor_mode"] == "diffusion":
+        monitor.local_url(config.get("monitor_local_url", monitor.LOCAL_URL))
+        if (
+            not isinstance(config.get("monitor_local_model"), str)
+            or not config["monitor_local_model"].strip()
+        ):
+            raise ValueError("Supply a local monitor model")
     if (
         not isinstance(config["monitor_model"], str)
         or not config["monitor_model"].strip()
@@ -230,12 +239,16 @@ async def generate(project, config, runtime_factory, emit, seed=None):
     runtime = None
     anthology = "\n\n".join(n["text"] for n in docs)
     for index in range(config["conversations"]):
+        ancestor = (
+            seed["conversations"][index] if seed and "conversations" in seed else seed
+        )
         run["conversations"].append(
             dict(
                 index=index,
                 status="queued",
-                turns=copy.deepcopy(seed["turns"])
-                if seed
+                parent=ancestor["parent"] if ancestor else None,
+                turns=copy.deepcopy(ancestor["turns"])
+                if ancestor
                 else (
                     []
                     if config["opening_mode"] == "generated"
@@ -256,7 +269,10 @@ async def generate(project, config, runtime_factory, emit, seed=None):
         steps = [-1] if not seed and config["opening_mode"] == "generated" else []
         if not config.get("preview"):
             steps += list(range(config["turns"] * 2 - 1))
-            if seed and seed["turns"] and seed["turns"][-1]["role"] == "character":
+            if seed and (
+                "conversations" in seed
+                or (seed["turns"] and seed["turns"][-1]["role"] == "character")
+            ):
                 steps.insert(
                     0, -2
                 )  # Resume with the visitor, then requested character replies.
@@ -410,7 +426,20 @@ async def generate(project, config, runtime_factory, emit, seed=None):
             runtime.on_schedule = schedule
 
             async def advance(conversation):
-                for role in segment:
+                for step_index, role in enumerate(segment):
+                    # Batch members may end on different speakers (e.g. an interrupted reply).
+                    if (
+                        seed
+                        and "conversations" in seed
+                        and segment_index == 0
+                        and step_index == 0
+                        and role == "visitor"
+                        and (
+                            not conversation["turns"]
+                            or conversation["turns"][-1]["role"] != "character"
+                        )
+                    ):
+                        continue
                     if conversation["status"] not in {"queued", "running"}:
                         break
                     await sample(conversation, role, runtime, alias)
@@ -471,6 +500,30 @@ def conversation_seed(project, run_id, index):
         turns=copy.deepcopy(conversation["turns"]),
         documents=copy.deepcopy(run["documents"]),
         config=copy.deepcopy(run["config"]),
+    )
+
+
+def batch_seed(project, run_id, indices=None):
+    """Freeze each sibling independently; continuation never clones one winner."""
+    run = next(
+        (r for r in project.data.get("simulation_runs", []) if r["id"] == run_id), None
+    )
+    if run is None or not run["conversations"]:
+        raise ValueError("Select a saved Loom")
+    if indices is None:
+        indices = [c["index"] for c in run["conversations"]]
+    if (
+        not isinstance(indices, list)
+        or not indices
+        or any(type(i) is not int for i in indices)
+        or len(set(indices)) != len(indices)
+    ):
+        raise ValueError("Select a nonempty set of distinct conversations")
+    seeds = [conversation_seed(project, run_id, index) for index in indices]
+    return dict(
+        parent=dict(run=run_id, conversation=-1),
+        documents=seeds[0]["documents"],
+        conversations=seeds,
     )
 
 

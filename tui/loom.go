@@ -2,8 +2,8 @@ package main
 
 import tea "charm.land/bubbletea/v2"
 
-// One command, with its target fixed by the current tab rather than a stale
-// document selection. Simulator runs start fresh from its configured opening.
+// The view determines document versus conversation generation; an explicit
+// Simulator selection determines which histories advance.
 func (m *model) loom(options generationOptions) tea.Cmd {
 	if m.section != 3 && (options.Turns > 0 || options.Message != "") {
 		m.status = "Error: --turns and --message apply only to Simulator conversations"
@@ -17,37 +17,24 @@ func (m *model) loom(options generationOptions) tea.Cmd {
 		m.status = "Save or cancel the edit before running /loom"
 		return nil
 	}
-	// Bare Loom never inherits a surprising batch size or conversation length.
-	if options.Count == 0 {
-		options.Count = 1
-	}
-	if options.Turns == 0 && m.section == 3 {
-		options.Turns = 1
-	}
-	if options.Loops == 0 {
-		options.Loops = 1
-	}
 	if m.section == 3 {
-		if options.Message != "" && m.loomConversation != nil {
-			m.status = "Clear the conversation selection with /clear before using --message for a fresh opening"
+		args, _, err := m.simulationLoomPlan(options)
+		if err != nil {
+			m.status = err.Error()
 			return nil
-		}
-		args := map[string]any{}
-		options.apply(args)
-		if target, ok := m.loomConversationTarget(); ok {
-			for k, v := range target {
-				args[k] = v
-			}
 		}
 		m.conversationOpen = false
 		m.simulation = nil
 		m.activeSimulation = nil
-		cmd := m.send("simulator.run", args)
-		if cmd != nil {
-			m.loomConversation = nil
-		}
-		return cmd
+		return m.send("simulator.run", args)
 	}
+	if options.Count == 0 {
+		options.Count = 1
+	}
+	if options.Loops == 0 {
+		options.Loops = 1
+	}
+
 	if m.section == 0 {
 		args := map[string]any{"refs": m.targetRefs()}
 		options.apply(args)

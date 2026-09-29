@@ -75,6 +75,9 @@ func (m *model) commandChoices() []action {
 			a.label = "Clear branch selection"
 		}
 		_, conversation := m.conversationTarget()
+		if m.section == 3 && a.id == "branch" {
+			conversation = len(m.selectedConversations()) == 1
+		}
 		if a.id == "visitor" && m.section != 3 {
 			continue
 		}
@@ -142,8 +145,8 @@ func (m *model) commandChoices() []action {
 		if a.id == "loom" {
 			if m.section == 3 {
 				a.label = "Generate conversations · number = conversations"
-				if _, ok := m.loomConversationTarget(); ok {
-					a.label = "Continue selected conversation · number = alternatives"
+				if m.simSelection != nil {
+					a.label = m.simulationActionLabel()
 				}
 			} else if m.section == 1 {
 				a.label = "Generate branches at cursor · number = branches"

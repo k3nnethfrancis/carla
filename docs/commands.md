@@ -22,6 +22,8 @@ Simulator ─ opening or transcript ── /loom ── conversation extensions 
 
 Library and Anthology call the same document operation as Branches, then open its results in Branches. They do not implement separate generation systems. New document versions start unkept; the original source or kept version remains unchanged.
 
+The [interaction model](interaction-model.md) explains focus, selection and action scope.
+
 ## The central commands
 
 | Command | Meaning |
@@ -59,7 +61,7 @@ While typing `/lo`, the highlighted `/loom` completion already shows its argumen
 | `--eval "name"` | Judge completed outputs using that named evaluation after generation; does not change generation prompts. | Library, Branches, Anthology, Simulator |
 | `--loops N` | Total generate-and-select cycles, including the first cycle. | Library, Branches, Anthology, Simulator |
 
-**Bare `/loom` is the small, predictable action:** one alternative, one loop, and in Simulator one new Character reply. Model, sampling, token ceilings and monitoring settings still come from configuration. Explicit parameters expand the run.
+**Bare `/loom` uses the selected scope:** one document continuation, one fresh conversation when nothing is checked, or one extension of each selected conversation. Continuations use **Turns per continuation** from Simulator `/config` (default one); `--turns` overrides it. One loop is the default. Model, sampling, token ceilings and monitoring come from configuration.
 
 `--turns` and `--msg` outside Simulator are rejected with an explanation. There are no mode flags. `--loops` greater than one requires a configured selection policy; a single loop does not select a winner.
 
@@ -86,7 +88,7 @@ If all four loops complete, the last example creates twelve continuations. The a
 
 ```text
 /loom
-    One new Character reply from the selected conversation or fresh setup.
+    Continue each selected conversation using configured turns, or start fresh if none are selected.
 
 /loom 4
     Four alternative next replies from the same starting conversation.
@@ -106,18 +108,25 @@ If the conversation ends with a Visitor message, Loom generates the Character re
 
 ## Selection determines the input
 
-A batch is a collection of alternatives, not itself a conversation. In Simulator, highlighting previews a target but does not select it for Loom. **Space** selects or deselects one conversation; **Enter** selects and opens it, including from the grid. Choosing a different conversation replaces the prior checkmark. `/clear` clears the target without deleting anything. The checked conversation stays the Loom target while browsing other items. Starting a Loom consumes that selection; displaying its output does not implicitly select a new target.
+Focus controls what you preview. Selection controls what generation and evaluation operate on. In Simulator:
 
-| Selected context | `/loom` | `/loom 4` |
+- **Space on a Loom parent:** select all its conversations; Space again clears it.
+- **Space on a child:** replace a parent selection with just that child, then toggle additional children into or out of the set. Selecting a child in another Loom starts a new set there.
+- **Enter on a parent:** select it and open its grid. Arrows move between previews; Space checks children. Enter on a child opens and selects that conversation alone.
+- **After generation:** the new result group becomes selected, ready for another `/loom` or `/continue`.
+- **`/clear`:** reset the operation target without deleting saved content. Browsing never silently creates a selection.
+
+| Selected context | `/loom` or `/continue` | `/loom 4` |
 |---|---|---|
 | One document version | One continuation | Four continuations of that version |
-| Explicitly checked conversation | One new Character reply | Four alternative extensions of that conversation |
-| Browsed conversation or batch, nothing checked | Start one fresh conversation | Start four fresh conversations |
-| Fresh Simulator setup | Start one conversation | Start four alternatives from the setup |
+| One checked conversation | Continue it with configured turns | Four alternatives from that conversation |
+| Loom parent with four conversations | Continue each of the four independently | Same four-member continuation |
+| Checked subset of conversations | Continue only those conversations | Count must match the selected set; omit it normally |
+| Nothing checked in Simulator | Start one fresh conversation | Start four fresh conversations |
 
-Never silently pick a batch winner, continue every member, or reuse the original batch input. Automatic policy selection is part of an explicitly configured multi-loop run.
+For example, `/loom 4` → finish → `/continue` advances all four. To advance only conversations 1 and 3, Space-select 1 (replacing the parent scope), then 3, and run `/continue`. `/eval` uses that same selected set. The target line and command completion show the scope. Each new result preserves its own ancestor transcript and provenance; originals remain unchanged.
 
-Continuing several existing conversations is different from making several alternatives of one conversation. Explicit multi-selection is the proposed entry point for that bulk operation, but its command contract is not yet settled.
+With multiple selected conversations, use `--turns` to control how far each advances. To generate alternatives from **one** conversation, select that conversation before specifying a different count. With `--loops > 1`, the existing selection policy still chooses one candidate between loops; it does not independently advance every sibling through all loops.
 
 ## Fork, edit and Visitor messages
 
@@ -137,7 +146,7 @@ Select conversation → /fork    → new version, no generated text
 
 `/config` is one entry point into contextual configuration.
 
-**Library, Branches and Anthology share document Loom settings.** They are views into the same configuration, not three copies. Alternatives, turns and loops are explicit run arguments; their former default controls are hidden to keep bare Loom predictable. Simulator exposes conversation settings alongside the common Loom controls.
+**Library, Branches and Anthology share document Loom settings.** They are views into the same configuration, not three copies. Alternatives and policy loops are explicit run arguments. Simulator also exposes Turns per continuation, used when advancing selected conversations.
 
 ```text
 /config
@@ -148,7 +157,7 @@ Select conversation → /fork    → new version, no generated text
 /policy
   Monitoring     conditions, thresholds and warn/stop actions
   Selection      evaluator, criteria and candidate advancement
-  Judges         reusable whole-item criteria, local prompts or Jev thresholds
+  Judges         reusable whole-item criteria, local prompts or classifier thresholds
 ```
 
 Configuration edits persist. Explicit command arguments override settings for that run only. Bare Loom retains the one-alternative / one-loop / one-reply behavior defined above. Saved legacy batch fields remain compatible with existing workspaces; use explicit command parameters to run batches.
@@ -171,7 +180,7 @@ A multi-loop run needs a configured selection policy. Missing configuration prod
 
 ### Monitoring: what is happening during generation
 
-The current Jev role remains distinct:
+The monitoring classifier role remains distinct:
 
 ```text
 Observe output → classify behavior → annotate / warn / explicitly stop
@@ -243,7 +252,7 @@ The interface replaces separate user-facing `/continue`, `/grow`, `/run` and con
 
 - The local selector reviews every candidate and selects one classified `explore`, or none. Multiple eligible candidates are resolved by the selector’s explicit choice and rationale. No selection ends exploration with `no_selection`; invalid evidence or provider failure fails the run and retains outputs. There is no silent random fallback.
 - Selection happens after a completed batch. A selector uses a separate resident model after generation is unloaded. Externally managed generators cannot be unloaded by Carla; stop that server before using selection loops.
-- Monitoring settings are currently shared between document and conversation workflows. It remains optional and sends the material being checked to OpenRouter when enabled. Document monitor evidence is persisted and inspectable; the conversation-specific blink UI is not reused for document tiles.
+- Monitoring settings are currently shared between document and conversation workflows. It remains optional: DiffusionGemma uses the local OpenJev server; choosing Jev sends the material being checked to OpenRouter. Document monitor evidence is persisted and inspectable; the conversation-specific blink UI is not reused for document tiles.
 - `/continue`, `/generate`, `/run`, `/simulate` and `/grow` are compatibility names for `/loom`. Their positional argument follows Loom’s alternatives count. Use `--tokens` explicitly for an output ceiling. `/grow` no longer silently enables repeated loops.
 - Old settings and sampling names lead to `/config`; policy names lead to `/policy`. Existing keyboard action IDs remain supported. `/model` remains a direct shortcut.
 - Conversation edits fork through the changed message and discard later replies in the fork, preserving the original.
@@ -296,9 +305,10 @@ grades. Existing completed judgments can be added without another model call.
 Older flat results migrate into collections without rerunning or altering them.
 
 A judge uses the configured local instruct model (criteria and editable prompt)
-or Jev through OpenRouter (behavior spec and probability threshold). Jev uses
+or a DiffusionGemma/Jev classifier (behavior spec and probability threshold).
+DiffusionGemma uses a [local OpenJev service](local-judge.md); Jev uses
 the saved OpenRouter credential or `OPENROUTER_API_KEY`. Its probabilities are
-model estimates, not calibrated confidence. Local judges use the policy model;
+model estimates, not calibrated confidence. Instruct judges use the policy model;
 they must return JSON with boolean `passed`, `reason`, and an exact `evidence`
 excerpt. Invalid responses and provider errors remain incomplete, never passes.
 Full items are sent without silent truncation; context overflow remains an error.
@@ -351,7 +361,10 @@ means no checks, even if Monitoring is on. Saved traces retain the timing used.
 
 ### Enabling monitoring
 
-`/policy` → Monitoring initially shows only **Monitoring · Off**. Select Jev and
+`/policy` → Monitoring initially shows only **Monitoring · Off**. Choose
+**DiffusionGemma (local)** for a local service without an API key; Server and Model
+are editable alongside Heartbeat and Behaviors. See [setup](local-judge.md).
+Alternatively, select Jev and
 complete the masked OpenRouter API-key step before timing, model and behavior
 settings appear. If a saved or environment key already exists, setup is already
 complete. An older workspace with Jev enabled but no available key shows only the

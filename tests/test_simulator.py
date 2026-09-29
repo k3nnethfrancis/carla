@@ -322,12 +322,17 @@ async def test_high_monitor_scores_never_stop_next_turn(setup, monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("action", ["warn", "stop"])
-async def test_policy_applies_only_to_matching_conversation(setup, monkeypatch, action):
+@pytest.mark.parametrize("provider", ["jev", "diffusion"])
+async def test_policy_applies_only_to_matching_conversation(
+    setup, monkeypatch, action, provider
+):
     from character_lab import monitor
 
     project, config, emit, events = setup
     config.update(
-        conversations=2, monitor_mode="jev", monitor_dimensions=monitor.dimensions({})
+        conversations=2,
+        monitor_mode=provider,
+        monitor_dimensions=monitor.dimensions({}),
     )
     config["monitor_dimensions"][0]["action"] = action
 
@@ -756,3 +761,58 @@ def test_monitor_timing_defaults_and_validation(setup):
             simulator.validate(
                 {**config, key: "false"}, project, Session.validate_settings
             )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("indices", [None, [0, 2]])
+async def test_continue_selected_siblings_keeps_each_history(setup, indices):
+    project, config, emit, events = setup
+    config.update(conversations=4, turns=1)
+    original = await simulator.generate(project, config, Runtime, emit)
+    for c in original["conversations"]:
+        c["turns"][-1]["text"] = f"Unique sibling {c['index']}"
+    before = copy.deepcopy(original)
+    seed = simulator.batch_seed(project, original["id"], indices)
+    config.update(conversations=len(seed["conversations"]), turns=2)
+    continued = await simulator.generate(project, config, Runtime, emit, seed)
+    assert original == before
+    assert continued["parent"] == dict(run=original["id"], conversation=-1)
+    for c, index in zip(continued["conversations"], indices or range(4)):
+        assert c["parent"] == dict(run=original["id"], conversation=index)
+        assert c["turns"][:2] == before["conversations"][index]["turns"]
+        assert [t["role"] for t in c["turns"][2:]] == [
+            "visitor",
+            "character",
+            "visitor",
+            "character",
+        ]
+        assert f"Unique sibling {index}" in c["turns"][2]["prompt"]
+        assert all(
+            f"Unique sibling {other}" not in c["turns"][2]["prompt"]
+            for other in range(4)
+            if other != index
+        )
+
+
+@pytest.mark.asyncio
+async def test_continue_batch_with_different_final_speakers(setup):
+    project, config, emit, _ = setup
+    config.update(conversations=2, turns=1, visitor_alias="other")
+    original = await simulator.generate(project, config, Runtime, emit)
+    original["conversations"][1]["turns"].pop()
+    continued = await simulator.generate(
+        project, config, Runtime, emit, simulator.batch_seed(project, original["id"])
+    )
+    assert [t["role"] for t in continued["conversations"][0]["turns"]] == [
+        "user",
+        "character",
+        "visitor",
+        "character",
+    ]
+    assert [t["role"] for t in continued["conversations"][1]["turns"]] == [
+        "user",
+        "character",
+    ]
+    for indices in ([], [0, 0], [True], [999]):
+        with pytest.raises(ValueError):
+            simulator.batch_seed(project, original["id"], indices)

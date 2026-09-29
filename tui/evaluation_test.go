@@ -57,7 +57,7 @@ func TestEvalTargetsUseSelectedVersionsAndExplicitConversationBatch(t *testing.T
 	m.section = 3
 	m.simulation = nil
 	m.conversationOpen = false
-	m.data.SimulationRuns = []runSummary{{ID: "run", Count: 2, Status: "complete"}}
+	m.data.SimulationRuns = []runSummary{{ID: "run", Count: 2, Status: "complete", Conversations: []simulationConversation{{Index: 0}, {Index: 1}}}}
 	for i, r := range m.rows() {
 		if r.kind == "simulation" {
 			m.selected = i
@@ -68,7 +68,7 @@ func TestEvalTargetsUseSelectedVersionsAndExplicitConversationBatch(t *testing.T
 	if len(targets) != 0 {
 		t.Fatal(targets)
 	}
-	m.loomConversation = &conversationParent{Run: "run", Conversation: 1}
+	m.selectLoomConversation(map[string]any{"run": "run", "conversation": 1})
 	if targets = m.evaluationTargets(); len(targets) != 1 || targets[0]["conversation"] != 1 {
 		t.Fatal(targets)
 	}
@@ -211,5 +211,20 @@ func TestCollectionConfigAndAddingDoNotRunJudges(t *testing.T) {
 	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
 	if req.Command != "evaluation.collection.add" {
 		t.Fatal(req)
+	}
+}
+
+func TestDiffusionEvaluatorEndpointSurvivesEditing(t *testing.T) {
+	m := fixture()
+	e := evaluator{ID: "local", Name: "Voice", Kind: "diffusion", Model: "openjev-latest", Endpoint: "http://127.0.0.1:8080", Spec: "Coherent", Threshold: .8}
+	m.data.Evaluators = []evaluator{e}
+	m.openEvaluator(e.ID)
+	for _, r := range m.dialog.rows {
+		if r.id == "endpoint" {
+			t.Fatal("managed server leaked into normal configuration")
+		}
+	}
+	if e.args()["endpoint"] != e.Endpoint {
+		t.Fatal("endpoint lost on judge edits")
 	}
 }

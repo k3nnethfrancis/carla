@@ -57,7 +57,7 @@ func (m *model) gridItems() []loomTile {
 			fmt.Fprintln(&body)
 		}
 		title := fmt.Sprintf("Conversation %d", c.Index+1)
-		if m.loomConversation != nil && m.loomConversation.Run == m.simulation.ID && m.loomConversation.Conversation == c.Index {
+		if m.conversationSelected(m.simulation.ID, c.Index) {
 			title = "✓ " + title
 		}
 		items = append(items, loomTile{
@@ -219,7 +219,7 @@ func (m *model) openGridTile(index int) tea.Cmd {
 		return m.send("node.open", map[string]any{"node": items[index].ID})
 	}
 	if m.simulation != nil {
-		m.loomConversation = &conversationParent{Run: m.simulation.ID, Conversation: index}
+		m.selectLoomConversation(map[string]any{"run": m.simulation.ID, "conversation": index})
 	}
 	m.selectConversationRow()
 	m.reflow()
