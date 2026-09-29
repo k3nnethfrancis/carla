@@ -171,13 +171,14 @@ def test_bundled_question_order_identical_across_repeats_providers():
 
 
 @pytest.mark.asyncio
-async def test_request_questions_match_real_monitor_scan(monkeypatch):
+@pytest.mark.parametrize("mode", ["bundled", "separate"])
+async def test_request_questions_match_real_monitor_scan(monkeypatch, mode):
     from character_lab import monitor
 
-    captured = {}
+    captured = []
 
     async def capture(request, record, **kwargs):
-        captured.update(request)
+        captured.append(request)
         record.update(status="unavailable")
 
     monkeypatch.setattr(monitor, "classify", capture)
@@ -185,13 +186,15 @@ async def test_request_questions_match_real_monitor_scan(monkeypatch):
     turn = dict(role="character", text="A coherent reply.", status="complete")
     config = dict(
         monitor_model="model",
+        monitor_call_mode=mode,
         monitor_dimensions=[
             dict(id=name, spec=value["instructions"], enabled=True)
             for name, value in f["questions"].items()
         ],
     )
     await monitor.scan(config, dict(turns=[turn]), turn)
-    assert (
-        eval_run.request_for(f, f["cases"][0], "model", list(f["questions"]))
-        == captured
-    )
+    names = list(f["questions"])
+    groups = [names] if mode == "bundled" else [[name] for name in names]
+    assert captured == [
+        eval_run.request_for(f, f["cases"][0], "model", group) for group in groups
+    ]

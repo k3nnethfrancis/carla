@@ -1,5 +1,6 @@
 """Explicit, opt-in Loom policy. Provider errors never stop a conversation."""
 
+import asyncio
 import copy
 import json
 import time
@@ -150,9 +151,14 @@ def detections(config, scores):
 
 async def scan(config, conversation, turn):
     """Exact history/questions/result stay in the trace; credentials never do."""
+    mode = config.get("monitor_call_mode", "separate")
+    if mode not in {"separate", "bundled"}:
+        raise ValueError("Choose Separate or Bundled monitor calls")
     local = config.get("monitor_mode") == "diffusion"
     record = dict(
         status="checking",
+        call_mode=mode,
+        calls=[],
         provider="openjev" if local else "openrouter",
         turn=len(conversation["turns"]) - 1,
     )
@@ -177,18 +183,59 @@ async def scan(config, conversation, turn):
             if d["enabled"]
         },
     )
-    record["request"] = copy.deepcopy(request)
-    if not request["questions"]:
-        record.update(status="complete", scores={}, detections=[])
-        return
-    if local:
-        await classify(
-            request, record, endpoint=config.get("monitor_local_url", LOCAL_URL)
+    # Freeze one prefix for the entire check, even while generation continues.
+    batches = (
+        [request["questions"]]
+        if mode == "bundled" and request["questions"]
+        else [{key: value} for key, value in request["questions"].items()]
+    )
+    started = time.monotonic()
+    scores = {}
+    try:
+        for batch in batches:
+            call = dict(status="checking")
+            record["calls"].append(call)
+            payload = copy.deepcopy({**request, "questions": batch})
+            try:
+                if local:
+                    await classify(
+                        payload,
+                        call,
+                        endpoint=config.get("monitor_local_url", LOCAL_URL),
+                    )
+                else:
+                    await classify(payload, call)
+            except asyncio.CancelledError:
+                call["status"] = "cancelled"
+                raise
+            if mode == "bundled":
+                # Preserve the historical single-call fields for bundled traces.
+                record.update(call)
+            if call["status"] == "complete":
+                scores.update(call["scores"])
+            record["scores"] = dict(scores)
+            record["detections"] = detections(config, scores)
+        failed = [c for c in record["calls"] if c["status"] != "complete"]
+        record.update(
+            status="partial"
+            if failed and scores
+            else "unavailable"
+            if failed
+            else "complete",
+            scores=scores,
+            detections=detections(config, scores),
         )
-    else:
-        await classify(request, record)
-    if record["status"] == "complete":
-        record["detections"] = detections(config, record["scores"])
+        if failed:
+            record["error"] = (
+                "Some behavior checks unavailable"
+                if scores
+                else failed[0].get("error", "Behavior checks unavailable")
+            )
+    except asyncio.CancelledError:
+        record["status"] = "cancelled"
+        raise
+    finally:
+        record["elapsed_seconds"] = round(time.monotonic() - started, 3)
 
 
 async def classify(request, record, *, endpoint=_HOSTED):

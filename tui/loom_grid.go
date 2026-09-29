@@ -294,7 +294,7 @@ func monitorSummary(result monitorResult) string {
 	if result.Status == "" {
 		return ""
 	}
-	if result.Status != "complete" {
+	if result.Status != "complete" && result.Status != "partial" {
 		return "Monitor: " + result.Status + " " + result.Error
 	}
 	keys := []string{}
@@ -303,6 +303,9 @@ func monitorSummary(result monitorResult) string {
 	}
 	sort.Strings(keys)
 	parts := []string{}
+	if result.Status == "partial" {
+		parts = append(parts, "partial · "+result.Error)
+	}
 	if result.Phase == "partial" && !result.EndOfTurn {
 		parts = append(parts, fmt.Sprintf("in progress · %d tokens", result.Tokens))
 	}
