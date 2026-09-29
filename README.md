@@ -269,7 +269,9 @@ make build
 ```
 
 Tests use synthetic documents and fake inference; they need no weights, GPU or
-API keys. See [architecture](docs/architecture.md) for code boundaries and
+API keys. The optional [monitoring eval](evals/monitoring/README.md) compares
+System One probability distributions and latency outside the app; its results stay
+local and gitignored. See [architecture](docs/architecture.md) for code boundaries and
 [research references](docs/resources.md) for method context.
 
 Code is [MIT licensed](LICENSE). Imported texts, model weights and generated
