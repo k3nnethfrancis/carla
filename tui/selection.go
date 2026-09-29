@@ -25,18 +25,8 @@ func (m *model) subtree(ids []string) map[string]bool {
 	return result
 }
 func (m *model) selectionMark(id string) string {
-	ids := m.subtree([]string{id})
-	count := 0
-	for key := range ids {
-		if m.branchSelection[key] {
-			count++
-		}
-	}
-	if count == len(ids) {
+	if m.branchSelection[id] {
 		return "✓ "
-	}
-	if count > 0 {
-		return "− "
 	}
 	return "  "
 }

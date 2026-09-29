@@ -9,6 +9,8 @@ import (
 // all its children; selecting a child replaces that scope with an explicit set.
 // Resolve it once for commands, evaluation, checkmarks and the action preview.
 type simulationSelection struct {
+	Group         string
+	Members       []conversationParent
 	Run           string
 	All           bool
 	Conversations map[int]bool
@@ -36,11 +38,36 @@ func (m *model) toggleConversation(run string, index int) {
 }
 func (m *model) conversationSelected(run string, index int) bool {
 	s := m.simSelection
+	if s != nil && (s.Group != "" || len(s.Members) > 0) {
+		for _, t := range m.selectedConversations() {
+			if t.Run == run && t.Conversation == index {
+				return true
+			}
+		}
+		return false
+	}
 	return s != nil && s.Run == run && (s.All || s.Conversations[index])
 }
 func (m *model) selectedConversations() []conversationParent {
 	if m.simSelection == nil {
 		return nil
+	}
+	if m.simSelection.Group != "" {
+		if scope := m.simulationGroupScope(m.simSelection.Group); scope != nil {
+			return simulationScopeLeaves(*scope)
+		}
+		var out []conversationParent
+		for _, run := range m.simulationSummaries() {
+			if alternativeKey(run) == m.simSelection.Group || run.AlternativeGroup == m.simSelection.Group {
+				for _, c := range run.Conversations {
+					out = append(out, conversationParent{Run: run.ID, Conversation: c.Index})
+				}
+			}
+		}
+		return out
+	}
+	if len(m.simSelection.Members) > 0 {
+		return m.simSelection.Members
 	}
 	var conversations []simulationConversation
 	if m.simulation != nil && m.simulation.ID == m.simSelection.Run {
@@ -65,15 +92,23 @@ func (m *model) loomConversationTarget() (map[string]any, bool) {
 	if m.section != 3 || m.simSelection == nil {
 		return nil, false
 	}
+	if m.simSelection.Group != "" {
+		if scope := m.simulationGroupScope(m.simSelection.Group); scope != nil {
+			return map[string]any{"scope": *scope}, true
+		}
+	}
 	targets := m.selectedConversations()
-	if len(targets) == 1 {
-		return map[string]any{"run": targets[0].Run, "conversation": targets[0].Conversation}, true
+	if len(targets) == 0 {
+		return nil, false
 	}
-	indices := []int{}
-	for _, target := range targets {
-		indices = append(indices, target.Conversation)
+	children := []actionScope{}
+	for _, t := range targets {
+		children = append(children, actionScope{Kind: "conversation", Run: t.Run, Conversation: t.Conversation})
 	}
-	return map[string]any{"run": m.simSelection.Run, "conversations": indices}, true
+	if len(children) == 1 && !m.simSelection.All {
+		return map[string]any{"scope": children[0]}, true
+	}
+	return map[string]any{"scope": actionScope{Kind: "set", ID: m.simSelection.Run, Children: children}}, true
 }
 
 // Plan is shared by the command preview and execution: the same target, defaults
@@ -83,16 +118,19 @@ func (m *model) simulationLoomPlan(options generationOptions) (map[string]any, s
 	if m.simSelection != nil && len(targets) == 0 {
 		return nil, "", fmt.Errorf("selected conversations are no longer available; /clear starts fresh")
 	}
-	if options.Message != "" && m.simSelection != nil {
-		return nil, "", fmt.Errorf("clear the conversation selection with /clear before using --message for a fresh opening")
+	if options.Action == "" {
+		options.Action = "loom"
 	}
-	if len(targets) > 1 && options.Count > 0 && options.Count != len(targets) {
-		return nil, "", fmt.Errorf("a set continues each selected conversation once; omit the count or select one conversation for alternatives")
+	if options.Action == "continue" && len(targets) == 0 {
+		return nil, "", fmt.Errorf("select a conversation or set to continue; /loom starts fresh")
 	}
-	if options.Count == 0 && len(targets) < 2 {
+	if options.Action == "continue" && (options.Count > 0) {
+		return nil, "", fmt.Errorf("/continue advances the selected set; use /loom for alternatives")
+	}
+	if options.Action == "loom" && options.Count == 0 {
 		options.Count = 1
 	}
-	if options.Loops == 0 {
+	if options.Loops == 0 && options.Action == "loom" {
 		options.Loops = 1
 	}
 	if options.Turns == 0 && m.simSelection == nil {
@@ -109,19 +147,24 @@ func (m *model) simulationLoomPlan(options generationOptions) (map[string]any, s
 	if turns == 1 {
 		unit = "turn"
 	}
-	label := fmt.Sprintf("Start %d conversations · %d %s each", options.Count, turns, unit)
-	if len(targets) > 0 {
-		noun := "conversations"
-		if len(targets) == 1 {
-			noun = "conversation"
+	noun := func(n int, singular string) string {
+		if n == 1 {
+			return singular
 		}
-		label = fmt.Sprintf("Continue %d selected %s · %d %s each", len(targets), noun, turns, unit)
-		if len(targets) == 1 && options.Count > 1 {
-			label = fmt.Sprintf("Generate %d alternatives of selected conversation · %d %s each", options.Count, turns, unit)
+		return singular + "s"
+	}
+	label := fmt.Sprintf("Start %d %s · %d %s each", max(1, options.Count), noun(max(1, options.Count), "conversation"), turns, unit)
+	if len(targets) > 0 {
+		label = fmt.Sprintf("Continue %d selected %s · %d %s each", len(targets), noun(len(targets), "conversation"), turns, unit)
+		if options.Action == "loom" && options.Count > 1 {
+			label = fmt.Sprintf("Create %d alternative %s of %d %s · %d %s each", options.Count, noun(options.Count, "set"), len(targets), noun(len(targets), "conversation"), turns, unit)
 		}
 	}
+	if options.Message != "" {
+		label += " · send visitor message to each"
+	}
 	if options.Loops > 1 {
-		label += fmt.Sprintf(" · %d selection loops", options.Loops)
+		label += fmt.Sprintf(" · %d loops", options.Loops)
 	}
 	args := map[string]any{}
 	options.apply(args)
@@ -135,9 +178,16 @@ func (m *model) simulationLoomPlan(options generationOptions) (map[string]any, s
 func (m *model) simulationActionLabel() string {
 	options := generationOptions{}
 	if fields := strings.Fields(m.command.Value()); len(fields) > 0 {
-		for _, alias := range m.commandAliases("loom") {
+		for _, alias := range append(m.commandAliases("loom"), m.commandAliases("continue")...) {
 			if fields[0] == "/"+alias {
-				if parsed, err := parseGenerationOptions(m.command.Value(), "loom"); err == nil {
+				id := "loom"
+				for _, name := range m.commandAliases("continue") {
+					if fields[0] == "/"+name {
+						id = "continue"
+					}
+				}
+				if parsed, err := parseGenerationOptions(m.command.Value(), id); err == nil {
+					parsed.Action = id
 					options = parsed
 				}
 				break

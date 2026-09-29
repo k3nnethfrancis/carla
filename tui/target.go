@@ -56,12 +56,12 @@ func (m *model) contextualActions() []action {
 			}
 		}
 		if count < len(refs) {
-			actions = append(actions, action{id: "add", label: "Add to seeds"})
+			actions = append(actions, action{id: "add", label: "Import a source document"})
 		}
 		if count > 0 {
 			actions = append(actions, action{id: "remove", label: "Remove from seeds"})
 		}
-		actions = append(actions, action{id: "continue", label: "Continue from this source selection"})
+
 	} else if (m.section == 1 || m.section == 2) && (r.kind == "node" || m.selectionVisible()) {
 		if m.section == 1 {
 			label := fmt.Sprintf("Keep %d in anthology", m.collectionCount())
@@ -128,7 +128,7 @@ func (m *model) contextualAction(id string) tea.Cmd {
 	}
 	switch id {
 	case "add":
-		return m.send("seed.add", map[string]any{"refs": m.targetRefs()})
+		return m.addItem()
 	case "remove":
 		if m.section == 0 {
 			return m.send("seed.remove", map[string]any{"refs": m.targetRefs()})
@@ -140,16 +140,7 @@ func (m *model) contextualAction(id string) tea.Cmd {
 		}
 		return m.send("node.keep", map[string]any{"node": m.targetRow().id, "kept": true})
 	case "continue":
-		args := map[string]any{"node": m.targetRow().id}
-		if m.section == 0 {
-			args = map[string]any{"refs": m.targetRefs()}
-		}
-		cmd := m.send("continue", args)
-		if cmd != nil {
-			m.section = 1
-			m.focus = 1
-		}
-		return cmd
+		return m.loom(generationOptions{Action: "continue"})
 	}
 	return nil
 }
@@ -207,7 +198,9 @@ func (m *model) actionNodeIDs() []string {
 	if m.selectionVisible() {
 		return m.selectedBranches()
 	}
-	if r := m.targetRow(); r.kind == "node" {
+	if r := m.targetRow(); r.kind == "document-set" {
+		return m.documentSetMembers(r.id)
+	} else if r.kind == "node" {
 		return []string{r.id}
 	}
 	return nil

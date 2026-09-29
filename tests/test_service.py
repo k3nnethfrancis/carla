@@ -116,6 +116,7 @@ async def test_cancel_preserves_partial_and_blocks_switch(session):
 async def test_clear_edit_keep_review_snapshot_and_restart(session):
     s = session
     await s.execute("seed.toggle", {"ref": "meditations:1.1"}, "select")
+    await s.execute("seed.open", {}, "open")
     root = s.current().copy()
     await s.execute(
         "node.edit", {"node": root["id"], "text": "Source\nA path remembers."}, "edit"
@@ -249,7 +250,7 @@ async def test_bindings_saved_across_workspaces(session):
 
 
 @pytest.mark.asyncio
-async def test_open_seed_set_without_generation_or_duplicates(session):
+async def test_open_seed_set_creates_explicit_copies_without_generating(session):
     s = session
     with pytest.raises(ValueError, match="Space"):
         await s.execute("seed.open", {}, "empty")
@@ -261,8 +262,10 @@ async def test_open_seed_set_without_generation_or_duplicates(session):
     await s.execute("seed.open", {}, "open")
     root = s.current()
     await s.execute("seed.open", {}, "open-again")
-    assert s.current()["id"] == root["id"]
-    assert len(s.project.data["nodes"]) == count
+    assert s.current()["id"] != root["id"]
+    assert s.current()["text"] == root["text"]
+    assert count == 0  # Checking source passages does not create documents.
+    assert len(s.project.data["nodes"]) == count + 2
     assert set(root["passage_ids"]) == set(refs)
     assert s.job is None
 
@@ -999,3 +1002,18 @@ async def test_local_monitor_config_without_credentials_and_bad_endpoint_rejecte
             "bad",
         )
     assert session.project.data["simulator_config"]["monitor_local_url"] == "auto"
+
+
+@pytest.mark.asyncio
+async def test_selection_policy_toggle_is_explicit_and_persisted(session):
+    s = session
+    await s.snapshot()
+    state = next(event[1] for event in reversed(s.events) if event[0] == "state")
+    assert state["selection_enabled"] is False
+    await s.execute("policy.configure", {"selection_enabled": True}, "enable")
+    assert s.project.data["selection_enabled"] is True
+    with pytest.raises(ValueError, match="true or false"):
+        await s.execute("policy.configure", {"selection_enabled": "false"}, "invalid")
+    assert s.project.data["selection_enabled"] is True
+    await s.execute("policy.configure", {"selection_enabled": False}, "disable")
+    assert json.loads(s.project.path.read_text())["selection_enabled"] is False

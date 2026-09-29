@@ -18,6 +18,9 @@ func (m *model) dialogChoice() (dialogChoice, bool) {
 	id := d.rows[d.index].id
 	c := dialogChoice{field: id}
 	switch d.kind {
+	case "grow-config":
+		c.toggle = id == "selection_enabled"
+		return c, c.toggle
 	case "loom-policy":
 		if id != "mode" {
 			return c, false
@@ -58,6 +61,9 @@ func (m *model) cycleDialogChoice(step int) tea.Cmd {
 	}
 	d := m.dialog
 	if c.toggle {
+		if d.kind == "grow-config" {
+			return m.send("policy.configure", map[string]any{"selection_enabled": !m.data.SelectionEnabled})
+		}
 		return m.submitLoomPolicy(d)
 	}
 	index := 0

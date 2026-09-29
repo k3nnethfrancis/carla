@@ -10,23 +10,25 @@ import (
 // documentation, not a second parser; regression tests exercise the shown syntax.
 func (m *model) commandArguments(id string) []string {
 	switch id {
-	case "loom":
-		count := "[branches]"
-		if m.section == 3 {
-			count = "[conversations]"
-			if m.simSelection != nil {
-				if len(m.selectedConversations()) == 1 {
-					count = "[alternatives]"
-				} else {
-					count = "selected conversations (count inferred)"
-				}
+	case "loom", "continue":
+		args := []string{}
+		if id == "loom" {
+			noun := "[alternatives]"
+			if (m.section == 3 && m.simSelection == nil) || m.section == 2 {
+				noun = "[conversations]"
 			}
+			if m.section == 3 && len(m.selectedConversations()) > 1 {
+				noun = "[alternative sets]"
+			}
+			args = append(args, noun)
 		}
-		args := []string{count, "--tokens N|Max"}
-		if m.section == 3 {
-			args = append(args, "--turns N", "--msg/--message \"text\"")
+		args = append(args, "--tokens N|Max", "--model alias")
+		if m.section == 3 || (m.section == 2 && id == "loom") {
+			args = append(args, "--turns N", "--visitor \"text\"", "--visitor-model alias")
 		}
-		return append(args, "--eval \"name\"", "--loops N")
+		args = append(args, "--eval \"name\"")
+		args = append(args, "--loops N")
+		return args
 	case "eval":
 		return []string{"[\"evaluation name\"]", "--train-on-pass true|false"}
 	case "models":
@@ -47,7 +49,7 @@ func (m *model) commandHelp(id string) string {
 		text += "\n\n/" + commandName(action{id: id}) + " " + strings.Join(args, " · ")
 	}
 	if id == "loom" {
-		text += "\n\nCount can also be written --count N or -n N. Flags accept --flag=value and any order; examples put --loops last. --eval runs after generation, without changing generation prompts. Multiple loops require a configured selection policy."
+		text += "\n\nCount can also be written --count N or -n N. Flags accept --flag=value and any order; examples put --loops last. --eval runs after generation, without changing generation prompts. One output continues the current target. Two or more split alternatives. Loops continue each output; enabled selection can choose whole alternatives between split loops."
 	}
 	if id == "configure" && m.section == 3 {
 		text += "\n\nSettings: documents, character_alias, visitor_alias, openings, turns, visitor_brief, character_settings, visitor_settings, character_template, visitor_template."

@@ -62,7 +62,8 @@ selection, curation and export remain document operations rather than new layers
 `persistence.WorkspaceStore` loads the JSON snapshot, replays its stream journal,
 and owns the write → atomic replace → journal compaction sequence. `Project`
 retains interrupted-status decisions and document labels; both share the same
-in-memory data object. The existing file layout and schema are unchanged.
+in-memory data object. The snapshot/journal file layout is unchanged. Additive identity and grouping fields
+are initialized lazily; older node IDs remain valid version references.
 The store appends new chunks and provider events to `stream.jsonl`.
 Full snapshots at turn/operation boundaries include a journal sequence and are
 atomically renamed before the journal is removed. Recovery skips records at or
@@ -70,6 +71,33 @@ below that sequence; this prevents duplicate text if interrupted between those
 steps. Writes are not fsynced, so this is process-crash recovery rather than a
 power-loss durability guarantee. Full checkpoints remain synchronous and can
 pause very large workspaces; per-token writes no longer serialize the workspace.
+
+## Action identity and grouping
+
+`document_actions.py` resolves document versions and cursor prefixes, then allocates
+logical identities and ordered set membership. Node IDs remain immutable revision
+references. `document_heads` points to current versions; `document_sets` records
+frozen membership with logical set heads. Continue advances a head; older versions
+and prefixes branch. `document_generation.py` orchestrates these plans through
+Session's existing bounded streaming path. Unjudged loops advance every output;
+explicit selection can choose whole alternatives between split loops.
+Queued members are allocated before inference so cancellation retains set shape.
+
+`simulator_actions.py` resolves explicit item/subset/set targets, validates visitor
+message conflicts and records alternative groups. Continue archives the previous
+run under `revisions` before advancing selected heads. Loom sets share an
+`alternative_group` and retain ordered member runs. Generation uses one scheduler
+across all sets; groups are domain structure, not extra model processes. Frozen
+seeds record parent revision numbers, so moving a live head does not erase ancestry.
+
+The frontend action contract exposes a reduced palette and common target plans.
+Go does not create persistent IDs or implement selection policy. Backend validation
+rejects unsupported scopes; execution cannot depend on a UI-only promise.
+
+`exports.py` resolves saved selections and writes versioned JSON manifests with
+text reading copies. It preserves structured turns, exact document ancestry and
+judgment metadata without choosing training masks or a training framework. Export
+is independent of the live snapshot/journal persistence and is not workspace restore.
 
 ## Inference and scheduling
 
@@ -174,3 +202,13 @@ The frontend saves the last tab and document/trace row in each workspace's
 with keyboard focus in the command bar. It does not restore checked Loom targets,
 editing, dialogs, or command input. Missing/deleted rows fall back to the tab's
 first item. Navigation writes are atomic and occur only when the location changes.
+
+### Action scope
+
+`action_scope.py` defines recursive containment (`document` or `conversation`
+leaves and `set` children). It is separate from parent/version ancestry.
+Go sends the explicit selected shape; Python validates/freeze-copies it, enumerates
+leaves for scheduling, and remaps saved output scopes to new IDs on splits.
+Continue retains conversation identities; document continuations save child
+versions. Current document sets resolve their current member heads, while old
+set snapshots and evaluated versions remain unchanged.

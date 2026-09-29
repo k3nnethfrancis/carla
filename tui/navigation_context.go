@@ -19,6 +19,11 @@ type pagePosition struct {
 	notes                                    bool
 }
 type runSummary struct {
+	AlternativeScope           *actionScope `json:"alternative_scope"`
+	SourceScope                *actionScope `json:"source_scope"`
+	AlternativeGroup           string       `json:"alternative_group"`
+	AlternativeIndex           int          `json:"alternative_index"`
+	AlternativeCount           int          `json:"alternative_count"`
 	Parent                     *conversationParent
 	Conversations              []simulationConversation
 	ID, Status, Created, Label string
@@ -94,7 +99,7 @@ func (m *model) refreshConfig() {
 	}
 	switch d.kind {
 	case "eval-collection-config":
-		m.openCollectionConfig()
+		m.openConfig()
 	case "eval-definitions":
 		m.openEvaluators()
 	case "eval-definition":
@@ -110,7 +115,7 @@ func (m *model) refreshConfig() {
 	case "sim-openings":
 		m.openOpeningConfig()
 	case "sim-config":
-		m.openSimulatorConfig()
+		m.openConfig()
 	case "sim-speakers":
 		m.speakerPicker()
 	case "grow-config":
@@ -197,7 +202,8 @@ func (m *model) openActive() tea.Cmd {
 	if m.activeSimulation != nil && m.data.Busy {
 		m.switchSection(3)
 		m.simulation = m.activeSimulation
-		m.conversationOpen = len(m.simulation.Conversations) == 1
+		m.gridGroup = m.activeSimulation.AlternativeGroup
+		m.conversationOpen = len(m.simulation.Conversations) == 1 && m.gridGroup == ""
 		m.gridSelection = 0
 		m.focus = 1
 		m.reflow()

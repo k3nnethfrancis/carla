@@ -7,7 +7,7 @@ Simulator's command arguments and emits its domain events through that session.
 import copy
 from uuid import uuid4
 
-from . import credentials, evaluation_sets, monitor, simulator
+from . import credentials, evaluation_sets, monitor, simulator, simulator_actions
 from .exploration import require_selector
 
 
@@ -63,17 +63,57 @@ async def dispatch(session, command, args, request_id):
         await session.snapshot(request_id)
         return
     if command == "simulator.fork":
-        seed = simulator.conversation_seed(p, args["run"], args["conversation"])
-        run = simulator.fork_conversation(p, seed, args)
+        seed = simulator_actions.resolve_seed(p, args)
+        if seed is None:
+            raise ValueError("Select a conversation or set to branch")
+        runs = simulator.fork_sets(p, seed, args)
         await session.snapshot(request_id)
-        await session.emit(
-            "simulation",
-            simulator.view(run)
-            | {"opened": True, "forked": True, "open_conversation": 0},
-            request_id,
-        )
+        for run in runs:
+            await session.emit(
+                "simulation",
+                simulator.view(run)
+                | {
+                    "opened": True,
+                    "forked": True,
+                    "open_conversation": 0 if len(run["conversations"]) == 1 else None,
+                },
+                request_id,
+            )
         return
     if command == "simulator.open":
+        if "scope" in args:
+            from . import action_scope
+
+            scope = action_scope.validate(args["scope"], "conversation")
+            runs = {}
+            for leaf in action_scope.leaves(scope):
+                run = next(
+                    (
+                        r
+                        for r in p.data.get("simulation_runs", [])
+                        if r["id"] == leaf.get("run")
+                    ),
+                    None,
+                )
+                index = leaf.get("conversation")
+                if (
+                    run is None
+                    or type(index) is not int
+                    or not 0 <= index < len(run["conversations"])
+                ):
+                    raise ValueError("Select a saved conversation")
+                runs[run["id"]] = run
+            for run in runs.values():
+                await session.emit(
+                    "simulation",
+                    simulator.view(run)
+                    | {
+                        "opened": True,
+                        "grid_group": scope.get("id", ""),
+                    },
+                    request_id,
+                )
+            return
         run = next(
             (r for r in p.data.get("simulation_runs", []) if r["id"] == args["run"]),
             None,
@@ -111,25 +151,51 @@ async def dispatch(session, command, args, request_id):
         config = copy.deepcopy(
             simulator.configuration(p, session.runtime.model["alias"])
         )
-        seed = None
-        if command == "simulator.run" and "run" in args:
-            seed = (
-                simulator.conversation_seed(p, args["run"], args["conversation"])
-                if "conversation" in args
-                else simulator.batch_seed(p, args["run"], args.get("conversations"))
-            )
-            config[
-                "documents"
-            ] = []  # The frozen ancestor anthology is carried by seed.
-        if "message" in args:
-            message = args["message"]
+        config["selection_enabled"] = args.get(
+            "selection", p.data.get("selection_enabled", False)
+        )
+        if type(config["selection_enabled"]) is not bool:
+            raise ValueError("Selection must be enabled or disabled")
+        action = args.get("action")
+        if action is not None and action not in {"continue", "loom"}:
+            raise ValueError("Choose Continue or Loom")
+        if action == "continue" and "count" in args:
+            raise ValueError("Continue advances the selection; count belongs to Loom")
+        seed = (
+            simulator_actions.resolve_seed(p, args)
+            if command == "simulator.run"
+            else None
+        )
+        if "documents" in args:
+            config["documents"] = copy.deepcopy(args["documents"])
+        if seed:
+            config["documents"] = []  # Frozen ancestor anthology travels with the seed.
+        if action == "continue" and seed is None:
+            raise ValueError("Select a saved conversation or set to continue")
+        supplied = [args[key] for key in ("visitor", "message", "msg") if key in args]
+        if supplied:
+            if any(value != supplied[0] for value in supplied):
+                raise ValueError("Supply one visitor message")
+            message = supplied[0]
             if not isinstance(message, str) or not message.strip():
-                raise ValueError("Supply a nonempty visitor opening message")
-            if seed:
+                raise ValueError("Supply a nonempty visitor message")
+            if seed and action is None and "visitor" not in args:
                 raise ValueError(
                     "Clear the conversation selection before supplying an opening message"
                 )
-            config.update(opening=message, opening_mode="fixed")
+            if seed:
+                seed = simulator_actions.add_visitor(seed, message)
+            else:
+                config.update(opening=message, opening_mode="fixed")
+        if "model" in args:
+            config["character_alias"] = args["model"]
+        if "visitor_model" in args:
+            config["visitor_alias"] = args["visitor_model"]
+        if action is not None:
+            config["action"] = action
+            config["alternatives"] = args.get("count", 1)
+            if type(config["alternatives"]) is not int or config["alternatives"] < 1:
+                raise ValueError("Alternatives must be a positive integer")
         if command == "simulator.preview":
             config.update(
                 preview=True,
@@ -139,7 +205,7 @@ async def dispatch(session, command, args, request_id):
             )
         if "count" in args:
             config["conversations"] = args["count"]
-        if seed and "conversations" in seed:
+        if seed and "conversations" in seed and action is None:
             size = len(seed["conversations"])
             if "count" in args and args["count"] != size:
                 raise ValueError(
@@ -154,7 +220,13 @@ async def dispatch(session, command, args, request_id):
         config["loops"] = args.get("loops", 1)
         if type(config["loops"]) is not int or config["loops"] < 1:
             raise ValueError("Loops must be a positive integer")
-        if config["loops"] > 1:
+        if config["loops"] > 1 and (
+            action is None
+            or (
+                config.get("selection_enabled", False)
+                and config.get("alternatives", 1) > 1
+            )
+        ):
             require_selector(session.policy_model)
         simulator.validate(config, p, session.validate_settings)
         if not config["documents"] and not config.get("preview") and not seed:

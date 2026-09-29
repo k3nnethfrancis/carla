@@ -5,7 +5,7 @@
 Carla opens its model setup dialog when no configured base GGUF exists.
 Use arrows and Enter to select, and Escape to go back one step or skip setup.
 File paths and URLs are entered in the same input controls as other Carla dialogs.
-`carla --setup-model` opens setup explicitly; inside Carla, use `/model` →
+`carla --setup-model` opens setup explicitly; inside Carla, use `/config` → models →
 `+ Add model`. An explicit `--models FILE` bypasses automatic detection.
 Both the installed launcher and direct TUI binary use this same setup flow.
 
@@ -59,12 +59,13 @@ Each entry needs `alias`, `kind: "base"`, `path` and `port`. Optional fields are
 
 For persistent defaults, place the array at `$CARLA_DATA_DIR/models.json`.
 Saved workspace model entries override matching registry entries; an explicit
-`--models FILE` replaces the workspace catalog. `/model` selects from that catalog.
+`--models FILE` replaces the workspace catalog. The model picker in `/config` selects from that catalog.
 
-Repeated Loom loops need a separate instruct selection model. `--policy-model FILE` accepts one object
+Optional policy-guided split loops need a separate instruct selection model. `--policy-model FILE` accepts one object
 with the same fields and `kind: "instruct"`. Setup saves the persistent default at `$CARLA_DATA_DIR/policy-model.json`. Selection unloads
 the generator before loading the selector. Selection instructions never enter
-raw generation context. Without a configured policy model, multi-loop Loom cannot run.
+raw generation context. Selection defaults to Off. Ordinary loops continue each output without a judge;
+Selection On requires a configured policy model for split loops.
 
 ## Prompts and templates
 
@@ -165,8 +166,8 @@ uses one alternative and one loop, plus one Character reply in Simulator.
 remaining available context. EOS and speaker boundaries may end output sooner.
 Simulator `--tokens` overrides both Character and Visitor ceilings, while the
 opening generator keeps its own settings. `--turns` counts Character replies per
-alternative per loop. `--loops` enables selection-driven repetition. See the
-[complete syntax](commands.md#loom-configure-one-set-then-repeat).
+alternative per loop. `--loops` repeats continuation; Selection On instead enables policy-guided split loops. See the
+[complete syntax](commands.md#generation-arguments).
 
 ## Storage and launch
 
@@ -194,7 +195,7 @@ with `CARLA_PYTHON` when needed. The documented installation is from source.
 ## Document library
 
 The library is shared across workspaces, but loading a workspace does not select
-all its documents. In the TUI, use `/import` or **+ Add document** in Library.
+all its documents. In the TUI, use `/add` or **+ Add document** in Library.
 Enter a local UTF-8 `.txt` or `.md` file path, an optional title (defaults to the
 filename), and optional author/source URL. Tab or Enter moves between fields; Enter on the last field imports.
 Ctrl+Enter imports from any field; Escape cancels. The document appears immediately, without selecting it as a seed.

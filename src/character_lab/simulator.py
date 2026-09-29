@@ -12,7 +12,7 @@ import uuid
 from contextlib import aclosing
 from itertools import groupby
 
-from . import monitor
+from . import monitor, simulator_actions
 from .domain import now
 from .scheduling import parallel_map
 
@@ -148,7 +148,7 @@ def summary(run):
     for conversation in run["conversations"]:
         for turn in conversation["turns"]:
             if turn.get("model"):
-                names.setdefault(turn["role"], turn["model"]["name"])
+                names[turn["role"]] = turn["model"]["name"]
     return {key: run.get(key) for key in ("id", "status", "created")} | {
         "label": ("Opening preview · " if run.get("preview") else "")
         + " / ".join(
@@ -157,6 +157,20 @@ def summary(run):
         ),
         "count": run["config"]["conversations"],
         "parent": run.get("parent"),
+        **{
+            key: run[key]
+            for key in (
+                "alternative_group",
+                "alternative_index",
+                "alternative_count",
+                "source_set",
+                "source_scope",
+                "alternative_scope",
+                "revision",
+                "action",
+            )
+            if key in run
+        },
         "conversations": [
             {"index": c["index"], "status": c["status"]} for c in run["conversations"]
         ],
@@ -171,7 +185,7 @@ def view(run):
     return {
         k: v
         for k, v in run.items()
-        if k not in {"conversations", "documents", "config"}
+        if k not in {"conversations", "documents", "config", "revisions"}
     } | {
         "conversations": [
             {k: v for k, v in conversation.items() if k != "turns"}
@@ -205,11 +219,7 @@ def view(run):
     }
 
 
-async def generate(project, config, runtime_factory, emit, seed=None):
-    """Persist after each chunk; cancel/failure preserves partial output and provenance."""
-    from .stream_monitor import TurnMonitor
-
-    models = {m["alias"]: copy.deepcopy(m) for m in project.data["models"]}
+def new_run(project, config, seed=None):
     docs = (
         seed["documents"]
         if seed
@@ -232,12 +242,12 @@ async def generate(project, config, runtime_factory, emit, seed=None):
             for n in docs
         ],
         conversations=[],
-        parent=seed["parent"] if seed else None,
+        parent=copy.deepcopy(seed["parent"]) if seed else None,
+        parent_revision=seed.get("source_revision", 0) if seed else None,
+        action=config.get("action", "loom"),
     )
     project.data.setdefault("simulation_runs", []).append(run)
     project.save()
-    runtime = None
-    anthology = "\n\n".join(n["text"] for n in docs)
     for index in range(config["conversations"]):
         ancestor = (
             seed["conversations"][index] if seed and "conversations" in seed else seed
@@ -246,7 +256,10 @@ async def generate(project, config, runtime_factory, emit, seed=None):
             dict(
                 index=index,
                 status="queued",
-                parent=ancestor["parent"] if ancestor else None,
+                parent=copy.deepcopy(ancestor["parent"]) if ancestor else None,
+                parent_revision=ancestor.get("source_revision", 0)
+                if ancestor
+                else None,
                 turns=copy.deepcopy(ancestor["turns"])
                 if ancestor
                 else (
@@ -264,20 +277,103 @@ async def generate(project, config, runtime_factory, emit, seed=None):
             )
         )
     project.save()
+    return run, run["conversations"]
+
+
+async def generate(project, config, runtime_factory, emit, seed=None):
+    """Legacy single-set sampler; action planning lives in generate_alternatives."""
+    return (
+        await _generate(project, config, runtime_factory, emit, [(config, seed, {})])
+    )[0]
+
+
+async def generate_alternatives(project, config, runtime_factory, emit, seed=None):
+    """Run all selected sets through one bounded, model-segmented scheduler."""
+    if "action" not in config:
+        return [await generate(project, config, runtime_factory, emit, seed)]
+    sets = simulator_actions.seed_sets(seed)
+    config = copy.deepcopy(config)
+    if seed is not None and config.get("alternatives", 1) == 1:
+        config["action"] = "continue"
+    continuing = config["action"] == "continue"
+    count = 1 if continuing else config.get("alternatives", 1)
+    if not continuing and seed is None:
+        local = copy.deepcopy(config)
+        local["conversations"] = count
+        return await _generate(
+            project, config, runtime_factory, emit, [(local, seed, {})]
+        )
+    config["source_scope"] = seed.get("scope") or simulator_actions.scope_for_sets(sets)
+    group = simulator_actions.alternative_id()
+    plans = []
+    for alternative in range(count):
+        for source_index, source in enumerate(sets):
+            local = copy.deepcopy(config)
+            local["conversations"] = (
+                len(simulator_actions.members(source)) if source else 1
+            )
+            metadata = (
+                {}
+                if continuing
+                else dict(
+                    alternative_group=group,
+                    alternative_index=alternative,
+                    alternative_count=count,
+                    source_set=source_index,
+                )
+            )
+            plans.append((local, source, metadata))
+    return await _generate(project, config, runtime_factory, emit, plans)
+
+
+async def _generate(project, config, runtime_factory, emit, plans):
+    """Persist each leaf's chunks under its real run/index, sharing loaded weights."""
+    from .stream_monitor import TurnMonitor
+
+    models = {m["alias"]: copy.deepcopy(m) for m in project.data["models"]}
+    runs, work = [], []
+    # Validate every frozen source before archiving or creating any destination.
+    for _, source, _ in plans:
+        simulator_actions.validate_seed(project, source)
+    for local, seed, metadata in plans:
+        if config.get("action") == "continue":
+            run, selected = simulator_actions.continue_run(project, local, seed)
+        else:
+            run, selected = new_run(project, local, seed)
+        run.update(metadata)
+        runs.append(run)
+        for conversation in selected:
+            work.append((run, conversation))
+    if config.get("action") != "continue" and any(metadata for _, _, metadata in plans):
+        # Scope is supplied independently of the scheduler's flattened run batches.
+        sources = [
+            source
+            for _, source, _ in plans[
+                : len(plans) // max(1, config.get("alternatives", 1))
+            ]
+        ]
+        frozen = sources[0] if len(sources) == 1 else {"sets": sources}
+        if config.get("source_scope"):
+            frozen = dict(frozen, scope=config["source_scope"])
+        simulator_actions.attach_scopes(runs, frozen)
+    project.save()
+    runtime = None
+    # Every set is either fresh or resumed; target resolution disallows mixing.
+    seed = plans[0][1]
     try:
+        for run in runs:
+            await emit("simulation", view(run))
         # Batch independent conversations by speaker to avoid competing model loads.
         steps = [-1] if not seed and config["opening_mode"] == "generated" else []
         if not config.get("preview"):
             steps += list(range(config["turns"] * 2 - 1))
-            if seed and (
-                "conversations" in seed
-                or (seed["turns"] and seed["turns"][-1]["role"] == "character")
-            ):
+            if seed:
                 steps.insert(
                     0, -2
                 )  # Resume with the visitor, then requested character replies.
 
-        async def sample(conversation, role, runtime, alias):
+        async def sample(run, conversation, role, runtime, alias):
+            anthology = "\n\n".join(n["text"] for n in run["documents"])
             speaker = "Model C" if role == "character" else "User"
             index = conversation["index"]
             conversation["status"] = "running"
@@ -319,7 +415,7 @@ async def generate(project, config, runtime_factory, emit, seed=None):
                 dict(
                     run=run["id"],
                     conversation=index + 1,
-                    total=config["conversations"],
+                    total=len(run["conversations"]),
                     role=role,
                     stage="loading / waiting",
                 ),
@@ -342,7 +438,7 @@ async def generate(project, config, runtime_factory, emit, seed=None):
                                 dict(
                                     run=run["id"],
                                     conversation=index + 1,
-                                    total=config["conversations"],
+                                    total=len(run["conversations"]),
                                     role=role,
                                     stage="generating",
                                 ),
@@ -408,9 +504,7 @@ async def generate(project, config, runtime_factory, emit, seed=None):
             )
         ]
         for segment_index, (alias, segment) in enumerate(segments):
-            if not any(
-                c["status"] in {"queued", "running"} for c in run["conversations"]
-            ):
+            if not any(c["status"] in {"queued", "running"} for _, c in work):
                 break
             if runtime:
                 if runtime.process is None:
@@ -425,12 +519,12 @@ async def generate(project, config, runtime_factory, emit, seed=None):
 
             runtime.on_schedule = schedule
 
-            async def advance(conversation):
+            async def advance(item):
+                run, conversation = item
                 for step_index, role in enumerate(segment):
                     # Batch members may end on different speakers (e.g. an interrupted reply).
                     if (
                         seed
-                        and "conversations" in seed
                         and segment_index == 0
                         and step_index == 0
                         and role == "visitor"
@@ -442,7 +536,7 @@ async def generate(project, config, runtime_factory, emit, seed=None):
                         continue
                     if conversation["status"] not in {"queued", "running"}:
                         break
-                    await sample(conversation, role, runtime, alias)
+                    await sample(run, conversation, role, runtime, alias)
                 if segment_index == len(segments) - 1 and conversation["status"] in {
                     "queued",
                     "running",
@@ -451,22 +545,25 @@ async def generate(project, config, runtime_factory, emit, seed=None):
                     project.save()
                     await emit("simulation", view(run))
 
-            await parallel_map(run["conversations"], advance)
+            await parallel_map(work, advance)
 
-        for conversation in run["conversations"]:
+        for _, conversation in work:
             if conversation["status"] in {"queued", "running"}:
                 conversation["status"] = "complete"
         if config.get("loops", 1) > 1 and runtime and runtime.process is None:
             raise ValueError(
                 "Stop the externally managed generator before switching to selection"
             )
-        run["status"] = "complete"
+        for run in runs:
+            run["status"] = "complete"
     except asyncio.CancelledError:
-        run["status"] = "stopped"
+        for run in runs:
+            run["status"] = "stopped"
     except Exception as exc:
-        run.update(status="failed", error=str(exc))
+        for run in runs:
+            run.update(status="failed", error=str(exc))
     finally:
-        for conversation in run["conversations"]:
+        for run, conversation in work:
             for turn in conversation["turns"]:
                 if turn.get("monitor", {}).get("status") == "checking":
                     turn["monitor"]["status"] = "cancelled"
@@ -476,10 +573,12 @@ async def generate(project, config, runtime_factory, emit, seed=None):
                 conversation["status"] = run["status"]
         if runtime:
             runtime.close()
-        run["finished"] = now()
+        for run in runs:
+            run["finished"] = now()
         project.save()
-        await emit("simulation", view(run))
-    return run
+        for run in runs:
+            await emit("simulation", view(run))
+    return runs
 
 
 def conversation_seed(project, run_id, index):
@@ -497,6 +596,7 @@ def conversation_seed(project, run_id, index):
         raise ValueError("Stop the active run before forking or continuing")
     return dict(
         parent=dict(run=run_id, conversation=index),
+        source_revision=run.get("revision", 0),
         turns=copy.deepcopy(conversation["turns"]),
         documents=copy.deepcopy(run["documents"]),
         config=copy.deepcopy(run["config"]),
@@ -522,6 +622,7 @@ def batch_seed(project, run_id, indices=None):
     seeds = [conversation_seed(project, run_id, index) for index in indices]
     return dict(
         parent=dict(run=run_id, conversation=-1),
+        source_revision=run.get("revision", 0),
         documents=seeds[0]["documents"],
         conversations=seeds,
     )
@@ -564,9 +665,59 @@ def fork_conversation(project, seed, args):
         protocol="conversation-fork-v1",
         config=config,
         documents=seed["documents"],
-        parent=seed["parent"],
+        parent=copy.deepcopy(seed["parent"]),
+        parent_revision=seed.get("source_revision", 0),
         conversations=[dict(index=0, status="draft", turns=turns)],
     )
     project.data.setdefault("simulation_runs", []).append(run)
     project.save()
     return run
+
+
+def fork_sets(project, seed, args):
+    """Copy selected sets and their ancestry without inference or source mutation."""
+    simulator_actions.validate_seed(project, seed)
+    sets = simulator_actions.seed_sets(seed)
+    if "text" in args:
+        leaves = [leaf for item in sets for leaf in simulator_actions.members(item)]
+        if len(leaves) != 1:
+            raise ValueError("Select one conversation to edit")
+        return [fork_conversation(project, copy.deepcopy(leaves[0]), args)]
+    group = simulator_actions.alternative_id()
+    runs = []
+    for source_index, item in enumerate(sets):
+        leaves = simulator_actions.members(item)
+        config = copy.deepcopy(leaves[0]["config"])
+        config["conversations"] = len(leaves)
+        run = dict(
+            id=uuid.uuid4().hex[:12],
+            created=now(),
+            status="draft",
+            protocol="conversation-fork-v1",
+            config=config,
+            documents=copy.deepcopy(item["documents"]),
+            parent=copy.deepcopy(item["parent"]),
+            parent_revision=item.get("source_revision", 0),
+            conversations=[
+                dict(
+                    index=i,
+                    status="draft",
+                    turns=copy.deepcopy(leaf["turns"]),
+                    parent=copy.deepcopy(leaf["parent"]),
+                    parent_revision=leaf.get("source_revision", 0),
+                )
+                for i, leaf in enumerate(leaves)
+            ],
+        )
+        if len(sets) > 1:
+            run.update(
+                alternative_group=group,
+                alternative_index=0,
+                alternative_count=1,
+                source_set=source_index,
+            )
+        runs.append(run)
+    simulator_actions.attach_scopes(runs, seed)
+    project.data.setdefault("simulation_runs", []).extend(runs)
+    project.save()
+    return runs

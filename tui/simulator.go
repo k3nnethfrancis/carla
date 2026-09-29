@@ -19,6 +19,9 @@ func (m *model) simDocs() []string {
 	return out
 }
 func (m *model) simulationText() string {
+	if m.simulation == nil && m.simSelection != nil && m.simSelection.Group != "" {
+		return fmt.Sprintf("%d conversations selected across alternative sets.\n\nOpen a child set to compare its conversations.\n\n/continue advances this selection.\n/loom N creates N alternative futures of this selection.", len(m.selectedConversations()))
+	}
 	if m.simulation == nil {
 		return fmt.Sprintf("Choose anthology documents and configure a run.\n\nDocuments: %d\nCharacter: %s\nVisitor: %s\n\nOpening: %s\n\nThe character receives the selected documents. The visitor receives its own brief and conversation history. Both use raw local completions.\n\nUse /config, then /loom. /inspect shows a selected run’s exact requests.",
 			len(m.simDocs()), m.simString("character_alias"), m.simString("visitor_alias"), m.openingDescription())
@@ -101,6 +104,8 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 		}
 	case "grow-config":
 		switch r.id {
+		case "selection_enabled":
+			return m.send("policy.configure", map[string]any{"selection_enabled": !m.data.SelectionEnabled})
 		case "models":
 			return m.openDialog("models")
 		case "spec", "prompt":

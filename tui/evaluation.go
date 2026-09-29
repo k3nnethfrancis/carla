@@ -229,17 +229,19 @@ func (m *model) evaluationActions() tea.Cmd {
 		return nil
 	}
 	m.dialog = &dialog{kind: "eval-actions", title: fmt.Sprintf("%d selected", len(m.evaluationIDs())), rows: []row{
-		{id: "keep", label: "Mark for training"}, {id: "remove", label: "Unmark for training"}, {id: "eval", label: "Evaluate again"}, {id: "notes", label: "Edit note (highlighted item)"}, {id: "inspect", label: "Exact inputs and results (highlighted item)"},
+		{id: "keep", label: "Mark for training"}, {id: "untrain", label: "Unmark for training"}, {id: "remove", label: "Remove from this evaluation"}, {id: "eval", label: "Evaluate again"}, {id: "notes", label: "Edit note (highlighted item)"}, {id: "inspect", label: "Exact inputs and results (highlighted item)"},
 	}}
 	return nil
 }
 func (m *model) evalAction(id string) tea.Cmd {
 	ids := m.evaluationIDs()
 	switch id {
-	case "keep", "remove":
+	case "keep", "untrain":
 		return m.send("evaluation.item.annotate", map[string]any{"collection": m.evalCollection, "ids": ids, "training": id == "keep"})
+	case "remove":
+		return m.send("evaluation.collection.remove", map[string]any{"collection": m.evalCollection, "ids": ids})
 	case "snapshot":
-		return m.send("evaluation.collection.export", map[string]any{"collection": m.evalCollection})
+		return m.exportItems()
 	case "notes":
 		if m.evaluation == nil || m.evaluation.ID != m.targetRow().id {
 			return m.previewTarget()

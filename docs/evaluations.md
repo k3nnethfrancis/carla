@@ -109,14 +109,18 @@ matrix, calibrate your judges or establish causal claims automatically.
 
 ## Build and export a training set
 
-`/keep` marks selected evaluation items for training. `/remove` unmarks them.
+The training controls mark or unmark selected evaluation items. `/remove` removes
+items from the collection; stored judgments and a recovery record are preserved.
+The compatibility command `/keep` remains available for this action.
 Manual selection is independent of the judge result, allowing deliberate negative
 examples too. `/eval --train-on-pass true` marks only items whose judges all pass
 in that run; it does not undo an earlier manual training selection.
 
 `/notes` records item notes. Notes/training changes have metadata histories.
-`/snapshot` exports the open collection's training-marked items to a new JSONL file
-under the workspace's `datasets/` directory. Each line includes:
+`/export` saves explicitly selected items, or the entire open collection, under
+the workspace's `exports/` directory. It writes a versioned `manifest.json` plus
+text reading copies. Training marks are preserved; they do not silently filter
+the export. Each structured item includes:
 
 - Frozen text, source records, generation-model provenance and snapshot hash.
 - Collection identity, judgment history and attached scoped policy evidence.

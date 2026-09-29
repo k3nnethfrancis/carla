@@ -58,11 +58,11 @@ Use ↑/↓ and Enter to choose, or Escape to go back:
 - Skip setup to browse the bundled Meditations and Tractatus starters offline.
 
 Downloads show their size, license and pinned revision before confirmation.
-Use `/model` → `+ Add model`, or run `carla --setup-model`, to add another model. Generation also requires
+Use `/config` → models → `+ Add model`, or run `carla --setup-model`, to add another model. Generation also requires
 `llama-server` on PATH; see [generation setup](#set-up-generation).
 
 Once inside Carla, select a passage with Space, open it with Enter, and explore the
-panes with Tab / Shift+Tab. Type `/help` for commands or `/keys` for editable
+panes with Tab / Shift+Tab. Type `/help` for commands or `/config` for editable
 bindings. `/` focuses the command bar, including from the document editor.
 The Keys dialog covers listed actions and navigation; its own capture, reset,
 save and cancel controls stay fixed so you can always recover a binding.
@@ -76,56 +76,44 @@ typing a prefix such as `/lo`. `/help` explains each option; press Enter on a co
 
 | Command | What it does |
 | --- | --- |
-| `/import` | Add a local text or Markdown seed to the shared Library. |
-| `/help` · `/keys` | Browse all commands or customize keyboard bindings. |
-| `/workspace` · `/model` | Choose a workspace or local model. |
-| `/config` | Generation settings; in Evaluate, the opened collection and its judges. |
-| `/policy` | Monitoring, selection and reusable judge configurations. |
-| `/eval [name] --train-on-pass true` | Run active/named evaluation on selected material; optionally mark passes for training. |
-| `/evaluations` | Manage named evaluation collections, inspect judgments and export training items. |
-| `/loom` | Generate one continuation or the next Character reply. |
-| `/loom 3 --tokens 512` | In Branches, generate three alternative continuations. |
-| `/loom 3 --turns 4 --tokens 512` | In Simulator, generate three conversations, each with four new character replies. |
-| `/loom 3 --tokens 512 --eval "Voice"` | Generate alternatives, then judge completed outputs with the saved Voice evaluation. |
-| `/fork` | Fork the selected document or conversation without generating. |
-| `/keep` · `/anthology` | Keep selected branches or browse the curated anthology. |
-| `/edit` · `/save` · `/cancel` | Edit, save a new version, or discard the draft. |
-| `/inspect` · `/notes` | Inspect exact inputs and provenance, or open document notes. |
-| `/simulator` · `/visitor` | Open Simulator or write a Visitor message into a fork. |
-| `/grid` · `/active` | View Loom outputs together or jump to active generation. |
-| `/loom 3 --tokens 512 --loops 4` | Generate three alternatives per loop; selection advances one path for four loops. |
-| `/remove` | Deselect sources, unkeep anthology entries, or confirm branch deletion. Alias: `/delete`. |
-| `/snapshot` | Export anthology documents or training-marked evaluation items with provenance. |
-| `/stop` · `/restart` · `/exit` | Stop generation, restart Carla, or exit. |
+| `/add` · `/remove` | Add or remove material from the current collection. |
+| `/branch` | Copy selected material without generating, preserving ancestry. |
+| `/continue --tokens 512` | Advance the existing item or set; preserve earlier revisions. |
+| `/loom 3 --tokens 512` | Generate three alternative futures of the selected item or set. |
+| `/loom 3 --turns 2 --visitor "What matters to you?"` | Explore three conversational alternatives from your supplied message. |
+| `/eval "Voice" --train-on-pass true` | Judge selected content and optionally mark passes for training. |
+| `/export` | Save selected content or the current collection with provenance. |
+| `/config` · `/policy` | Configure execution defaults and judging policies. |
+| `/stop` · `/help` | Stop active work or browse command help. |
+| `/library` · `/branches` · `/anthology` · `/simulator` · `/evaluate` | Open a stage. |
 
-[Command system](docs/commands.md) explains the complete contract; `/help` lists commands. Generation needs a configured model; `--tokens` sets
-an output ceiling, and `--turns` counts character replies rather than both speakers.
+[Commands](docs/commands.md) covers flags, selection, editing and exports;
+[interaction model](docs/interaction-model.md) explains object identity and grouping.
+Models, workspace selection and keybindings are available through `/config`.
 
-### How Loom works
+### Continue, Loom and Branch
 
-Library, Branches and Anthology use the same document continuation operation;
-starting from Library or Anthology takes you to Branches. New outputs must be
-kept explicitly. Simulator instead extends one explicitly selected conversation,
-or starts fresh when nothing is selected. Hovering does not select a conversation;
-Space/Enter selects it and `/clear` clears it.
+`/continue` and bare `/loom` advance what you selected. `/loom N` with N≥2 creates N alternative futures
+of it. `/branch` copies it without generation. The same meanings apply to a single
+item or a set: selecting four conversations and running `/loom 3` produces three
+sets of four; `/continue` advances the original four. Prior revisions and ancestry
+remain saved, while evaluations refer to the exact content they judged.
 
-Bare `/loom` creates one alternative, for one loop, adding one Character reply
-in Simulator. Add a count for alternatives, `--tokens N|Max` for an output cap,
-and `--turns N` for Character replies per Simulator alternative. `--msg "text"`
-(or `--message`) sets a fresh run's Visitor opener. `--eval "name"` applies a saved
-evaluation after generation. `--loops N` repeats generation and policy selection,
-advancing one candidate between loops; configure selection under `/policy` first.
+Library opens seeds in Branches. Anthology Branch/Continue returns to Branches;
+Anthology Loom starts Simulator. Simulator
+uses conversations. With no Simulator selection, `/loom 4` starts four fresh
+conversations. Space/Enter selects a target; arrows only preview. Clear selection
+to start fresh again. New document versions must be kept explicitly with `/add`.
 
 ```text
-/loom 3 --turns 2 --tokens 512 --msg "What does a path remember?" --eval "Voice" --loops 4
+/loom 3 --tokens 512 --visitor "What does a path remember?" --turns 2 --eval "Voice" --loops 4
 ```
 
-This Simulator run generates three alternatives per loop, each adding two
-Character replies, over four loops. Selection advances one path; the completed
-outputs are then judged by Voice. The token cap applies to each speaker's
-generation, not the whole conversation. Quote names and messages containing
-spaces. `/continue`, `/generate`, `/run`, `/simulate` and `/grow` are aliases for
-`/loom` and accept the same arguments.
+`--tokens` caps each generation; `--turns` counts new character replies.
+`--visitor` supplies a message once per selected conversation. `--model` and
+`--visitor-model` override configured models for this operation. `--eval` judges
+completed outputs. `--loops` repeats continuation from each output. Selection is Off by default;
+enabling it in `/policy` lets a judge choose whole alternatives between split loops.
 
 ## Set up generation
 
@@ -144,12 +132,12 @@ or downloaded automatically. A missing model does not prevent source browsing.
 
 ## Work through an experiment
 
-- **Library:** select passages from shared documents; only selected text enters
-  the workspace. [Import your own text](docs/configuration.md#document-library).
-- **Branches:** `/loom --tokens 512` samples one continuation from the cursor;
-  `/loom 3 --tokens 512` samples three alternatives. `/fork` forks the current
+- **Library:** Space selects passages; Enter opens their text as a new seed root in
+  Branches. [Import your own text](docs/configuration.md#document-library).
+- **Branches:** `/loom --tokens 512` continues the document (or an explicitly positioned cursor);
+  `/loom 3 --tokens 512` samples three alternatives. `/branch` forks the current
   version without generating. Edits preserve ancestry.
-- **Anthology:** `/keep` retains a document for curation. Keeping is a human
+- **Anthology:** `/add` retains a document for curation. Keeping is a human
   selection, not an automatic quality verdict or training step.
 - **Simulator:** `/config` chooses documents, speakers, openings and sampling.
   `/loom 3 --turns 4 --tokens 512` produces three conversations with four new
@@ -159,12 +147,14 @@ or downloaded automatically. A missing model does not prevent source browsing.
 - **Evaluate:** create a named collection, choose judges, add frozen documents or
   conversations, and run judgments. Review evidence, add notes and mark items for
   training. Existing judgments can be attached without another model call.
-  `/snapshot` exports training-marked items with their evidence and provenance.
+  `/export` saves selected evaluation items or the collection, including evidence and training marks.
 
-`/loom 3 --tokens 512 --loops 4` repeats candidate generation and local selection.
+`/loom 3 --tokens 512 --loops 4` creates three alternatives and continues each
+for four generation chunks. Enable Selection in `/policy` to select and split
+again between loops instead.
 The selection policy lives under `/policy`; no policy instructions enter base-model
 prompts. It never automatically keeps documents. Configure a selector before
-starting repeated loops; see [configuration](docs/configuration.md).
+using policy-guided split loops; see [configuration](docs/configuration.md).
 
 ## Policies and evaluations
 

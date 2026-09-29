@@ -11,8 +11,10 @@ import (
 // Commands reuse the action handlers; typing never invokes single-key shortcuts.
 func commandName(a action) string {
 	switch a.id {
-	case "branch":
-		return "fork"
+	case "snapshot":
+		return "export"
+	case "evaluations":
+		return "evaluate"
 	case "configure":
 		return "config"
 	case "kept":
@@ -45,6 +47,7 @@ func (m *model) commandChoices() []action {
 		return nil
 	}
 	actions := m.contextualActions()
+	actions = append(actions, action{id: "add", label: "Add to this collection"})
 	for _, a := range allActions {
 		if a.id == "eval" && len(m.evaluationTargets()) == 0 && !(m.section == 4 && len(m.collectionItems()) > 0) {
 			continue
@@ -76,20 +79,20 @@ func (m *model) commandChoices() []action {
 		}
 		_, conversation := m.conversationTarget()
 		if m.section == 3 && a.id == "branch" {
-			conversation = len(m.selectedConversations()) == 1
+			conversation = len(m.selectedConversations()) > 0
 		}
 		if a.id == "visitor" && m.section != 3 {
 			continue
 		}
-		if documentAction(a.id) && !(conversation && (a.id == "branch" || a.id == "edit" || a.id == "inspect")) && m.targetRow().kind != "node" && !(a.id == "inspect" && m.section == 3 && m.simulation != nil) {
+		if documentAction(a.id) && !(a.id == "branch" && len(m.actionNodeIDs()) > 0) && !(conversation && (a.id == "branch" || a.id == "edit" || a.id == "inspect")) && m.targetRow().kind != "node" && !(a.id == "inspect" && m.section == 3 && m.simulation != nil) {
 			continue
 		}
-		if a.id != "generate" && a.id != "continue" && a.id != "keep" && a.id != "add" && a.id != "remove" {
+		if a.id != "generate" && a.id != "keep" && a.id != "add" && a.id != "remove" {
 			actions = append(actions, a)
 		}
 	}
 	if m.section == 4 && len(m.evaluationIDs()) > 0 {
-		actions = append(actions, action{id: "keep", label: "Mark selected items for training"}, action{id: "remove", label: "Unmark selected items for training"}, action{id: "notes", label: "Edit evaluation note"}, action{id: "inspect", label: "Exact evaluated input and judge result"})
+		actions = append(actions, action{id: "keep", label: "Mark selected items for training"}, action{id: "remove", label: "Remove selected items from this evaluation"}, action{id: "notes", label: "Edit evaluation note"}, action{id: "inspect", label: "Exact evaluated input and judge result"})
 	}
 	actions = append(actions, action{id: "help", label: "All commands and navigation"}, action{id: "keys", label: "Edit keybindings"}, action{id: "quit", label: "Quit Carla"}, action{id: "exit", label: "Exit Carla"}, action{id: "restart", label: "Restart Carla in this workspace"})
 	if m.data.Busy {
@@ -122,11 +125,21 @@ func (m *model) commandChoices() []action {
 	seen := map[string]bool{}
 	for _, a := range actions {
 		a.id = m.canonicalCommand(a.id)
+		if !m.paletteAvailable(a.id, value) {
+			continue
+		}
 		if seen[a.id] {
 			continue
 		}
 		seen[a.id] = true
 		switch a.id {
+		case "add":
+			a.label = m.addDescription()
+		case "continue":
+			a.label = "Continue selected items · repeat with --loops"
+			if m.section == 2 {
+				a.label = "Continue a new branch from kept versions"
+			}
 		case "policy":
 			a.label = "Monitoring, selection and judge configurations"
 		case "eval":
@@ -134,24 +147,21 @@ func (m *model) commandChoices() []action {
 		case "evaluations":
 			a.label = "Named collections, judgments and training items"
 		case "snapshot":
-			a.label = "Export anthology documents and provenance"
-			if m.section == 4 {
-				a.label = "Export training items and judgment history"
-			}
+			a.label = "Export selected items or this collection with provenance"
 		}
 		if a.id == "models" && m.section == 3 {
 			a.label = "Choose character or visitor model"
 		}
 		if a.id == "loom" {
 			if m.section == 3 {
-				a.label = "Generate conversations · number = conversations"
+				a.label = "Start conversations · number = conversations"
 				if m.simSelection != nil {
 					a.label = m.simulationActionLabel()
 				}
 			} else if m.section == 1 {
-				a.label = "Generate branches at cursor · number = branches"
+				a.label = "Continue documents · 2+ splits alternatives"
 			} else {
-				a.label = "Continue source or kept document in Branches"
+				a.label = "Start Simulator conversations from kept documents"
 			}
 		}
 		if m.section == 3 && a.id == "branch" {
@@ -176,6 +186,22 @@ func (m *model) commandChoices() []action {
 		m.prioritizePageCommands(actions)
 	}
 	query := strings.TrimPrefix(value, "/")
+	// An exact unavailable command must never execute a longer prefix match.
+	for _, known := range allActions {
+		canonical := m.canonicalCommand(known.id)
+		for _, alias := range m.commandAliases(canonical) {
+			if alias == query {
+				available := false
+				for _, a := range actions {
+					available = available || a.id == canonical
+				}
+				if !available {
+					return nil
+				}
+			}
+		}
+	}
+
 	var matches []action
 	score := func(a action) int {
 		best := 99
@@ -326,7 +352,8 @@ func (m *model) commandKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.openEval(rawInput)
 		case "branch":
 			return m.forkDocument()
-		case "loom":
+		case "loom", "continue":
+			options.Action = a.id
 			return m.loom(options)
 		case "save":
 			return m.saveEditor()
@@ -423,15 +450,15 @@ func (m *model) prioritizePageCommands(actions []action) {
 	var preferred []string
 	switch m.section {
 	case 0:
-		preferred = []string{"import", "add", "remove", "clear", "loom", "configure", "branches"}
+		preferred = []string{"add", "remove", "clear", "configure", "branches"}
 	case 1:
-		preferred = []string{"loom", "configure", "branch", "keep", "remove", "clear", "edit", "notes", "inspect", "review", "models", "settings"}
+		preferred = []string{"continue", "loom", "configure", "branch", "add", "remove", "clear", "edit", "notes", "inspect", "review", "models", "settings"}
 	case 2:
 		preferred = []string{"snapshot", "remove", "inspect", "notes", "edit", "simulator", "continue", "loom", "branch"}
 	case 4:
 		preferred = []string{"eval", "configure", "keep", "remove", "notes", "inspect", "snapshot", "policy", "find"}
 	case 3:
-		preferred = []string{"loom", "configure", "clear", "branch", "edit", "visitor", "inspect", "anthology"}
+		preferred = []string{"continue", "loom", "configure", "clear", "branch", "edit", "visitor", "inspect", "anthology"}
 	}
 	if m.notesOpen {
 		preferred = append([]string{"notes", "edit", "inspect"}, preferred...)
@@ -454,8 +481,19 @@ func (m *model) prioritizePageCommands(actions []action) {
 // and aliases share a single palette row and dispatch path.
 func (m *model) canonicalCommand(id string) string {
 	switch id {
-	case "continue", "generate", "run", "simulate", "grow":
+	case "generate", "run", "simulate":
+		return "continue"
+	case "grow":
 		return "loom"
+	case "export":
+		return "snapshot"
+	case "import":
+		return "add"
+	case "keep":
+		if m.section == 4 {
+			return "keep"
+		}
+		return "add"
 	case "delete":
 		return "remove"
 	case "fork":
@@ -473,9 +511,20 @@ func (m *model) commandAliases(id string) []string {
 	names := []string{commandName(action{id: id})}
 	switch id {
 	case "loom":
-		names = append(names, "continue", "generate", "run", "simulate", "grow")
+		names = append(names, "grow")
+	case "continue":
+		names = append(names, "generate", "run", "simulate")
+	case "add":
+		names = append(names, "import")
+		if m.section != 4 {
+			names = append(names, "keep")
+		}
+	case "snapshot":
+		names = append(names, "snapshot")
+	case "evaluations":
+		names = append(names, "evaluations")
 	case "branch":
-		names = append(names, "branch")
+		names = append(names, "fork")
 	case "remove":
 		names = append(names, "delete")
 	case "configure":
@@ -493,6 +542,25 @@ func (m *model) commandAliases(id string) []string {
 // Optional direct entry opens the same control as keyboard navigation.
 func (m *model) directConfig(id, input string) (tea.Cmd, bool) {
 	fields := strings.Fields(input)
+	if len(fields) == 2 && id == "configure" {
+		for _, target := range []string{"keys", "workspaces", "workspace", "models", "model"} {
+			if fields[1] == target {
+				if target == "workspace" {
+					target = "workspaces"
+				}
+				if target == "model" {
+					target = "models"
+				}
+				m.openConfig()
+				parent := m.dialog
+				cmd := m.perform(target)
+				if m.dialog != nil {
+					m.dialog.parent = parent
+				}
+				return cmd, true
+			}
+		}
+	}
 	if len(fields) != 2 || m.section != 3 {
 		return nil, false
 	}

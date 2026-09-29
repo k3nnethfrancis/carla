@@ -15,7 +15,7 @@ func TestCommandPrefixesExposeContextualFlags(t *testing.T) {
 		for _, input := range []string{"/lo", "/loom", "/generate", `/simulate 2 --eval "Voice"`} {
 			m.command.SetValue(input)
 			hints := strings.Join(m.commandHints(), " ")
-			for _, flag := range []string{"--tokens", "--eval", "--loops"} {
+			for _, flag := range []string{"--tokens", "--eval", "--model"} {
 				if !strings.Contains(hints, flag) {
 					t.Fatalf("%s: %s", input, hints)
 				}
@@ -87,7 +87,7 @@ func TestFullCommandHelpScrollsAndReturns(t *testing.T) {
 	}
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnd})
 	frame := ansi.Strip(m.View().Content)
-	if !strings.Contains(frame, "selection policy") || !strings.Contains(frame, "ESC back") {
+	if !strings.Contains(frame, "alternatives") || !strings.Contains(frame, "ESC back") {
 		t.Fatal(frame)
 	}
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -123,6 +123,8 @@ func TestHelpWheelDoesNotMoveBackgroundTarget(t *testing.T) {
 
 func TestHelpHintsUseConfiguredBindings(t *testing.T) {
 	m := evalFixture()
+	m.height = 18
+	m.width = 60
 	m.data.Bindings = map[string]string{"nav.up": "k", "nav.down": "j", "nav.enter": "o", "nav.back": "q"}
 	m.openHelp()
 	frame := ansi.Strip(m.View().Content)

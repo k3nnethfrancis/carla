@@ -12,7 +12,7 @@ func TestUnifiedAliases(t *testing.T) {
 		m := fixture()
 		m.section = section
 		m.focus = 3
-		for alias, want := range map[string]string{"config": "configure", "settings": "configure", "generate": "loom", "continue": "loom", "run": "loom", "branch": "branch", "fork": "branch", "remove": "remove", "delete": "remove"} {
+		for alias, want := range map[string]string{"config": "configure", "settings": "configure", "generate": "continue", "continue": "continue", "run": "continue", "branch": "branch", "fork": "branch", "remove": "remove", "delete": "remove"} {
 			// Document-only actions require a valid document target; test their identity separately.
 			id := m.canonicalCommand(alias)
 			if id != want {
@@ -48,8 +48,8 @@ func TestLoopsParser(t *testing.T) {
 	}
 }
 
-func TestDocumentEntryPointsShareOneOperation(t *testing.T) {
-	for _, section := range []int{0, 1, 2} {
+func TestBranchesLoomUsesDocumentOperation(t *testing.T) {
+	for _, section := range []int{1} {
 		m := fixture()
 		m.section = section
 		m.width, m.height = 120, 36

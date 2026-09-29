@@ -9,8 +9,33 @@ import (
 )
 
 func (m *model) toggleTarget() tea.Cmd {
+	if r := m.targetRow(); r.kind == "document-set" {
+		if m.branchSelection == nil {
+			m.branchSelection = map[string]bool{}
+		}
+		all := true
+		for _, id := range m.documentSetMembers(r.id) {
+			all = all && m.branchSelection[id]
+		}
+		for _, id := range m.documentSetMembers(r.id) {
+			m.branchSelection[id] = !all
+		}
+		if all {
+			delete(m.branchSelection, "set:"+r.id)
+		} else {
+			m.branchSelection["set:"+r.id] = true
+		}
+		m.reflow()
+		return nil
+	}
 	if m.section == 3 {
-		if r := m.targetRow(); m.focus == 0 && r.kind == "simulation" {
+		if r := m.targetRow(); m.focus == 0 && r.kind == "simulation-group" {
+			if m.simSelection != nil && m.simSelection.Group == r.id {
+				m.simSelection = nil
+			} else {
+				m.simSelection = &simulationSelection{Group: r.id}
+			}
+		} else if m.focus == 0 && r.kind == "simulation" {
 			if m.simSelection != nil && m.simSelection.Run == r.id && m.simSelection.All {
 				m.simSelection = nil
 			} else {
@@ -40,7 +65,19 @@ func (m *model) toggleTarget() tea.Cmd {
 	if (m.section == 1 || m.section == 2) && !m.pending && !m.data.Busy {
 		r := m.targetRow()
 		if r.kind == "node" {
-			ids := m.subtree([]string{r.id})
+			ids := map[string]bool{r.id: true}
+			// Ancestry is not containment: selecting a document targets exactly
+			// that version, not every discarded experiment below it.
+			for key := range m.branchSelection {
+				if strings.HasPrefix(key, "set:") {
+					for _, member := range m.documentSetMembers(strings.TrimPrefix(key, "set:")) {
+						if member == r.id {
+							delete(m.branchSelection, key)
+							break
+						}
+					}
+				}
+			}
 			all := true
 			for id := range ids {
 				if !m.branchSelection[id] {
@@ -95,6 +132,7 @@ func (m *model) syncCursor(width, height int) {
 	m.navigator.SetHeight(height)
 	if m.editing == "" && m.data.Current != nil && (m.cursorNode != m.currentID() || m.navigator.Value() != m.currentText()) {
 		m.cursorNode = m.currentID()
+		m.cursorMoved = false
 		m.navigator.SetValue(m.currentText())
 		m.navigator.CursorEnd()
 	}
@@ -108,6 +146,7 @@ func (m *model) moveCursor(key string, msg tea.KeyPressMsg) tea.Cmd {
 	}
 	var cmd tea.Cmd
 	m.navigator, cmd = m.navigator.Update(move)
+	m.cursorMoved = true
 	m.reflow()
 	m.revealCursor()
 	return cmd
@@ -197,14 +236,23 @@ func documentInput(msg tea.KeyPressMsg) bool {
 // generation alone consumes a prefix, and the original remains immutable.
 func (m *model) forkDocument() tea.Cmd {
 	if m.section == 3 {
-		if targets := m.selectedConversations(); len(targets) == 1 {
-			return m.send("simulator.fork", map[string]any{"run": targets[0].Run, "conversation": targets[0].Conversation})
+		if target, ok := m.loomConversationTarget(); ok {
+			return m.send("simulator.fork", target)
 		}
-		m.status = "Select exactly one conversation to fork"
+		m.status = "Select conversations to branch"
 		return nil
 	}
 	if m.pending || m.data.Busy {
 		return nil
+	}
+	if m.selectionVisible() || m.targetRow().kind == "document-set" {
+		cmd := m.send("node.fork", m.documentGroupArgs())
+		if cmd != nil {
+			m.commandDocument = ""
+			m.enterLoom = true
+			m.section = 1
+		}
+		return cmd
 	}
 	id := m.currentID()
 	args := map[string]any{"node": id}
@@ -278,6 +326,7 @@ func (m *model) revealVersionChange() {
 	text := []rune(m.currentText())
 	offset := max(0, min(m.data.Current.ChangeOffset, len(text)))
 	moveTextCursor(&m.navigator, offset)
+	m.cursorMoved = false
 	m.document.SetContent(m.renderDocument(m.document.Width()))
 	row := strings.Count(ansi.Wrap(safe(string(text[:offset]))+"█", max(1, m.document.Width()), ""), "\n")
 	m.document.SetYOffset(row)

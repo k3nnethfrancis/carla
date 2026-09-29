@@ -9,16 +9,25 @@ import (
 
 // The tab defines what the positional count produces. Tokens are always a cap.
 type generationOptions struct {
-	Count, Tokens, Turns, Loops int
-	Message, Evaluation         string
+	Count, Tokens, Turns, Loops                      int
+	Message, Evaluation, Model, VisitorModel, Action string
 }
 
 func (o generationOptions) apply(args map[string]any) {
+	if o.Action != "" {
+		args["action"] = o.Action
+	}
+	if o.Model != "" {
+		args["model"] = o.Model
+	}
+	if o.VisitorModel != "" {
+		args["visitor_model"] = o.VisitorModel
+	}
 	if o.Evaluation != "" {
 		args["eval"] = o.Evaluation
 	}
 	if o.Message != "" {
-		args["message"] = o.Message
+		args["visitor"] = o.Message
 	}
 	if o.Loops > 0 {
 		args["loops"] = o.Loops
@@ -41,7 +50,7 @@ func parseGenerationOptions(input, id string) (generationOptions, error) {
 	}
 	seen := map[string]bool{}
 	fail := func() (generationOptions, error) {
-		return out, fmt.Errorf("use /loom 5 --tokens 1024 --loops 4 (Simulator also accepts --turns N and --msg with quoted text); token ranges are not supported")
+		return out, fmt.Errorf("use /loom 5 --tokens 1024 --loops 4 (both accept --tokens, --eval and --model; Simulator also accepts --turns N, --visitor and --visitor-model); token ranges are not supported")
 	}
 	for i := 1; i < len(fields); i++ {
 		key, value, inline := strings.Cut(fields[i], "=")
@@ -56,11 +65,15 @@ func parseGenerationOptions(input, id string) (generationOptions, error) {
 				key = "--count"
 			}
 		}
-		if key != "--tokens" && (id != "loom" || (key != "--count" && key != "-n" && key != "--turns" && key != "--loops" && key != "--msg" && key != "--message" && key != "--eval")) {
-			return fail()
+		if key == "--msg" || key == "--message" {
+			key = "--visitor"
 		}
-		if key == "--msg" {
-			key = "--message"
+		allowed := key == "--tokens" || key == "--turns" || key == "--visitor" || key == "--eval" || key == "--model" || key == "--visitor-model" || key == "--loops"
+		if id == "loom" {
+			allowed = allowed || key == "--count" || key == "-n" || key == "--loops"
+		}
+		if !allowed || (positional && id != "loom") {
+			return fail()
 		}
 		if key == "-n" {
 			key = "--count"
@@ -83,9 +96,20 @@ func parseGenerationOptions(input, id string) (generationOptions, error) {
 			out.Evaluation = value
 			continue
 		}
-		if key == "--message" {
+		if key == "--model" || key == "--visitor-model" {
 			if strings.TrimSpace(value) == "" {
-				return out, fmt.Errorf("--message needs a nonempty quoted message")
+				return fail()
+			}
+			if key == "--model" {
+				out.Model = value
+			} else {
+				out.VisitorModel = value
+			}
+			continue
+		}
+		if key == "--visitor" {
+			if strings.TrimSpace(value) == "" {
+				return out, fmt.Errorf("--visitor needs a nonempty quoted message")
 			}
 			out.Message = value
 			continue
