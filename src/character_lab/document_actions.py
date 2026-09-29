@@ -11,6 +11,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+from . import action_scope
 from .domain import now
 
 
@@ -26,6 +27,8 @@ class DocumentPlan:
     targets: tuple[DocumentTarget, ...]
     count: int
     source_set: str | None = None
+    scope: dict | None = None
+    fork: bool = False
 
 
 @dataclass(frozen=True)
@@ -49,24 +52,80 @@ def group(project, set_id):
     return found
 
 
-def plan(project, action, node_ids=None, *, count=1, offsets=None, set_id=None):
+def current_members(project, selected_set):
+    """Resolve operational heads without rewriting saved set provenance."""
+    existing = {node["id"] for node in project.data["nodes"]}
+    if any(key not in existing for key in selected_set["members"]):
+        raise ValueError("A selected document version no longer exists")
+    if (
+        project.data.get("document_set_heads", {}).get(
+            selected_set["set_id"], selected_set["id"]
+        )
+        != selected_set["id"]
+    ):
+        return list(selected_set["members"])
+    return [
+        project.data.get("document_heads", {}).get(
+            project.node(key).get("document_id", key), key
+        )
+        for key in selected_set["members"]
+    ]
+
+
+def plan(
+    project,
+    action,
+    node_ids=None,
+    *,
+    count=1,
+    offsets=None,
+    set_id=None,
+    scope=None,
+    fork=False,
+):
     """Validate and freeze targets; ancestry never expands into implicit scope.
 
     Offsets are Unicode code points. A selected historical version or prefix is
     valid, but Continue will branch rather than replace its existing future.
     Library passage composition must happen before calling this function.
     """
+    if not isinstance(fork, bool):
+        raise ValueError("Document fork choice must be enabled or disabled")
     if action not in {"continue", "loom", "branch"}:
         raise ValueError("Unknown document action")
     if type(count) is not int or count < 1:
         raise ValueError("Alternatives must be a positive integer")
     if action != "loom" and count != 1:
         raise ValueError("Only Loom accepts a number of alternatives")
+    if action == "loom" and count == 1:
+        action = "continue"
+    if scope is not None:
+        if node_ids or set_id is not None:
+            raise ValueError("Supply one explicit action scope")
+        scope = action_scope.validate(scope, "document")
+        node_ids = [leaf.get("node") for leaf in action_scope.leaves(scope)]
+        # Saved set identity is useful only when the explicit leaves still match
+        # its operational membership; it never overrides the requested scope.
+        if scope.get("kind") == "set" and any(
+            s["id"] == scope.get("id") for s in project.data.get("document_sets", [])
+        ):
+            selected_set = group(project, scope["id"])
+            if node_ids != current_members(project, selected_set):
+                raise ValueError("The selected set changed; select it again")
+            set_id = scope["id"]
+            node_ids = None
     if set_id is not None:
         if node_ids:
             raise ValueError("Select document versions or a document set, not both")
         selected_set = group(project, set_id)
-        node_ids = selected_set["members"]
+        node_ids = current_members(project, selected_set)
+        saved_scope = selected_set.get("scope")
+        if saved_scope:
+            heads = dict(zip(selected_set["members"], node_ids))
+            scope = action_scope.map_leaves(
+                saved_scope,
+                lambda leaf: {**leaf, "node": heads.get(leaf["node"], leaf["node"])},
+            )
         if len(node_ids) != len(selected_set["sources"]):
             raise ValueError(
                 "This document set did not finish starting; select its saved members instead"
@@ -97,7 +156,12 @@ def plan(project, action, node_ids=None, *, count=1, offsets=None, set_id=None):
             raise ValueError("Select one version per document to continue")
         identities.add(identity)
         targets.append(DocumentTarget(key, node["text"][:end]))
-    return DocumentPlan(action, tuple(targets), count, set_id)
+    if scope is None:
+        children = [{"kind": "document", "node": t.node_id} for t in targets]
+        scope = (
+            children[0] if len(children) == 1 else {"kind": "set", "children": children}
+        )
+    return DocumentPlan(action, tuple(targets), count, set_id, scope, fork)
 
 
 def _can_advance(project, target):
@@ -121,6 +185,7 @@ def begin(project, action_plan):
     heads = project.data.setdefault("document_set_heads", {})
     advance_set = (
         action_plan.action == "continue"
+        and not action_plan.fork
         and source is not None
         and heads.get(source["set_id"], source["id"]) == source["id"]
         and all(_can_advance(project, target) for target in action_plan.targets)
@@ -137,6 +202,8 @@ def begin(project, action_plan):
             alternative=alternative,
             sources=[target.node_id for target in action_plan.targets],
             members=[],
+            source_scope=action_plan.scope,
+            scope=action_plan.scope,
             created=now(),
         )
         project.data.setdefault("document_sets", []).append(result)
@@ -150,6 +217,7 @@ def begin(project, action_plan):
                     len(candidates),
                     member,
                     action_plan.action == "continue"
+                    and not action_plan.fork
                     and (source is None or advance_set),
                 )
             )
@@ -208,6 +276,24 @@ def create_revision(project, candidate, **extra):
     )
     result["members"].append(node["id"])
     result["members"].sort(key=lambda key: project.node(key)["set_member"])
+    replacements = {
+        result["sources"][project.node(key)["set_member"]]: key
+        for key in result["members"]
+    }
+    result["scope"] = action_scope.map_leaves(
+        result["source_scope"],
+        lambda leaf: {**leaf, "node": replacements.get(leaf["node"], leaf["node"])},
+    )
+
+    def clear_ids(scope):
+        if scope["kind"] == "set":
+            scope.pop("id", None)
+            for child in scope["children"]:
+                clear_ids(child)
+
+    clear_ids(result["scope"])
+    if result["scope"]["kind"] == "set":
+        result["scope"]["id"] = result["id"]
     project.save()
     return node
 

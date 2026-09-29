@@ -60,8 +60,9 @@ scope. Use `/continue --visitor "Your message"` to supply the next visitor turn,
 or `/loom 4 --visitor "Your message"` to explore four alternative responses.
 
 
-Library/Anthology Loom actions use the same document workflow as Branches and
-return new output there. New descendants are not automatically kept.
+Library Enter opens a new source root in Branches. Anthology Branch/Continue
+returns new output to Branches without keeping it; Anthology Loom starts Simulator.
+Library and Evaluate do not run generation commands.
 
 `/remove` is contextual: deselect Library sources, remove Anthology membership,
 confirm branch/subtree deletion, or remove Evaluate collection membership. Branch
@@ -70,8 +71,9 @@ universal filesystem-delete command. See [commands](commands.md) for exact scope
 
 ## Repeat and compare
 
-One loop generates alternatives for your review. `--loops N` enables local
-selection between loops; configure its criteria/model under `/policy` first.
+One-output Loom continues the selected target. A larger count splits alternatives.
+`--loops N` repeats continuation on those outputs. Selection defaults to Off;
+enable it under `/policy` to select a whole alternative and split again between loops.
 The selector may choose none, ending exploration with its explanation retained.
 Monitoring is separately optional; only enabled Stop actions stop flagged output.
 A token ceiling limits an individual generation, not the number of later turns.

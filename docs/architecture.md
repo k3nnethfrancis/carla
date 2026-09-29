@@ -79,7 +79,8 @@ logical identities and ordered set membership. Node IDs remain immutable revisio
 references. `document_heads` points to current versions; `document_sets` records
 frozen membership with logical set heads. Continue advances a head; older versions
 and prefixes branch. `document_generation.py` orchestrates these plans through
-Session's existing bounded streaming path and selects whole sets between loops.
+Session's existing bounded streaming path. Unjudged loops advance every output;
+explicit selection can choose whole alternatives between split loops.
 Queued members are allocated before inference so cancellation retains set shape.
 
 `simulator_actions.py` resolves explicit item/subset/set targets, validates visitor
@@ -201,3 +202,13 @@ The frontend saves the last tab and document/trace row in each workspace's
 with keyboard focus in the command bar. It does not restore checked Loom targets,
 editing, dialogs, or command input. Missing/deleted rows fall back to the tab's
 first item. Navigation writes are atomic and occur only when the location changes.
+
+### Action scope
+
+`action_scope.py` defines recursive containment (`document` or `conversation`
+leaves and `set` children). It is separate from parent/version ancestry.
+Go sends the explicit selected shape; Python validates/freeze-copies it, enumerates
+leaves for scheduling, and remaps saved output scopes to new IDs on splits.
+Continue retains conversation identities; document continuations save child
+versions. Current document sets resolve their current member heads, while old
+set snapshots and evaluated versions remain unchanged.

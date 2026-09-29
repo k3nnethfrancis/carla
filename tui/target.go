@@ -61,7 +61,7 @@ func (m *model) contextualActions() []action {
 		if count > 0 {
 			actions = append(actions, action{id: "remove", label: "Remove from seeds"})
 		}
-		actions = append(actions, action{id: "continue", label: "Continue from this source selection"})
+
 	} else if (m.section == 1 || m.section == 2) && (r.kind == "node" || m.selectionVisible()) {
 		if m.section == 1 {
 			label := fmt.Sprintf("Keep %d in anthology", m.collectionCount())

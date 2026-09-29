@@ -9,7 +9,7 @@ import (
 )
 
 func TestLoomRejectsConversationOptionsInDocumentViews(t *testing.T) {
-	for _, section := range []int{0, 1, 2} {
+	for _, section := range []int{1} {
 		m := fixture()
 		m.section = section
 		if m.loom(generationOptions{Turns: 2}) != nil || !strings.Contains(m.status, "--turns") {

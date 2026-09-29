@@ -1,128 +1,100 @@
 # Interaction model
 
-Carla's actions operate on saved objects and explicit selections. Tabs expose
-those objects; they do not redefine the commands. Commands, buttons and keyboard
-bindings should resolve the same target and invoke the same operation.
+Commands operate on explicit targets: one document or conversation, a set, or a
+nested set. Containment defines operation scope; ancestry records where content
+came from. The executor enumerates leaves to schedule work while preserving the
+selected tree in saved provenance.
 
-## Actions
+## Where actions work
 
-| Command | Intent |
-| --- | --- |
-| `/add` | Add material to the current collection. |
-| `/remove` | Remove selected membership or content, showing the consequence. |
-| `/branch` | Make an independent alternative without generating. Preserve ancestry. |
-| `/continue` | Advance the existing item or selected set, retaining its history. |
-| `/loom N` | Generate N alternative futures of the selected item or set. |
-| `/eval` | Judge exact saved versions using the active or named evaluation. |
-| `/export` | Write a frozen copy of selected saved items, or the current collection. |
+| Stage | Branch | Continue | Loom |
+| --- | --- | --- | --- |
+| Library | — | — | — |
+| Branches | Copy with ancestry, no generation | Save a continuation beneath the document | Continue once; 2+ creates alternatives |
+| Anthology | Copy into Branches | Continue into a new branch, not automatically kept | Start fresh Simulator conversations from selected documents |
+| Simulator | Fork selected conversation structure without generation | Advance selected conversations | Continue selected conversations; 2+ forks their structure |
+| Evaluate | — | — | — |
 
-The shared command palette contains `/config`, `/policy`, `/stop` and `/help`.
-Stage navigation uses `/library`, `/branches`, `/anthology`, `/simulator` and
-`/evaluate`. Editor controls, selection controls, notes and inspection remain
-available through their owning interfaces. Compatibility aliases need not be
-separate entries in the palette.
+In Library, Space selects source passages and Enter opens them together in
+Branches. Opening the same selection again creates another seed root with the
+same source provenance. Library content remains unchanged.
 
-`/config` owns execution defaults, model selection, workspace selection and key
-bindings. `/policy` owns monitoring, selection and evaluation definitions. A model
-flag overrides the default for one operation; it does not change future defaults.
+## Scope and selection
 
-## Focus, selection and scope
+Arrows preview; Space selects. Checked targets take precedence over preview.
+Opening a conversation targets that conversation. Clearing Simulator selection
+returns to fresh generation. Moving to the command bar preserves the scope.
 
-Arrows preview; Space selects. Enter opens an object and targets it. Moving to the
-command bar preserves that context. A visible selection wins over the preview.
-In Simulator, clearing selection explicitly returns to fresh generation; merely
-hovering a previous conversation must not make it a generation target.
+A document checkbox selects that exact version, not its ancestry descendants.
+A set checkbox selects its contained members, preserving nested boundaries.
+Deletion separately previews affected descendants before confirmation.
 
-A conversation set **contains** its members. A document parent represents
-**ancestry**. Anthology **references** kept versions. Those relationships must not
-be treated as the same recursive selection operation. Batch curation can include
-descendants explicitly; generation must preserve the selected starting versions.
+Set identity does not change when the highlighted row moves. Current document
+sets resolve their members' current logical heads; historical membership snapshots
+remain frozen. Anthology and evaluation entries reference exact saved versions.
 
-Library passage selection composes a seed document, following the same document
-generation path as Branches. Anthology points to kept document versions: generating
-from one produces material in Branches which still needs separate curation.
+## Advance and split
 
-## Continue, Loom and Branch
-
-For one selected set A containing four conversations:
+For a selected set A of four conversations:
 
 ```text
-/continue   A → A with four advanced conversations (prior revisions retained)
-/loom       A → B with four alternative continuations
-/loom 3     A → B, C, D; each contains four alternative continuations
-/branch     A → B with four copied conversations; no generation
+/continue   A → A: each selected conversation advances
+/loom       A → A: same operation
+/loom 1     A → A: same operation
+/loom 2     A → a new Loom containing two alternative sets of four
+/branch     A → a copied structure, without generation
 ```
 
-For a single item, the same rules apply at item scope. Loom 1 and Continue can
-produce the same amount of text; they differ in identity and ancestry. A document
-continuation from an old revision or an earlier cursor position preserves the
-existing future by branching instead of rewriting it. Exact saved versions remain
-available to Anthology and evaluations.
+Selecting one conversation narrows the same operations to that conversation.
+Selecting sets of sets preserves those internal boundaries in each alternative.
+Conversation state lives at the leaves. Grouping does not concatenate conversations
+or combine their histories into one model request. Loom groups use stable numbered
+labels with nested alternatives. Opening a group shows its conversations in a
+paged grid; opening a tile narrows the action target to that conversation, and
+Escape returns to the same group grid.
 
-A subset advances only those members. Loom preserves the subset as an alternative
-set; it never concatenates conversations into one model prompt. Selection policies
-between Loom loops select complete alternatives at that grouping level, rather
-than silently assembling winning children from different alternatives.
+Documents retain immutable child versions for continuations. Sources and old
+versions keep their existing futures. An automatic scroll to the first change
+is only a reading aid; deliberately positioning the reader cursor selects a
+prefix for generation. Anthology Branch/Continue starts independent material in
+Branches which must be kept separately.
 
-## Current scope and limitations
-
-A document continuation from the list uses the complete saved text. Automatic
-scrolling to the first change is a reading aid, not a generation boundary. Moving
-the cursor explicitly in the document reader selects a prefix for generation.
-
-The document backend currently represents one ordered set of saved versions.
-It does not yet represent a nested set of document sets: selecting members from
-multiple sets combines them into a flat selection. Simulator preserves source-run
-groups when targeting conversations from multiple runs. Arbitrary recursive
-nesting is not implemented in either domain.
-
-Document ancestry and set membership are separate relationships. The current
-parent checkbox still selects descendants for batch curation, so inspect the
-checked versions before generating. Continue rejects a selection containing
-multiple revisions of the same logical document. These selection limitations
-remain under review; the action rules above describe the intended contract.
-
-## Inputs and overrides
+## Repetition and policies
 
 ```text
-/continue --tokens 512
-/loom 4 --tokens 512
-/continue --visitor "What matters to you?" --model base-alias
-/loom 3 --visitor "What matters to you?" --turns 2 --loops 4
+/continue --tokens 512 --loops 3
+/loom 4 --tokens 512 --loops 3
+/loom 2 --visitor "What matters to you?" --turns 2 --loops 3
 ```
 
-`--visitor` supplies the next visitor message before generation, once per selected
-conversation. The preview states that scope. An existing unanswered visitor turn
-is a conflict: it is not silently replaced. Without a supplied message, an already
-pending visitor turn receives the next character response. The flag applies only
-to Simulator. Long visitor text can be entered through the conversation editor.
+Without selection, a split creates N alternatives once, then later loops advance
+those outputs. It does not multiply N on every loop. With Selection enabled in
+`/policy`, split loops judge complete alternatives, select one, then split again
+from that winner. One-output loops always continue directly. Selection defaults
+to Off and is separate from optional monitoring.
 
-`--model` selects the document/character generator for this operation;
-`--visitor-model` selects the simulated visitor. Saved traces record effective
-settings and models. `--tokens` caps each generation; it is not a target length.
-`--turns` controls new character replies in Simulator. `--loops` repeats Loom's
-generate-and-select cycle; it is not a Continue option.
+`--tokens` caps each model completion. `--turns` counts additional character replies
+per Simulator loop; it is unavailable for document continuations. `--visitor`
+supplies the next visitor message once per selected conversation. An unanswered
+visitor message is a conflict, not silently replaced. Model flags override only
+this operation. `--eval` judges generated versions without changing prompts.
 
-## Evidence and persistence
+## Collection actions and evidence
 
-Continue must retain original text, turns, prompts, settings and model identities.
-Judgments and training marks apply to the frozen content they evaluated. Advancing
-an item does not transfer a passing label to its new content. Branch and Loom
-preserve ancestry; editing does not rewrite downstream replies based on old text.
+`/add` imports sources or adds exact versions to the current collection.
+`/remove` removes membership or, in Branches, confirms deletion of documents and
+affected descendants. Delete is its default panel binding. In text editors Delete
+edits text; saved custom bindings remain respected. `/eval` judges individual saved
+items; selection policies can instead compare complete alternative structures.
+`/export` freezes selected items or the collection into a provenance-bearing bundle.
 
-Exports contain exact text, structured messages, metadata and provenance. They do
-not select a training framework, tokenization scheme, loss mask or preference
-objective. They do not train a model or upload data. An export is not a workspace
-backup or a supported workspace restore format.
+Continue retains prior text, messages, model settings and evidence. New content
+does not inherit a passing judgment, training mark or Anthology membership.
+Exports are not a training algorithm or a supported workspace restore format.
 
-## Ownership and verification
+## Ownership
 
-Go owns focus, selection, editors, command completion and rendering. Python owns
-validated operations, grouping, revisions, inference, persistence and evidence.
-The same operation plan should explain the request before it runs. One session
-owns an active job with bounded model concurrency; set structure survives queueing,
-streaming, stopping and recovery.
-
-Acceptance covers single items, subsets and parents; clear-to-fresh behavior;
-Continue versus Loom identity; visitor/model overrides; policies over complete
-sets; frozen judgments; command/editor navigation; and restart with partial work.
+Go resolves focus and explicit selection into a structured scope. Python validates
+that scope, freezes generation inputs, owns revisions and group provenance, and
+schedules leaves with bounded concurrency. The same command handler serves
+keyboard actions and the command palette. Stopping retains saved partial work.

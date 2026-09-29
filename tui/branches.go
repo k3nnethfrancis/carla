@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -24,7 +25,7 @@ func (m *model) branchRows() []row {
 	grouped := map[string]bool{}
 	if m.section == 1 {
 		for _, set := range m.visibleDocumentSets() {
-			for _, id := range set.Members {
+			for _, id := range m.documentSetMembers(set.ID) {
 				grouped[id] = true
 			}
 		}
@@ -96,7 +97,7 @@ func (m *model) branchRows() []row {
 			}
 			mark := "  "
 			all := len(set.Members) > 0
-			for _, id := range set.Members {
+			for _, id := range m.documentSetMembers(set.ID) {
 				all = all && m.branchSelection[id]
 			}
 			if all {
@@ -106,14 +107,39 @@ func (m *model) branchRows() []row {
 			if m.collapsed[set.ID] {
 				return
 			}
-			for _, id := range set.Members {
+			var addScope func(actionScope, string, int)
+			addScope = func(scope actionScope, path string, level int) {
+				if scope.Kind == "set" {
+					arrow := "▾ "
+					if m.collapsed[path] {
+						arrow = "▸ "
+					}
+					mark := "  "
+					if m.branchSelection["set:"+path] {
+						mark = "✓ "
+					}
+					rows = append(rows, row{id: path, kind: "document-set", depth: level, label: mark + arrow + "Set"})
+					if m.collapsed[path] {
+						return
+					}
+					for i, c := range scope.Children {
+						addScope(c, fmt.Sprintf("%s/%d", path, i), level+1)
+					}
+					return
+				}
 				for _, n := range m.data.Nodes {
-					if n.ID == id {
-						rows = append(rows, row{id: id, kind: "node", label: m.selectionMark(id) + documentLabel(n), depth: depth + 1, preview: n.Preview})
-						walk(id, depth+2)
+					if n.ID == scope.Node {
+						rows = append(rows, row{id: n.ID, kind: "node", label: m.selectionMark(n.ID) + documentLabel(n), depth: level, preview: n.Preview})
+						walk(n.ID, level+1)
+						break
 					}
 				}
 			}
+			scope := m.documentScope(set.ID)
+			for i, c := range scope.Children {
+				addScope(c, fmt.Sprintf("%s/scope/%d", set.ID, i), depth+1)
+			}
+
 		}
 		for i, id := range logical {
 			var versions []documentSet
@@ -186,9 +212,36 @@ func (m *model) branchArrow(key string) {
 }
 
 func (m *model) documentSetMembers(id string) []string {
+	if strings.Contains(id, "/scope/") {
+		var ids []string
+		var visit func(actionScope)
+		visit = func(s actionScope) {
+			if s.Kind == "document" {
+				ids = append(ids, s.Node)
+			}
+			for _, c := range s.Children {
+				visit(c)
+			}
+		}
+		visit(m.documentScope(id))
+		return ids
+	}
 	for _, s := range m.data.DocumentSets {
 		if s.ID == id {
-			return s.Members
+			members := append([]string(nil), s.Members...)
+			if head := m.data.DocumentSetHeads[s.SetID]; head == "" || head == s.ID {
+				for i, id := range members {
+					for _, n := range m.data.Nodes {
+						if n.ID == id {
+							if next := m.data.DocumentHeads[n.DocumentID]; next != "" {
+								members[i] = next
+							}
+							break
+						}
+					}
+				}
+			}
+			return members
 		}
 	}
 	return nil
@@ -214,4 +267,63 @@ func (m *model) visibleDocumentSets() []documentSet {
 		}
 	}
 	return out
+}
+
+// documentScope preserves saved nested membership while resolving current heads.
+// Set IDs describe provenance; exact leaf IDs remain the execution authority.
+func (m *model) documentScope(id string) actionScope {
+	if base, path, ok := strings.Cut(id, "/scope/"); ok {
+		scope := m.documentScope(base)
+		for _, part := range strings.Split(path, "/") {
+			index, err := strconv.Atoi(part)
+			if err != nil || index < 0 || index >= len(scope.Children) {
+				return actionScope{Kind: "set"}
+			}
+			scope = scope.Children[index]
+		}
+		scope.ID = ""
+		return scope
+	}
+	for _, set := range m.data.DocumentSets {
+		if set.ID != id {
+			continue
+		}
+		members := m.documentSetMembers(id)
+		replacements := map[string]string{}
+		for i, old := range set.Members {
+			replacements[old] = members[i]
+		}
+		var resolve func(actionScope) actionScope
+		resolve = func(s actionScope) actionScope {
+			if s.Kind == "document" {
+				if next := replacements[s.Node]; next != "" {
+					s.Node = next
+				}
+				return s
+			}
+			s.Children = append([]actionScope(nil), s.Children...)
+			for i, c := range s.Children {
+				s.Children[i] = resolve(c)
+			}
+			// Nested historical IDs are provenance, not current containing-set IDs.
+			s.ID = ""
+			return s
+		}
+		result := actionScope{Kind: "set", ID: id}
+		if set.Scope != nil {
+			result = resolve(*set.Scope)
+			result.ID = id
+			result.Kind = "set"
+			if len(result.Children) == 0 {
+				result.Children = []actionScope{{Kind: "document", Node: members[0]}}
+				result.Node = ""
+			}
+		} else {
+			for _, member := range members {
+				result.Children = append(result.Children, actionScope{Kind: "document", Node: member})
+			}
+		}
+		return result
+	}
+	return actionScope{Kind: "set"}
 }

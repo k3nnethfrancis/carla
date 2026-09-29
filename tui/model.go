@@ -64,10 +64,13 @@ type simulationConversation struct {
 	Turns  []simulationTurn
 }
 type simulationRun struct {
-	AlternativeGroup  string `json:"alternative_group"`
-	AlternativeIndex  int    `json:"alternative_index"`
-	AlternativeCount  int    `json:"alternative_count"`
-	OpenConversation  *int   `json:"open_conversation"`
+	GridGroup         string       `json:"grid_group"`
+	AlternativeScope  *actionScope `json:"alternative_scope"`
+	SourceScope       *actionScope `json:"source_scope"`
+	AlternativeGroup  string       `json:"alternative_group"`
+	AlternativeIndex  int          `json:"alternative_index"`
+	AlternativeCount  int          `json:"alternative_count"`
+	OpenConversation  *int         `json:"open_conversation"`
 	Parent            *conversationParent
 	ID, Status, Error string
 	Opened            bool
@@ -76,13 +79,16 @@ type simulationRun struct {
 	Conversations     []simulationConversation
 }
 type documentSet struct {
-	ID      string
-	SetID   string `json:"set_id"`
-	Members []string
-	Parent  string
-	Action  string
+	Scope       *actionScope `json:"scope"`
+	SourceScope *actionScope `json:"source_scope"`
+	ID          string
+	SetID       string `json:"set_id"`
+	Members     []string
+	Parent      string
+	Action      string
 }
 type state struct {
+	SelectionEnabled bool                   `json:"selection_enabled"`
 	DocumentHeads    map[string]string      `json:"document_heads"`
 	DocumentSetHeads map[string]string      `json:"document_set_heads"`
 	DocumentSets     []documentSet          `json:"document_sets"`
@@ -143,6 +149,7 @@ type model struct {
 	pendingDocumentNodes        map[string]bool
 	preserveSimulationSelection bool
 	pendingDocumentSelection    map[string]bool
+	pendingDocumentGroups       map[string][]string
 	pendingDocumentSet          string
 	evalCollection              string
 	evalCreating                bool
@@ -166,6 +173,8 @@ type model struct {
 	policySeen                  map[string]bool
 	loomTiles                   []loomTile
 	loomGrid                    bool
+	gridGroup                   string
+	simulationViews             map[string]*simulationRun
 	gridSelection               int
 	gridPinned                  bool
 	commandOrigin               *commandOrigin
@@ -384,6 +393,11 @@ func (m *model) activate() tea.Cmd {
 		}
 		return nil
 	case "simulation-group":
+		if scope := m.simulationGroupScope(r.id); scope != nil {
+			m.simSelection = &simulationSelection{Group: r.id}
+			m.gridGroup = r.id
+			return m.send("simulator.open", map[string]any{"scope": *scope})
+		}
 		m.awaitingSimulation = false
 		m.simSelection = &simulationSelection{Group: r.id}
 		m.simulation = nil
@@ -408,7 +422,7 @@ func (m *model) activate() tea.Cmd {
 		return cmd
 	case "document-set":
 		m.collapsed[r.id] = false
-		m.branchSelection = map[string]bool{}
+		m.branchSelection = map[string]bool{"set:" + r.id: true}
 		for _, id := range m.documentSetMembers(r.id) {
 			m.branchSelection[id] = true
 		}
@@ -594,6 +608,10 @@ func (m *model) apply(e event) tea.Cmd {
 		if err := json.Unmarshal(e.Data, &run); err != nil {
 			return func() tea.Msg { return failure{err} }
 		}
+		if m.simulationViews == nil {
+			m.simulationViews = map[string]*simulationRun{}
+		}
+		m.simulationViews[run.ID] = &run
 		if !run.Opened {
 			updated := false
 			for i := range m.data.SimulationRuns {
@@ -604,7 +622,7 @@ func (m *model) apply(e event) tea.Cmd {
 				}
 			}
 			if !updated {
-				m.data.SimulationRuns = append(m.data.SimulationRuns, runSummary{ID: run.ID, Count: len(run.Conversations), Status: run.Status, Conversations: run.Conversations, Parent: run.Parent, AlternativeGroup: run.AlternativeGroup, AlternativeIndex: run.AlternativeIndex, AlternativeCount: run.AlternativeCount})
+				m.data.SimulationRuns = append(m.data.SimulationRuns, runSummary{ID: run.ID, Count: len(run.Conversations), Status: run.Status, Conversations: run.Conversations, Parent: run.Parent, AlternativeScope: run.AlternativeScope, SourceScope: run.SourceScope, AlternativeGroup: run.AlternativeGroup, AlternativeIndex: run.AlternativeIndex, AlternativeCount: run.AlternativeCount})
 			}
 		}
 		newView := run.Opened || m.simulation == nil && (m.awaitingSimulation || m.simSelection == nil)
@@ -614,12 +632,19 @@ func (m *model) apply(e event) tea.Cmd {
 			m.preserveSimulationSelection = false
 		}
 		if newView {
+			m.gridGroup = run.GridGroup
+			if !run.Opened && run.AlternativeGroup != "" {
+				m.gridGroup = run.AlternativeGroup
+			}
 			m.conversationOpen = run.OpenConversation != nil || len(run.Conversations) == 1
 			m.gridSelection = 0
 			if run.OpenConversation != nil {
 				m.gridSelection = *run.OpenConversation
 			}
-			m.loomGrid = !m.conversationOpen && len(run.Conversations) > 1
+			if m.gridGroup != "" {
+				m.conversationOpen = false
+			}
+			m.loomGrid = !m.conversationOpen && (len(run.Conversations) > 1 || m.gridGroup != "")
 			m.gridPinned = true
 			m.focus = 1
 		}
@@ -667,6 +692,10 @@ func (m *model) apply(e event) tea.Cmd {
 			run.Conversations[delta.Conversation].Turns[delta.Turn].Text += delta.Text
 		}
 		bottom := m.document.AtBottom()
+		cached := m.simulationViews[delta.Run]
+		if cached != m.simulation && cached != m.activeSimulation {
+			appendDelta(cached)
+		}
 		appendDelta(m.simulation)
 		if m.activeSimulation != m.simulation {
 			appendDelta(m.activeSimulation)
@@ -716,6 +745,14 @@ func (m *model) apply(e event) tea.Cmd {
 			return func() tea.Msg { return failure{err} }
 		}
 	case "state":
+		documentRow := ""
+		if m.pendingDocumentSelection != nil && m.section == 1 {
+			documentRow = m.targetRow().id
+		}
+		if m.pendingDocumentSet != "" && documentRow != m.pendingDocumentSet {
+			// A user navigating during generation keeps their new preview.
+			m.pendingDocumentSet = ""
+		}
 		m.evaluation = nil
 		noteSaved := m.notePending
 		oldID, oldWorkspace := m.currentID(), m.data.Workspace.Path
@@ -740,6 +777,14 @@ func (m *model) apply(e event) tea.Cmd {
 				m.editor.Blur()
 			} else {
 				m.pending = true
+			}
+		}
+		if documentRow != "" {
+			for i, r := range m.rows() {
+				if r.id == documentRow {
+					m.selected = i
+					break
+				}
 			}
 		}
 		if !m.data.Busy {
@@ -782,6 +827,8 @@ func (m *model) apply(e event) tea.Cmd {
 			}
 		}
 		if oldWorkspace != m.data.Workspace.Path {
+			m.gridGroup = ""
+			m.simulationViews = nil
 			m.behaviorDraft = nil
 			m.behaviorCreating = ""
 			m.evalCollection = ""
@@ -868,8 +915,11 @@ func (m *model) apply(e event) tea.Cmd {
 		for _, n := range m.data.Nodes {
 			valid[n.ID] = true
 		}
+		for _, set := range m.data.DocumentSets {
+			valid["set:"+set.ID] = true
+		}
 		for id := range m.branchSelection {
-			if !valid[id] {
+			if !valid[id] && !(strings.HasPrefix(id, "set:") && len(m.documentSetMembers(strings.TrimPrefix(id, "set:"))) > 0) {
 				delete(m.branchSelection, id)
 			}
 		}

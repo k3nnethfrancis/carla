@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -43,7 +44,27 @@ func (m *model) gridItems() []loomTile {
 		return nil
 	}
 	items := []loomTile{}
-	for _, c := range m.simulation.Conversations {
+	targets := []conversationParent{}
+	if m.gridGroup != "" {
+		if scope := m.simulationGroupScope(m.gridGroup); scope != nil {
+			targets = simulationScopeLeaves(*scope)
+		}
+	}
+	if len(targets) == 0 {
+		for _, c := range m.simulation.Conversations {
+			targets = append(targets, conversationParent{Run: m.simulation.ID, Conversation: c.Index})
+		}
+	}
+	for _, target := range targets {
+		run := m.simulationViews[target.Run]
+		if m.simulation.ID == target.Run {
+			run = m.simulation
+		}
+		c := simulationConversation{Index: target.Conversation, Status: "loading"}
+		if run != nil && target.Conversation < len(run.Conversations) {
+			c = run.Conversations[target.Conversation]
+		}
+
 		var body strings.Builder
 		for _, t := range c.Turns {
 			speaker := "Visitor"
@@ -57,11 +78,14 @@ func (m *model) gridItems() []loomTile {
 			fmt.Fprintln(&body)
 		}
 		title := fmt.Sprintf("Conversation %d", c.Index+1)
-		if m.conversationSelected(m.simulation.ID, c.Index) {
+		if m.gridGroup != "" {
+			title = fmt.Sprintf("%s · %s", m.gridRunLabel(target.Run), title)
+		}
+		if m.conversationSelected(target.Run, c.Index) {
 			title = "✓ " + title
 		}
 		items = append(items, loomTile{
-			ID: conversationKey(m.simulation.ID, c.Index), Title: title, Text: body.String(), Status: conversationStatus(c),
+			ID: conversationKey(target.Run, c.Index), Title: title, Text: body.String(), Status: conversationStatus(c),
 		})
 	}
 	return items
@@ -218,8 +242,14 @@ func (m *model) openGridTile(index int) tea.Cmd {
 		m.selectDocument(items[index].ID)
 		return m.send("node.open", map[string]any{"node": items[index].ID})
 	}
-	if m.simulation != nil {
-		m.selectLoomConversation(map[string]any{"run": m.simulation.ID, "conversation": index})
+	if target, ok := gridConversation(items[index].ID); ok {
+		m.gridSelection = target.Conversation
+		m.selectLoomConversation(map[string]any{"run": target.Run, "conversation": target.Conversation})
+		if cached := m.simulationViews[target.Run]; cached != nil {
+			m.simulation = cached
+		} else if m.simulation == nil || m.simulation.ID != target.Run {
+			return m.send("simulator.open", map[string]any{"run": target.Run, "conversation": target.Conversation})
+		}
 	}
 	m.selectConversationRow()
 	m.reflow()
@@ -283,4 +313,29 @@ func monitorSummary(result monitorResult) string {
 		parts = append(parts, "! "+d.Name+" · "+d.Action)
 	}
 	return "Policy: " + strings.Join(parts, " · ")
+}
+
+func gridConversation(id string) (conversationParent, bool) {
+	parts := strings.SplitN(id, ":", 2)
+	if len(parts) != 2 {
+		return conversationParent{}, false
+	}
+	n, err := strconv.Atoi(parts[1])
+	return conversationParent{Run: parts[0], Conversation: n}, err == nil
+}
+func (m *model) gridRunLabel(id string) string {
+	if scope := m.simulationGroupScope(m.gridGroup); scope != nil {
+		seen := map[string]bool{}
+		n := 0
+		for _, leaf := range simulationScopeLeaves(*scope) {
+			if !seen[leaf.Run] {
+				seen[leaf.Run] = true
+				n++
+			}
+			if leaf.Run == id {
+				return fmt.Sprintf("Set %d", n)
+			}
+		}
+	}
+	return "Set"
 }

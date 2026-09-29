@@ -168,10 +168,10 @@ func TestConversationBranchShortcutUsesSameRequestAsPalette(t *testing.T) {
 		if req.Command != "simulator.fork" {
 			t.Fatalf("shortcut=%v: %s", shortcut, req.Command)
 		}
-		var index int
-		json.Unmarshal(req.Args["conversation"], &index)
-		if index != 1 {
-			t.Fatalf("forked wrong conversation: %d", index)
+		var scope actionScope
+		json.Unmarshal(req.Args["scope"], &scope)
+		if scope.Conversation != 1 || scope.Kind != "conversation" {
+			t.Fatalf("forked wrong scope: %+v", scope)
 		}
 	}
 }

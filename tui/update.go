@@ -10,8 +10,8 @@ import (
 type action struct{ id, label, key string }
 
 var allActions = []action{
-	{"continue", "Continue", "ctrl+r"}, {"generate", "Generate (alias for continue)", ""}, {"branch", "Fork current version", "ctrl+b"}, {"loom", "Generate alternatives", ""},
-	{"add", "Add to seeds", ""}, {"remove", "Remove from collection", ""},
+	{"continue", "Continue", "ctrl+r"}, {"generate", "Generate (alias for continue)", ""}, {"branch", "Branch current version", "ctrl+b"}, {"loom", "Generate alternatives", ""},
+	{"add", "Add to seeds", ""}, {"remove", "Remove from collection", "delete"},
 	{"delete", "Delete selected branches", ""}, {"keep", "Keep branch", "k"}, {"grow", "Grow", "g"},
 	{"settings", "Settings", "ctrl+t"}, {"models", "Model", "m"},
 	{"workspaces", "Workspace", "ctrl+w"}, {"edit", "Edit document", "e"},
@@ -29,6 +29,13 @@ var allActions = []action{
 }
 
 func (m *model) perform(id string) tea.Cmd {
+	if id == "remove.alt" {
+		id = "remove"
+	}
+	if (m.section == 0 || m.section == 4) && (id == "branch" || id == "continue" || id == "loom" || id == "generate" || id == "grow") {
+		m.status = "Open material in Branches or Simulator to generate"
+		return nil
+	}
 	if m.inNotesContext() {
 		switch id {
 		case "remove", "delete", "branch", "keep", "eval", "snapshot", "continue", "loom", "grow", "generate":
@@ -320,6 +327,9 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if cmd, handled := m.gridKey(key); handled {
 			return m, cmd
+		}
+		if m.editing == "" && !m.searching && (m.boundAction(raw, "panels") == "remove" || m.boundAction(raw, "panels") == "remove.alt") {
+			return m, m.perform("remove")
 		}
 		if m.cursorActive() && documentInput(msg) {
 			if msg.Code == tea.KeyEnter {

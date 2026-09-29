@@ -136,7 +136,10 @@ func (m *model) commandChoices() []action {
 		case "add":
 			a.label = m.addDescription()
 		case "continue":
-			a.label = "Advance selected items without creating alternatives"
+			a.label = "Continue selected items · repeat with --loops"
+			if m.section == 2 {
+				a.label = "Continue a new branch from kept versions"
+			}
 		case "policy":
 			a.label = "Monitoring, selection and judge configurations"
 		case "eval":
@@ -156,9 +159,9 @@ func (m *model) commandChoices() []action {
 					a.label = m.simulationActionLabel()
 				}
 			} else if m.section == 1 {
-				a.label = "Create alternative branches · number = alternatives"
+				a.label = "Continue documents · 2+ splits alternatives"
 			} else {
-				a.label = "Create alternatives from source or kept versions"
+				a.label = "Start Simulator conversations from kept documents"
 			}
 		}
 		if m.section == 3 && a.id == "branch" {
@@ -447,7 +450,7 @@ func (m *model) prioritizePageCommands(actions []action) {
 	var preferred []string
 	switch m.section {
 	case 0:
-		preferred = []string{"add", "remove", "clear", "loom", "configure", "branches"}
+		preferred = []string{"add", "remove", "clear", "configure", "branches"}
 	case 1:
 		preferred = []string{"continue", "loom", "configure", "branch", "add", "remove", "clear", "edit", "notes", "inspect", "review", "models", "settings"}
 	case 2:

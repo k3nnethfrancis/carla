@@ -34,14 +34,14 @@ Keep effects in commands/update handling and rendering free of file/network writ
   operate on the item that was selected on another page.
 - Arrows move within the focused area; Tab/Shift+Tab move forward/backward between
   areas. Enter activates or opens. Space selects collection items; selecting a
-  branch parent includes descendants for curation; generation uses explicitly
-  resolved version/set targets, not implicit ancestry expansion. A selected mark
+  set parent includes its contained members; document rows select exact versions.
+  Ancestry is not generation scope; deletion previews descendants separately. A selected mark
   must not shift other rows.
 - Escape unwinds one level. In Simulator: conversation → its grid → conversation
   list → tabs. Editing Escape cancels the draft before broader navigation.
 - `/` opens the command bar, including from document navigation/editing. Preserve
   literal slashes in path/URL forms. Text-entry focus must not invoke letter hotkeys.
-- Continue advances logical items; Loom creates alternative futures; Branch copies
+- Continue and Loom1 advance items; Loom2+ creates alternative futures; Branch copies
   without inference. Preserve selected set shape and immutable evaluated versions.
   `/add`, `/remove` and `/export` act on the current collection. The default palette
   stays small; legacy shortcuts remain searchable without duplicate primary rows.

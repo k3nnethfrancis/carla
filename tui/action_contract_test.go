@@ -31,7 +31,7 @@ func TestOperationOverridesAreParsedWithoutMutatingDefaults(t *testing.T) {
 	if err != nil || options.Model != "base" || options.VisitorModel != "guest" || options.Message != "A new question?" {
 		t.Fatal(options, err)
 	}
-	for _, bad := range []string{"/continue 4", "/continue --count 4", "/continue --loops 2"} {
+	for _, bad := range []string{"/continue 4", "/continue --count 4"} {
 		if _, err := parseGenerationOptions(bad, "continue"); err == nil {
 			t.Fatal(bad)
 		}
@@ -63,7 +63,7 @@ func TestAlternativeSetsStayNestedAndTargetWholeGroup(t *testing.T) {
 		t.Fatal(m.selectedConversations())
 	}
 	args, label, err := m.simulationLoomPlan(generationOptions{Count: 3})
-	if err != nil || len(args["targets"].([]conversationParent)) != 4 || !strings.Contains(label, "3 alternative sets of 4") {
+	if err != nil || len(simulationScopeLeaves(args["scope"].(actionScope))) != 4 || !strings.Contains(label, "3 alternative sets of 4") {
 		t.Fatal(args, label, err)
 	}
 	m.simSelection = &simulationSelection{Group: "g/1"}
@@ -131,9 +131,9 @@ func TestDocumentSetShowsMembershipAndDispatchesGroup(t *testing.T) {
 	}
 	m.selected = 0
 	req := captureCommand(t, m, func() tea.Cmd { return m.loom(generationOptions{Action: "continue"}) })
-	var set string
-	json.Unmarshal(req.Args["set"], &set)
-	if set != "set1" {
+	var scope actionScope
+	json.Unmarshal(req.Args["scope"], &scope)
+	if scope.ID != "set1" {
 		t.Fatal(req)
 	}
 }
@@ -172,7 +172,7 @@ func TestCheckedDocumentsWinOverHoveredSet(t *testing.T) {
 	m.selected = 0
 	m.branchSelection = map[string]bool{n.ID: true}
 	args := m.documentGroupArgs()
-	if args["set"] != nil || args["nodes"].([]string)[0] != n.ID {
+	if args["scope"].(actionScope).Node != n.ID {
 		t.Fatal(args)
 	}
 }
@@ -313,10 +313,105 @@ func TestContextualContinueUsesSameSelectedTargetsAsCommand(t *testing.T) {
 	m.branchSelection = map[string]bool{second.ID: true}
 	req := captureCommand(t, m, func() tea.Cmd { return m.contextualAction("continue") })
 	var action string
-	var ids []string
+	var scope actionScope
 	json.Unmarshal(req.Args["action"], &action)
-	json.Unmarshal(req.Args["nodes"], &ids)
-	if action != "continue" || len(ids) != 1 || ids[0] != second.ID {
+	json.Unmarshal(req.Args["scope"], &scope)
+	if action != "continue" || scope.Node != second.ID {
 		t.Fatal(req)
+	}
+}
+
+func TestExplicitDocumentSetScopeSurvivesHoverAndNestedSets(t *testing.T) {
+	m := fixture()
+	m.section = 1
+	m.focus = 0
+	m.data.Nodes = []node{{ID: "a", DocumentID: "a"}, {ID: "b", DocumentID: "b"}, {ID: "c", DocumentID: "c"}}
+	scope := actionScope{Kind: "set", Children: []actionScope{{Kind: "set", Children: []actionScope{{Kind: "document", Node: "a"}, {Kind: "document", Node: "b"}}}, {Kind: "document", Node: "c"}}}
+	m.data.DocumentSets = []documentSet{{ID: "s", SetID: "s", Members: []string{"a", "b", "c"}, Scope: &scope}}
+	m.branchSelection = map[string]bool{"set:s": true, "a": true, "b": true, "c": true}
+	m.selected = 2
+	got := m.documentGroupArgs()["scope"].(actionScope)
+	if got.ID != "s" || got.Children[0].Kind != "set" || len(got.Children[0].Children) != 2 {
+		t.Fatal(got)
+	}
+	rows := m.branchRows()
+	found := false
+	for _, r := range rows {
+		if r.id == "s/scope/0" && r.kind == "document-set" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal(rows)
+	}
+	if len(m.documentSetMembers("s/scope/0")) != 2 {
+		t.Fatal(m.documentSetMembers("s/scope/0"))
+	}
+}
+
+func TestNestedDocumentContinueRetainsScopeOnRepeatAndRespectsNavigation(t *testing.T) {
+	for _, navigate := range []bool{false, true} {
+		m := fixture()
+		m.section, m.focus = 1, 0
+		m.data.Nodes = []node{{ID: "a", DocumentID: "a", Status: "complete"}, {ID: "b", DocumentID: "b", Status: "complete"}, {ID: "c", DocumentID: "c", Status: "complete"}}
+		nested := actionScope{Kind: "set", Children: []actionScope{{Kind: "document", Node: "a"}, {Kind: "document", Node: "b"}}}
+		whole := actionScope{Kind: "set", Children: []actionScope{nested, {Kind: "document", Node: "c"}}}
+		m.data.DocumentSets = []documentSet{{ID: "old", SetID: "old", Members: []string{"a", "b", "c"}, Scope: &whole}}
+		m.data.DocumentSetHeads = map[string]string{"old": "old"}
+		m.branchSelection = map[string]bool{"set:old/scope/0": true, "a": true, "b": true}
+		for i, r := range m.rows() {
+			if r.id == "old/scope/0" {
+				m.selected = i
+			}
+		}
+		captureCommand(t, m, func() tea.Cmd { return m.loom(generationOptions{Action: "continue"}) })
+		if navigate {
+			for i, r := range m.rows() {
+				if r.id == "c" {
+					m.selected = i
+				}
+			}
+		}
+		next := m.data
+		next.Nodes = append(append([]node(nil), m.data.Nodes...), node{ID: "a2", DocumentID: "a2", Parent: "a", Status: "complete"}, node{ID: "b2", DocumentID: "b2", Parent: "b", Status: "complete"})
+		output := actionScope{Kind: "set", Children: []actionScope{{Kind: "document", Node: "a2"}, {Kind: "document", Node: "b2"}}}
+		next.DocumentSets = append(append([]documentSet(nil), m.data.DocumentSets...), documentSet{ID: "result", SetID: "result", Members: []string{"a2", "b2"}, Scope: &output, SourceScope: &nested})
+		next.DocumentSetHeads = map[string]string{"old": "old", "result": "result"}
+		next.DocumentHeads = map[string]string{"a": "a", "b": "b", "c": "c", "a2": "a2", "b2": "b2"}
+		next.Busy = false
+		data, _ := json.Marshal(next)
+		m.apply(event{Type: "state", Data: data})
+		if !m.branchSelection["set:result"] || m.branchSelection["set:old/scope/0"] {
+			t.Fatal(m.branchSelection)
+		}
+		got := m.documentGroupArgs()["scope"].(actionScope)
+		if got.ID != "result" || len(got.Children) != 2 || got.Children[0].Node != "a2" {
+			t.Fatal(got)
+		}
+		want := "result"
+		if navigate {
+			want = "c"
+		}
+		if m.targetRow().id != want {
+			t.Fatalf("navigate %v: preview %s want %s", navigate, m.targetRow().id, want)
+		}
+	}
+}
+
+func TestAnthologySelectedSetBranchRoutesToBranches(t *testing.T) {
+	m := fixture()
+	m.section = 2
+	m.focus = 0
+	first := m.data.Nodes[0]
+	first.Kept = true
+	second := first
+	second.ID = "second"
+	m.data.Nodes = []node{first, second}
+	m.branchSelection = map[string]bool{first.ID: true, second.ID: true}
+	req := captureCommand(t, m, m.forkDocument)
+	var scope actionScope
+	json.Unmarshal(req.Args["scope"], &scope)
+	if req.Command != "node.fork" || scope.Kind != "set" || len(scope.Children) != 2 || m.section != 1 {
+		t.Fatal(req, m.section)
 	}
 }

@@ -64,8 +64,14 @@ func TestPythonTransport(t *testing.T) {
 	e := read("state")
 	var s state
 	json.Unmarshal(e.Data, &s)
-	if s.Current == nil || len(s.Selected) != 1 {
+	if s.Current != nil || len(s.Selected) != 1 {
 		t.Fatal("selection not persisted")
+	}
+	c.send("seed.open", nil)()
+	e = read("state")
+	json.Unmarshal(e.Data, &s)
+	if s.Current == nil {
+		t.Fatal("opening did not create seed")
 	}
 	c.send("node.edit", map[string]any{"node": s.Current.ID, "text": "🙂 a new path"})()
 	read("state")
@@ -160,6 +166,8 @@ func TestPythonTransportDisconnectRecoversPartialAndLock(t *testing.T) {
 	if _, ok := c.send("seed.toggle", map[string]any{"ref": "transport-test:1"})().(sent); !ok {
 		t.Fatal("seed selection failed")
 	}
+	read(c, "state")
+	c.send("seed.open", nil)()
 	read(c, "state")
 	if _, ok := c.send("continue", map[string]any{"n_predict": 16})().(sent); !ok {
 		t.Fatal("continuation did not start")

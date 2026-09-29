@@ -18,7 +18,7 @@ text, never executed as shell code.
 | `/remove` | Remove the selected material from its context. In Anthology, unkeep it; in Branches, confirm deletion and its descendant scope. |
 | `/branch` | Copy a selected document, conversation or set without inference, retaining ancestry. |
 | `/continue` | Advance the existing selected item or set. Prior versions remain saved. |
-| `/loom [N]` | Create N generated alternatives of the selected item or set. Default N is 1. |
+| `/loom [N]` | Continue the selected target with N=1 (default); N≥2 forks alternatives. Anthology starts Simulator. |
 | `/eval [name]` | Run the active or named evaluation on selected saved content. |
 | `/export` | Export selected saved items, or the current collection when none are selected. |
 
@@ -40,8 +40,12 @@ Arrows move focus and preview content. Space selects/unselects. Enter opens a
 selected object or its actions. Tab/Shift+Tab move between panes; Escape unwinds
 one level, cancelling an editor draft before leaving its owner. `/config` exposes
 keybindings, including selection clearing, editing, save/cancel and session exit.
+Delete invokes Remove in content panels; in text editors it deletes text.
 
 ## Continue versus Loom
+
+`/loom` and `/loom 1` act like Continue on an existing target. Library and Evaluate
+do not expose generation actions. See the [stage matrix](interaction-model.md#where-actions-work).
 
 | Selected target | `/continue` | `/loom 3` |
 | --- | --- | --- |
@@ -61,9 +65,11 @@ source, historical revision or earlier cursor prefix becomes a new branch so its
 existing future stays intact. Anthology membership and evaluation results remain
 attached to exact saved versions; new content is not automatically kept or passed.
 
-Library selected passages compose one seed document. Library and Anthology use
-the same document generation path as Branches; generated material appears there.
-Simulator uses structured conversation histories and raw completion templates.
+Library Enter opens selected passages as a new seed root in Branches. Repeating
+this creates a separate root with the same source provenance. Anthology Branch
+and Continue create new material in Branches; Anthology Loom starts Simulator
+using the selected kept documents. Simulator uses separate conversation histories
+and raw completion templates.
 
 ## Generation arguments
 
@@ -76,7 +82,7 @@ Simulator uses structured conversation histories and raw completion templates.
 | `--visitor "text"` | Simulator Continue/Loom | Supply the next visitor message before generation |
 | `--turns N` | Simulator Continue/Loom | Number of additional character replies |
 | `--eval "name"` | Continue, Loom | Judge completed outputs with a named evaluation |
-| `--loops N` | Loom | Repeat generate-and-select, advancing the chosen alternative |
+| `--loops N` | Continue, Loom | Repeat continuation from each output; enabled selection can guide split loops |
 
 Persistent defaults live in `/config`. Flags override one operation and are saved
 with its provenance. Model flags do not change workspace defaults. Token caps
@@ -98,10 +104,12 @@ visitor model. An unanswered visitor message is a conflict: edit it or Continue
 without a supplied message to generate its response. Nothing is silently replaced.
 `--msg` and `--message` are compatibility spellings of `--visitor`.
 
-Loops require a configured local selection model and policy. When alternatives
-are sets, the selector judges and chooses a complete alternative set. It does not
-combine individual winners from different sets. All candidates and decisions
-remain available. Monitoring is a separate optional check during generation;
+Loops do not require a selector. With Selection Off (default), the first loop
+creates the requested alternatives and later loops advance those same outputs.
+Selection On in `/policy` instead chooses a complete alternative between split
+loops and splits again from the winner. One-output loops always advance directly.
+A selection policy never combines individual winners from different sets. All
+candidates and decisions remain available. Monitoring is a separate optional check during generation;
 only explicitly configured Stop actions terminate flagged work.
 
 ## Evaluation

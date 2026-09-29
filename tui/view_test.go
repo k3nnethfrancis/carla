@@ -480,7 +480,7 @@ func TestBranchSelectionActions(t *testing.T) {
 	m.data.Nodes = []node{{ID: "root", Kind: "source", Status: "complete"}, {ID: "child", Parent: "root", Status: "complete"}, {ID: "leaf", Parent: "child", Status: "complete"}, {ID: "sibling", Parent: "root", Status: "complete"}}
 	m.selected = 1
 	m.toggleTarget()
-	if len(m.selectedBranches()) != 2 || !strings.Contains(m.rows()[1].label, "✓") {
+	if len(m.selectedBranches()) != 1 || !strings.Contains(m.rows()[1].label, "✓") {
 		t.Fatal("selection checkbox missing")
 	}
 	m.collapsed["child"] = true
@@ -489,7 +489,7 @@ func TestBranchSelectionActions(t *testing.T) {
 		t.Fatal("delete scope/confirmation incorrect")
 	}
 	m.submitDialog()
-	if m.dialog != nil || len(m.selectedBranches()) != 2 {
+	if m.dialog != nil || len(m.selectedBranches()) != 1 {
 		t.Fatal("cancel changed selection")
 	}
 	m.activate()
@@ -534,30 +534,18 @@ func TestDocumentTailAfterResize(t *testing.T) {
 	}
 }
 
-func TestSubtreeSelectionIncludesCollapsedChildren(t *testing.T) {
+func TestDocumentSelectionDoesNotIncludeAncestryDescendants(t *testing.T) {
 	m := fixture()
-	m.section = 1
-	m.focus = 0
-	m.data.Nodes = []node{{ID: "root"}, {ID: "child", Parent: "root"}, {ID: "leaf", Parent: "child"}, {ID: "other"}}
+	m.section, m.focus = 1, 0
+	m.data.Nodes = []node{{ID: "root"}, {ID: "child", Parent: "root"}, {ID: "leaf", Parent: "child"}}
 	m.collapsed["root"] = true
 	m.toggleTarget()
-	if len(m.selectedBranches()) != 3 || m.selectionMark("root") != "✓ " {
-		t.Fatal("hidden descendants not selected")
+	if len(m.selectedBranches()) != 1 || !m.branchSelection["root"] {
+		t.Fatal(m.branchSelection)
 	}
 	m.toggleTarget()
 	if len(m.selectedBranches()) != 0 {
-		t.Fatal("parent did not deselect subtree")
-	}
-	m.collapsed["root"] = false
-	m.selected = 2
-	m.toggleTarget()
-	if m.selectionMark("root") != "− " || m.selectionMark("child") != "− " {
-		t.Fatal("partial selection missing")
-	}
-	m.selected = 0
-	m.toggleTarget()
-	if len(m.selectedBranches()) != 3 {
-		t.Fatal("partial parent did not complete selection")
+		t.Fatal(m.branchSelection)
 	}
 }
 

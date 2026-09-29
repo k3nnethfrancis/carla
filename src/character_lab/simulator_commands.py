@@ -81,6 +81,39 @@ async def dispatch(session, command, args, request_id):
             )
         return
     if command == "simulator.open":
+        if "scope" in args:
+            from . import action_scope
+
+            scope = action_scope.validate(args["scope"], "conversation")
+            runs = {}
+            for leaf in action_scope.leaves(scope):
+                run = next(
+                    (
+                        r
+                        for r in p.data.get("simulation_runs", [])
+                        if r["id"] == leaf.get("run")
+                    ),
+                    None,
+                )
+                index = leaf.get("conversation")
+                if (
+                    run is None
+                    or type(index) is not int
+                    or not 0 <= index < len(run["conversations"])
+                ):
+                    raise ValueError("Select a saved conversation")
+                runs[run["id"]] = run
+            for run in runs.values():
+                await session.emit(
+                    "simulation",
+                    simulator.view(run)
+                    | {
+                        "opened": True,
+                        "grid_group": scope.get("id", ""),
+                    },
+                    request_id,
+                )
+            return
         run = next(
             (r for r in p.data.get("simulation_runs", []) if r["id"] == args["run"]),
             None,
@@ -118,18 +151,23 @@ async def dispatch(session, command, args, request_id):
         config = copy.deepcopy(
             simulator.configuration(p, session.runtime.model["alias"])
         )
+        config["selection_enabled"] = args.get(
+            "selection", p.data.get("selection_enabled", False)
+        )
+        if type(config["selection_enabled"]) is not bool:
+            raise ValueError("Selection must be enabled or disabled")
         action = args.get("action")
         if action is not None and action not in {"continue", "loom"}:
             raise ValueError("Choose Continue or Loom")
-        if action == "continue" and ("count" in args or "loops" in args):
-            raise ValueError(
-                "Continue advances the selection once; count and loops belong to Loom"
-            )
+        if action == "continue" and "count" in args:
+            raise ValueError("Continue advances the selection; count belongs to Loom")
         seed = (
             simulator_actions.resolve_seed(p, args)
             if command == "simulator.run"
             else None
         )
+        if "documents" in args:
+            config["documents"] = copy.deepcopy(args["documents"])
         if seed:
             config["documents"] = []  # Frozen ancestor anthology travels with the seed.
         if action == "continue" and seed is None:
@@ -182,7 +220,13 @@ async def dispatch(session, command, args, request_id):
         config["loops"] = args.get("loops", 1)
         if type(config["loops"]) is not int or config["loops"] < 1:
             raise ValueError("Loops must be a positive integer")
-        if config["loops"] > 1:
+        if config["loops"] > 1 and (
+            action is None
+            or (
+                config.get("selection_enabled", False)
+                and config.get("alternatives", 1) > 1
+            )
+        ):
             require_selector(session.policy_model)
         simulator.validate(config, p, session.validate_settings)
         if not config["documents"] and not config.get("preview") and not seed:

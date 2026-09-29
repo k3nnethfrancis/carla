@@ -93,13 +93,14 @@ Models, workspace selection and keybindings are available through `/config`.
 
 ### Continue, Loom and Branch
 
-`/continue` advances what you selected. `/loom N` creates N alternative futures
+`/continue` and bare `/loom` advance what you selected. `/loom N` with N≥2 creates N alternative futures
 of it. `/branch` copies it without generation. The same meanings apply to a single
 item or a set: selecting four conversations and running `/loom 3` produces three
 sets of four; `/continue` advances the original four. Prior revisions and ancestry
 remain saved, while evaluations refer to the exact content they judged.
 
-Library, Branches and Anthology share the document generation path. Simulator
+Library opens seeds in Branches. Anthology Branch/Continue returns to Branches;
+Anthology Loom starts Simulator. Simulator
 uses conversations. With no Simulator selection, `/loom 4` starts four fresh
 conversations. Space/Enter selects a target; arrows only preview. Clear selection
 to start fresh again. New document versions must be kept explicitly with `/add`.
@@ -111,8 +112,8 @@ to start fresh again. New document versions must be kept explicitly with `/add`.
 `--tokens` caps each generation; `--turns` counts new character replies.
 `--visitor` supplies a message once per selected conversation. `--model` and
 `--visitor-model` override configured models for this operation. `--eval` judges
-completed outputs. `--loops` repeats generation and policy selection, preserving
-whole alternative sets. Configure the selection policy before using loops.
+completed outputs. `--loops` repeats continuation from each output. Selection is Off by default;
+enabling it in `/policy` lets a judge choose whole alternatives between split loops.
 
 ## Set up generation
 
@@ -131,9 +132,9 @@ or downloaded automatically. A missing model does not prevent source browsing.
 
 ## Work through an experiment
 
-- **Library:** select passages from shared documents; only selected text enters
-  the workspace. [Import your own text](docs/configuration.md#document-library).
-- **Branches:** `/loom --tokens 512` samples one continuation from the cursor;
+- **Library:** Space selects passages; Enter opens their text as a new seed root in
+  Branches. [Import your own text](docs/configuration.md#document-library).
+- **Branches:** `/loom --tokens 512` continues the document (or an explicitly positioned cursor);
   `/loom 3 --tokens 512` samples three alternatives. `/branch` forks the current
   version without generating. Edits preserve ancestry.
 - **Anthology:** `/add` retains a document for curation. Keeping is a human
@@ -148,10 +149,12 @@ or downloaded automatically. A missing model does not prevent source browsing.
   training. Existing judgments can be attached without another model call.
   `/export` saves selected evaluation items or the collection, including evidence and training marks.
 
-`/loom 3 --tokens 512 --loops 4` repeats candidate generation and local selection.
+`/loom 3 --tokens 512 --loops 4` creates three alternatives and continues each
+for four generation chunks. Enable Selection in `/policy` to select and split
+again between loops instead.
 The selection policy lives under `/policy`; no policy instructions enter base-model
 prompts. It never automatically keeps documents. Configure a selector before
-starting repeated loops; see [configuration](docs/configuration.md).
+using policy-guided split loops; see [configuration](docs/configuration.md).
 
 ## Policies and evaluations
 

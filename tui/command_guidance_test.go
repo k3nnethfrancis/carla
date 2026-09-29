@@ -87,7 +87,7 @@ func TestFullCommandHelpScrollsAndReturns(t *testing.T) {
 	}
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnd})
 	frame := ansi.Strip(m.View().Content)
-	if !strings.Contains(frame, "selection policy") || !strings.Contains(frame, "ESC back") {
+	if !strings.Contains(frame, "alternatives") || !strings.Contains(frame, "ESC back") {
 		t.Fatal(frame)
 	}
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEscape})

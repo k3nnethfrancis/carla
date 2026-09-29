@@ -13,7 +13,7 @@ func TestCommandDescriptionPrecedesParameters(t *testing.T) {
 		m.focusCommand(true)
 		m.command.SetValue("/loom")
 		text := ansi.Strip(m.commandView())
-		description := "Create alternative branches"
+		description := "Continue documents"
 		if section == 3 {
 			description = "Start conversations"
 		}

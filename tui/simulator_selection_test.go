@@ -94,7 +94,7 @@ func TestLoomUsesCheckedParentNotHighlightedConversation(t *testing.T) {
 	}
 	json.NewDecoder(right).Decode(&request)
 	<-done
-	if request.Command != "simulator.run" || request.Args["conversation"] != float64(0) || request.Args["count"] != float64(4) {
+	if request.Command != "simulator.run" || request.Args["scope"].(map[string]any)["conversation"] != float64(0) || request.Args["count"] != float64(4) {
 		t.Fatal(request)
 	}
 	if m.simSelection == nil {
@@ -122,7 +122,7 @@ func TestVisitorMessageArguments(t *testing.T) {
 			t.Fatal("accepted", input)
 		}
 	}
-	for _, section := range []int{0, 1, 2} {
+	for _, section := range []int{1} {
 		m := fixture()
 		m.section = section
 		if m.loom(generationOptions{Message: "Hi"}) != nil || !strings.Contains(m.status, "Simulator") {
@@ -200,15 +200,15 @@ func TestLoomParentAndSubsetUseOneSelectionResolver(t *testing.T) {
 	m.toggleConversation("batch", 1)
 	targets := m.evaluationTargets()
 	args, ok := m.loomConversationTarget()
-	if !ok || len(targets) != 2 || len(args["conversations"].([]int)) != 2 {
+	if !ok || len(targets) != 2 || len(simulationScopeLeaves(args["scope"].(actionScope))) != 2 {
 		t.Fatal(targets, args)
 	}
-	if !strings.Contains(m.targetLabel(), "set of 2 conversations · 2 turns each") {
+	if !strings.Contains(m.targetLabel(), "2 selected conversations · 2 turns each") {
 		t.Fatal(m.targetLabel())
 	}
 	m.toggleConversation("batch", 0)
 	args, _ = m.loomConversationTarget()
-	if args["conversation"] != 1 {
+	if args["scope"].(actionScope).Conversation != 1 {
 		t.Fatal(args)
 	}
 	m.perform("clear")
@@ -242,7 +242,7 @@ func TestContinueSelectedLoomDispatchesBatchWithConfiguredTurns(t *testing.T) {
 		<-done
 		left.Close()
 		right.Close()
-		if request.Command != "simulator.run" || request.Args["run"] != "batch" || len(request.Args["conversations"].([]any)) != 2 || request.Args["turns"] != nil {
+		if request.Command != "simulator.run" || request.Args["scope"].(map[string]any)["id"] != "batch" || len(request.Args["scope"].(map[string]any)["children"].([]any)) != 2 || request.Args["turns"] != nil {
 			t.Fatal(request)
 		}
 	}

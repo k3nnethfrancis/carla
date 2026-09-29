@@ -5,6 +5,7 @@ path so document identity, set shape and operation overrides have one owner.
 """
 
 import asyncio
+from dataclasses import replace
 
 from . import document_actions, evaluation_sets
 from .exploration import explore, require_selector
@@ -24,11 +25,14 @@ async def start(session, args, request_id, eval_plan):
     loops = args.get("loops", 1)
     if type(loops) is not int or loops < 1:
         raise ValueError("Loops must be a positive integer")
-    if action == "continue" and ("count" in args or loops != 1):
+    if action == "continue" and "count" in args:
         raise ValueError(
-            "Continue advances each item once; use Loom for alternatives or loops"
+            "Continue advances each selected item; use Loom for alternatives"
         )
-    if loops > 1:
+    selection = args.get("selection", p.data.get("selection_enabled", False))
+    if not isinstance(selection, bool):
+        raise ValueError("Selection must be enabled or disabled")
+    if loops > 1 and selection and args.get("count", 1) > 1:
         require_selector(session.policy_model)
     alias = args.get("model", session.runtime.model["alias"])
     model = next((m for m in p.data["models"] if m["alias"] == alias), None)
@@ -39,9 +43,10 @@ async def start(session, args, request_id, eval_plan):
         settings["n_predict"] = args["n_predict"]
     session.validate_settings(settings)
     count = args.get("count", 1)
+    selection = selection and count != 1
     if type(count) is not int or count < 1:
         raise ValueError("Alternatives must be a positive integer")
-    targets = [key for key in ("refs", "node", "nodes", "set") if key in args]
+    targets = [key for key in ("refs", "node", "nodes", "set", "scope") if key in args]
     if len(targets) > 1:
         raise ValueError(
             "Choose one document target: passages, document versions or a set"
@@ -64,7 +69,7 @@ async def start(session, args, request_id, eval_plan):
             raise ValueError("Select source passages first")
         node = p.source_root(session.sources, args["refs"])
         nodes = [node["id"]]
-    elif args.get("set"):
+    elif args.get("set") or "scope" in args:
         nodes = None
     else:
         if "nodes" in args:
@@ -89,15 +94,22 @@ async def start(session, args, request_id, eval_plan):
             raise ValueError("A cursor position requires one selected document")
         offsets = {nodes[0]: args["offset"]}
     plan = document_actions.plan(
-        p, action, nodes, count=count, offsets=offsets, set_id=args.get("set")
+        p,
+        action,
+        nodes,
+        count=count,
+        offsets=offsets,
+        set_id=args.get("set"),
+        scope=args.get("scope"),
+        fork=args.get("from_anthology", False),
     )
     session.job_id = request_id
     session.job = asyncio.create_task(
-        run(session, plan, settings, loops, model, eval_plan)
+        run(session, plan, settings, loops, model, eval_plan, selection)
     )
 
 
-async def run(session, plan, settings, loops, model, eval_plan):
+async def run(session, plan, settings, loops, model, eval_plan, selection):
     p = session.project
     original_runtime = session.runtime
     generated = []
@@ -106,8 +118,11 @@ async def run(session, plan, settings, loops, model, eval_plan):
     async def emit(kind, data):
         await session.emit(kind, data, session.job_id)
 
-    async def batch(policy_id=None, index=0):
-        candidates = document_actions.begin(p, current_plan)
+    async def batch(policy_id=None, index=0, plans=None):
+        candidates = []
+        for item in plans or [current_plan]:
+            for candidate in document_actions.begin(p, item):
+                candidates.append(replace(candidate, index=len(candidates)))
         outputs = await session.generate(
             "continue",
             None,
@@ -155,6 +170,18 @@ async def run(session, plan, settings, loops, model, eval_plan):
             session.runtime = session.runtime_factory(p.folder, model)
         if loops == 1:
             await batch()
+        elif not selection:
+            # Split once, then advance every resulting alternative. Loops extend
+            # each future; they do not multiply the fan-out at every step.
+            groups = await batch()
+            for _ in range(1, loops):
+                plans = [
+                    document_actions.plan(p, "continue", set_id=result["id"])
+                    for result in groups
+                ]
+                if not plans:
+                    break
+                groups = await batch(plans=plans)
         else:
             await explore(
                 p,

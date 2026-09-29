@@ -17,9 +17,9 @@ func TestPartialCommandArrowSelection(t *testing.T) {
 	}
 	m.commandKey(tea.KeyPressMsg{Code: tea.KeyUp})
 	// A partial command executes the selected action, not the literal prefix.
-	m.section = 0
-	m.commandKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if m.section != 1 {
+	m.section = 1
+	cmd := m.commandKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil || m.section != 1 {
 		t.Fatal("partial command not dispatched", m.status)
 	}
 	m.focusCommand(true)
@@ -71,11 +71,11 @@ func TestPrefixEnterUsesAlreadySelectedTopMatch(t *testing.T) {
 		if m.commandIndex != 0 || m.commandChoices()[0].id != "loom" {
 			t.Fatal(prefix, m.commandChoices())
 		}
-		// Switch to an unsupported tab to verify dispatch without starting inference.
+		// With no kept document, Anthology still explains the generation target.
 		m.section = 2
 		m.command.SetValue("/lo")
 		m.commandKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-		if m.status != "Select a document in Branches to run /loom" {
+		if m.status != "Select Anthology documents to start a conversation" {
 			t.Fatal(m.status)
 		}
 	}

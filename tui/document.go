@@ -20,6 +20,11 @@ func (m *model) toggleTarget() tea.Cmd {
 		for _, id := range m.documentSetMembers(r.id) {
 			m.branchSelection[id] = !all
 		}
+		if all {
+			delete(m.branchSelection, "set:"+r.id)
+		} else {
+			m.branchSelection["set:"+r.id] = true
+		}
 		m.reflow()
 		return nil
 	}
@@ -60,7 +65,19 @@ func (m *model) toggleTarget() tea.Cmd {
 	if (m.section == 1 || m.section == 2) && !m.pending && !m.data.Busy {
 		r := m.targetRow()
 		if r.kind == "node" {
-			ids := m.subtree([]string{r.id})
+			ids := map[string]bool{r.id: true}
+			// Ancestry is not containment: selecting a document targets exactly
+			// that version, not every discarded experiment below it.
+			for key := range m.branchSelection {
+				if strings.HasPrefix(key, "set:") {
+					for _, member := range m.documentSetMembers(strings.TrimPrefix(key, "set:")) {
+						if member == r.id {
+							delete(m.branchSelection, key)
+							break
+						}
+					}
+				}
+			}
 			all := true
 			for id := range ids {
 				if !m.branchSelection[id] {
@@ -219,11 +236,8 @@ func documentInput(msg tea.KeyPressMsg) bool {
 // generation alone consumes a prefix, and the original remains immutable.
 func (m *model) forkDocument() tea.Cmd {
 	if m.section == 3 {
-		if targets := m.selectedConversations(); len(targets) > 0 {
-			if len(targets) == 1 {
-				return m.send("simulator.fork", map[string]any{"run": targets[0].Run, "conversation": targets[0].Conversation})
-			}
-			return m.send("simulator.fork", map[string]any{"targets": targets})
+		if target, ok := m.loomConversationTarget(); ok {
+			return m.send("simulator.fork", target)
 		}
 		m.status = "Select conversations to branch"
 		return nil
@@ -232,7 +246,13 @@ func (m *model) forkDocument() tea.Cmd {
 		return nil
 	}
 	if m.selectionVisible() || m.targetRow().kind == "document-set" {
-		return m.send("node.fork", m.documentGroupArgs())
+		cmd := m.send("node.fork", m.documentGroupArgs())
+		if cmd != nil {
+			m.commandDocument = ""
+			m.enterLoom = true
+			m.section = 1
+		}
+		return cmd
 	}
 	id := m.currentID()
 	args := map[string]any{"node": id}

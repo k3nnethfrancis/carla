@@ -164,6 +164,8 @@ def summary(run):
                 "alternative_index",
                 "alternative_count",
                 "source_set",
+                "source_scope",
+                "alternative_scope",
                 "revision",
                 "action",
             )
@@ -290,14 +292,18 @@ async def generate_alternatives(project, config, runtime_factory, emit, seed=Non
     if "action" not in config:
         return [await generate(project, config, runtime_factory, emit, seed)]
     sets = simulator_actions.seed_sets(seed)
+    config = copy.deepcopy(config)
+    if seed is not None and config.get("alternatives", 1) == 1:
+        config["action"] = "continue"
     continuing = config["action"] == "continue"
     count = 1 if continuing else config.get("alternatives", 1)
-    if not continuing and (seed is None or "turns" in seed):
+    if not continuing and seed is None:
         local = copy.deepcopy(config)
         local["conversations"] = count
         return await _generate(
             project, config, runtime_factory, emit, [(local, seed, {})]
         )
+    config["source_scope"] = seed.get("scope") or simulator_actions.scope_for_sets(sets)
     group = simulator_actions.alternative_id()
     plans = []
     for alternative in range(count):
@@ -338,6 +344,18 @@ async def _generate(project, config, runtime_factory, emit, plans):
         runs.append(run)
         for conversation in selected:
             work.append((run, conversation))
+    if config.get("action") != "continue" and any(metadata for _, _, metadata in plans):
+        # Scope is supplied independently of the scheduler's flattened run batches.
+        sources = [
+            source
+            for _, source, _ in plans[
+                : len(plans) // max(1, config.get("alternatives", 1))
+            ]
+        ]
+        frozen = sources[0] if len(sources) == 1 else {"sets": sources}
+        if config.get("source_scope"):
+            frozen = dict(frozen, scope=config["source_scope"])
+        simulator_actions.attach_scopes(runs, frozen)
     project.save()
     runtime = None
     # Every set is either fresh or resumed; target resolution disallows mixing.
@@ -699,6 +717,7 @@ def fork_sets(project, seed, args):
                 source_set=source_index,
             )
         runs.append(run)
+    simulator_actions.attach_scopes(runs, seed)
     project.data.setdefault("simulation_runs", []).extend(runs)
     project.save()
     return runs

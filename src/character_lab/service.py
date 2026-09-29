@@ -167,6 +167,7 @@ class Session:
             evaluation_sets=evaluation_sets.summaries(p),
             active_evaluation=p.data.get("active_evaluation", ""),
             evaluation_prompt=evaluation.DEFAULT_PROMPT,
+            selection_enabled=p.data.get("selection_enabled", False),
             policy_spec=p.data.get("policy_spec", DEFAULT_SPEC),
             policy_prompt=p.data.get("policy_prompt", DEFAULT_PROMPT),
             policy_model=self.policy_model["name"],
@@ -313,23 +314,10 @@ class Session:
                     or (command == "seed.remove" and ref in p.selected)
                 ):
                     p.toggle(ref)
-            if not p.source_root(self.sources):
-                p.data["current"] = None
-                p.save()
         elif command == "seed.open":
             if not p.selected:
                 raise ValueError("Select source passages with Space first")
-            node = next(
-                (
-                    n
-                    for n in reversed(p.data["nodes"])
-                    if n["kind"] == "source"
-                    and set(n.get("passage_ids", [])) == set(p.selected)
-                ),
-                None,
-            )
-            if node is None:
-                node = p.source_root(self.sources)
+            node = p.source_root(self.sources)
             p.data["current"] = node["id"]
             p.save()
         elif command == "seed.clear":
@@ -339,14 +327,21 @@ class Session:
             self.view_node = args["node"] if self.busy else None
             p.data["current"] = p.node(args["node"])["id"]
             p.save()
-        elif command == "node.fork" and ("nodes" in args or "set" in args):
+        elif command == "node.fork" and (
+            "nodes" in args or "set" in args or "scope" in args
+        ):
             offsets = args.get("offsets")
             if "offset" in args:
                 if len(args.get("nodes", [])) != 1 or "offsets" in args:
                     raise ValueError("A cursor position requires one selected document")
                 offsets = {args["nodes"][0]: args["offset"]}
             plan = document_actions.plan(
-                p, "branch", args.get("nodes"), set_id=args.get("set"), offsets=offsets
+                p,
+                "branch",
+                args.get("nodes"),
+                set_id=args.get("set"),
+                offsets=offsets,
+                scope=args.get("scope"),
             )
             document_actions.branch(p, plan)
         elif command == "node.fork":
@@ -451,6 +446,12 @@ class Session:
                     if not args[field].strip():
                         raise ValueError("Policy instructions cannot be empty")
                     p.data[field] = args[field]
+            p.save()
+        elif command == "policy.configure":
+            enabled = args.get("selection_enabled")
+            if type(enabled) is not bool:
+                raise ValueError("Selection enabled must be true or false")
+            p.data["selection_enabled"] = enabled
             p.save()
         elif command == "bindings.save":
             bindings = args["bindings"]
@@ -978,6 +979,7 @@ class Session:
         latest = []
         generated_targets = []
         current_seed = seed
+        batch_config = dict(config)
 
         async def emit(kind, data):
             await self.emit(kind, data, self.job_id)
@@ -985,7 +987,7 @@ class Session:
         async def batch(policy_id=None, index=0):
             nonlocal latest
             latest = await simulator.generate_alternatives(
-                p, config, self.runtime_factory, emit, current_seed
+                p, batch_config, self.runtime_factory, emit, current_seed
             )
             generated_targets.extend(simulator_actions.affected_targets(latest))
             if policy_id:
@@ -1007,7 +1009,10 @@ class Session:
         try:
             if config.get("loops", 1) == 1:
                 await batch()
-            else:
+            elif (
+                config.get("selection_enabled", False)
+                and config.get("alternatives", 1) > 1
+            ):
                 await explore(
                     p,
                     config["loops"],
@@ -1017,6 +1022,12 @@ class Session:
                     advance,
                     emit,
                 )
+            else:
+                for index in range(config["loops"]):
+                    await batch(index=index)
+                    current_seed = simulator_actions.seed_from_runs(p, latest)
+                    batch_config["action"] = "continue"
+                    batch_config["alternatives"] = 1
             if eval_plan and not asyncio.current_task().cancelling():
                 await evaluation_sets.after_generation(
                     self, eval_plan, generated_targets

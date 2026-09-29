@@ -8,7 +8,12 @@ func (m *model) loom(options generationOptions) tea.Cmd {
 	if options.Action == "" {
 		options.Action = "loom"
 	}
-	if m.section != 3 && (options.Turns > 0 || options.Message != "" || options.VisitorModel != "") {
+	if m.section == 0 || m.section == 4 {
+		m.status = "Open material in Branches or Simulator to generate"
+		return nil
+	}
+	simulator := m.section == 3 || (m.section == 2 && options.Action == "loom")
+	if !simulator && (options.Turns > 0 || options.Message != "" || options.VisitorModel != "") {
 		m.status = "Error: --turns, --visitor and --visitor-model apply only to Simulator conversations"
 		return nil
 	}
@@ -20,17 +25,31 @@ func (m *model) loom(options generationOptions) tea.Cmd {
 		m.status = "Save or cancel the edit before running /loom"
 		return nil
 	}
-	if m.section == 3 {
+	if simulator {
+		var documents []string
+		if m.section == 2 {
+			documents = m.actionNodeIDs()
+			if len(documents) == 0 {
+				m.status = "Select Anthology documents to start a conversation"
+				return nil
+			}
+			m.simSelection = nil
+		}
 		args, _, err := m.simulationLoomPlan(options)
 		if err != nil {
 			m.status = err.Error()
 			return nil
 		}
-		if options.Action == "continue" && m.simulation == nil && m.simSelection != nil && m.simSelection.Group == "" {
+		if len(documents) > 0 {
+			args["documents"] = documents
+			m.section = 3
+		}
+		advancing := options.Action == "continue" || (m.simSelection != nil && options.Count <= 1)
+		if advancing && m.simulation == nil && m.simSelection != nil && m.simSelection.Group == "" {
 			m.awaitingSimulation = true
 			m.preserveSimulationSelection = true
 		}
-		if options.Action == "loom" {
+		if !advancing {
 			m.preserveSimulationSelection = false
 			m.awaitingSimulation = true
 			m.conversationOpen = false
@@ -46,19 +65,12 @@ func (m *model) loom(options generationOptions) tea.Cmd {
 		options.Loops = 1
 	}
 
-	if m.section == 0 {
-		refs := m.data.Selected
-		if len(refs) == 0 {
-			refs = m.targetRefs()
-		}
-		args := map[string]any{"refs": refs}
-		options.apply(args)
-		m.section, m.focus = 1, 1
-		return m.sendDocumentGeneration(args)
-	}
 	if m.selectionVisible() || m.targetRow().kind == "document-set" {
 		args := m.documentGroupArgs()
 		options.apply(args)
+		if m.section == 2 {
+			args["from_anthology"] = true
+		}
 		m.section, m.focus = 1, 1
 		return m.sendDocumentGeneration(args)
 	}
@@ -81,6 +93,9 @@ func (m *model) loom(options generationOptions) tea.Cmd {
 		args = map[string]any{"node": m.currentID(), "offset": m.cursorOffset(), "branch": true}
 	}
 	options.apply(args)
+	if m.section == 2 {
+		args["from_anthology"] = true
+	}
 	m.section, m.focus = 1, 1
 	m.reflow()
 	return m.sendDocumentGeneration(args)

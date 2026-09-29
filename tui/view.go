@@ -562,7 +562,7 @@ func (m *model) View() tea.View {
 		}
 	}
 	if m.section == 3 && m.conversationOpen && m.focus == 1 && m.editing == "" {
-		legend = "ESC grid/list · SPACE select/clear · /loom · /fork · /edit · /visitor"
+		legend = "ESC grid/list · SPACE select/clear · /continue · /loom · /branch"
 	}
 	if m.editing != "" && m.editing != "document" {
 		legend = "↑↓ / PGUP/PGDN scroll · /save · ESC cancel"

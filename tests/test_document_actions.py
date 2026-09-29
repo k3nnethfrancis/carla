@@ -177,3 +177,83 @@ def test_deleting_latest_revision_restores_surviving_head(tmp_path):
     assert project.data["document_heads"][original["document_id"]] == original["id"]
     with pytest.raises(ValueError, match="no longer exists"):
         actions.plan(project, "continue", set_id=latest["document_set"])
+
+
+def test_member_advance_is_used_by_current_set_without_changing_old_members(tmp_path):
+    project = Project(tmp_path)
+    originals = [generated(project, word) for word in ["A", "B"]]
+    members = run(project, "loom", [n["id"] for n in originals], count=2)[:2]
+    group = deepcopy(actions.group(project, members[0]["document_set"]))
+    advanced = run(project, "continue", [members[0]["id"]])[0]
+    advanced["text"] += " newer"
+    plan = actions.plan(project, "continue", set_id=group["id"])
+    assert [t.node_id for t in plan.targets] == [advanced["id"], members[1]["id"]]
+    assert actions.group(project, group["id"]) == group
+
+
+def test_nested_scope_survives_generation_without_flattening(tmp_path):
+    project = Project(tmp_path)
+    docs = [generated(project, x) for x in ["A", "B", "C"]]
+
+    def leaf(n):
+        return {"kind": "document", "node": n["id"]}
+
+    scope = {
+        "kind": "set",
+        "children": [
+            {"kind": "set", "children": [leaf(docs[0]), leaf(docs[1])]},
+            leaf(docs[2]),
+        ],
+    }
+    plan = actions.plan(project, "loom", count=2, scope=scope)
+    for candidate in actions.begin(project, plan):
+        actions.create_revision(project, candidate)
+    groups = project.data["document_sets"]
+    assert len(groups) == 2
+    for group in groups:
+        assert group["source_scope"] == scope
+        assert group["scope"]["children"][0]["kind"] == "set"
+        assert [
+            leaf["node"] for leaf in actions.action_scope.leaves(group["scope"])
+        ] == group["members"]
+
+
+def test_historical_set_revision_keeps_exact_members(tmp_path):
+    project = Project(tmp_path)
+    first = run(
+        project,
+        "loom",
+        [generated(project, "A")["id"], generated(project, "B")["id"]],
+        count=2,
+    )[:2]
+    original = actions.group(project, first[0]["document_set"])
+    run(project, "continue", set_id=original["id"])
+    assert [
+        t.node_id
+        for t in actions.plan(project, "continue", set_id=original["id"]).targets
+    ] == original["members"]
+
+
+def test_anthology_continuation_keeps_existing_logical_head(tmp_path):
+    project = Project(tmp_path)
+    original = generated(project, "Kept.")
+    project.keep(original["id"])
+    result = run(project, "continue", [original["id"]], fork=True)[0]
+    assert result["document_id"] != original["document_id"]
+    assert project.data["document_heads"][original["document_id"]] == original["id"]
+    assert original["kept"] and not result["kept"]
+
+
+def test_generated_nested_scope_can_be_used_again(tmp_path):
+    project = Project(tmp_path)
+    nodes = [generated(project, "A"), generated(project, "B")]
+    scope = {
+        "kind": "set",
+        "id": "client-selection",
+        "children": [{"kind": "document", "node": n["id"]} for n in nodes],
+    }
+    run(project, "loom", scope=scope, count=2)
+    result = project.data["document_sets"][-1]
+    assert result["scope"]["id"] == result["id"]
+    continued = run(project, "continue", scope=result["scope"])
+    assert [n["parent"] for n in continued] == result["members"]

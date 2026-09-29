@@ -68,7 +68,7 @@ func parseGenerationOptions(input, id string) (generationOptions, error) {
 		if key == "--msg" || key == "--message" {
 			key = "--visitor"
 		}
-		allowed := key == "--tokens" || key == "--turns" || key == "--visitor" || key == "--eval" || key == "--model" || key == "--visitor-model"
+		allowed := key == "--tokens" || key == "--turns" || key == "--visitor" || key == "--eval" || key == "--model" || key == "--visitor-model" || key == "--loops"
 		if id == "loom" {
 			allowed = allowed || key == "--count" || key == "-n" || key == "--loops"
 		}

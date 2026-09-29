@@ -104,6 +104,8 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 		}
 	case "grow-config":
 		switch r.id {
+		case "selection_enabled":
+			return m.send("policy.configure", map[string]any{"selection_enabled": !m.data.SelectionEnabled})
 		case "models":
 			return m.openDialog("models")
 		case "spec", "prompt":

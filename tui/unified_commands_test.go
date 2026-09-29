@@ -48,8 +48,8 @@ func TestLoopsParser(t *testing.T) {
 	}
 }
 
-func TestDocumentEntryPointsShareOneOperation(t *testing.T) {
-	for _, section := range []int{0, 1, 2} {
+func TestBranchesLoomUsesDocumentOperation(t *testing.T) {
+	for _, section := range []int{1} {
 		m := fixture()
 		m.section = section
 		m.width, m.height = 120, 36

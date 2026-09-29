@@ -83,7 +83,12 @@ async def test_policy_loops_choose_complete_document_set(session):
     s = session
     originals = [s.project.add(text) for text in ["First.", "Second."]]
     await execute(
-        s, action="loom", nodes=[n["id"] for n in originals], count=2, loops=2
+        s,
+        action="loom",
+        nodes=[n["id"] for n in originals],
+        count=2,
+        loops=2,
+        selection=True,
     )
     groups = s.project.data["document_sets"]
     assert len(groups) == 4
@@ -217,3 +222,36 @@ async def test_cancel_before_all_workers_start_preserves_complete_set_shape(sess
             node["text"].startswith(parent["text"])
             for node, parent in zip(nodes, original)
         )
+
+
+@pytest.mark.asyncio
+async def test_loops_extend_each_alternative_without_selector_or_extra_fanout(session):
+    s = session
+    s.policy_model = {"name": "Unavailable", "path": "/missing-selector"}
+    node = s.project.add("Seed.")
+    await execute(s, action="loom", node=node["id"], count=2, loops=3)
+    assert len(s.project.data["nodes"]) == 7
+    heads = [s.project.node(key) for key in s.project.data["document_heads"].values()]
+    assert (
+        len([n for n in heads if n["text"] == "Seed." + " A path remembers." * 3]) == 2
+    )
+    assert not s.project.data.get("policy_runs")
+
+
+@pytest.mark.asyncio
+async def test_single_loom_loops_needs_no_selector(session):
+    s = session
+    s.policy_model = {"name": "Unavailable", "path": "/missing-selector"}
+    node = s.project.add("Seed.")
+    await execute(s, action="loom", node=node["id"], count=1, loops=3)
+    assert s.current()["text"] == "Seed." + " A path remembers." * 3
+    assert s.current()["document_id"] == node["document_id"]
+
+
+@pytest.mark.asyncio
+async def test_continue_loops_and_single_loom_ignore_selector(session):
+    s = session
+    s.policy_model = {"name": "missing", "path": "/missing"}
+    node = s.project.add("Seed.")
+    await execute(s, action="continue", node=node["id"], loops=2, selection=True)
+    assert s.current()["text"] == "Seed." + " A path remembers." * 2

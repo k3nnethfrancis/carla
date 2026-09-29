@@ -8,6 +8,7 @@ previous run version before any streaming mutation.
 import copy
 import uuid
 
+from . import action_scope
 from .domain import now
 
 
@@ -22,8 +23,21 @@ def members(seed):
 def resolve_seed(project, args):
     from .simulator import batch_seed, conversation_seed
 
-    if "targets" in args:
+    scope = args.get("scope")
+    if scope is not None:
+        if any(
+            key in args for key in ("targets", "run", "conversation", "conversations")
+        ):
+            raise ValueError("Supply one explicit conversation scope")
+        scope = action_scope.validate(scope, "conversation")
+        targets = list(action_scope.leaves(scope))
+        if any(t.get("kind") != "conversation" for t in targets):
+            raise ValueError("Simulator needs conversation targets")
+    elif "targets" in args:
         targets = args["targets"]
+    else:
+        targets = None
+    if targets is not None:
         if not isinstance(targets, list) or not targets:
             raise ValueError("Select at least one conversation")
         grouped = {}
@@ -38,14 +52,20 @@ def resolve_seed(project, args):
                 raise ValueError("Select unique conversation targets")
             indices.append(index)
         sets = [batch_seed(project, run, indices) for run, indices in grouped.items()]
-        return sets[0] if len(sets) == 1 else {"sets": sets}
+        result = sets[0] if len(sets) == 1 else {"sets": sets}
+        if scope and scope["kind"] == "conversation":
+            result = sets[0]["conversations"][0]
+        result["scope"] = scope or scope_for_sets(sets)
+        return result
     if "run" not in args:
         return None
-    return (
+    result = (
         conversation_seed(project, args["run"], args["conversation"])
         if "conversation" in args
         else batch_seed(project, args["run"], args.get("conversations"))
     )
+    result["scope"] = scope_for_sets([result])
+    return result
 
 
 def add_visitor(seed, message):
@@ -165,7 +185,10 @@ def selected_seed(project, runs, key):
     if not group:
         raise ValueError("Selected alternative no longer exists")
     seeds = [batch_seed(project, run["id"]) for run in group]
-    return seeds[0] if len(seeds) == 1 else dict(sets=seeds)
+    result = seeds[0] if len(seeds) == 1 else dict(sets=seeds)
+    if group[0].get("alternative_scope"):
+        result["scope"] = copy.deepcopy(group[0]["alternative_scope"])
+    return result
 
 
 def affected_targets(runs):
@@ -181,3 +204,75 @@ def affected_targets(runs):
 
 def alternative_id():
     return uuid.uuid4().hex[:12]
+
+
+def scope_for_sets(sets):
+    """Reconstruct a scope for old saved runs without changing their records."""
+    groups = []
+    for item in sets:
+        children = [
+            dict(kind="conversation", **leaf["parent"]) for leaf in members(item)
+        ]
+        groups.append(
+            children[0]
+            if "turns" in item
+            else dict(kind="set", id=item["parent"]["run"], children=children)
+        )
+    return groups[0] if len(groups) == 1 else dict(kind="set", children=groups)
+
+
+def seed_from_runs(project, runs):
+    """Freeze precisely the affected leaves for a subsequent in-place loop."""
+    scopes = []
+    for run in runs:
+        indices = run.get(
+            "affected_conversations", [c["index"] for c in run["conversations"]]
+        )
+        scopes.append(
+            dict(
+                kind="set",
+                id=run["id"],
+                children=[
+                    dict(kind="conversation", run=run["id"], conversation=i)
+                    for i in indices
+                ],
+            )
+        )
+    return resolve_seed(
+        project,
+        dict(
+            scope=scopes[0] if len(scopes) == 1 else dict(kind="set", children=scopes)
+        ),
+    )
+
+
+def attach_scopes(runs, seed):
+    """Store containment separately from ancestry; shared trees retain set boundaries."""
+    source_scope = seed.get("scope") or scope_for_sets(seed_sets(seed))
+    for group in candidate_sets(runs).values():
+        mapping = {}
+        for run in group:
+            for conversation in run["conversations"]:
+                parent = conversation.get("parent")
+                if parent:
+                    mapping[(parent["run"], parent["conversation"])] = dict(
+                        kind="conversation",
+                        run=run["id"],
+                        conversation=conversation["index"],
+                    )
+        tree = action_scope.map_leaves(
+            source_scope, lambda leaf: mapping[(leaf["run"], leaf["conversation"])]
+        )
+
+        def identify(node, path=""):
+            if node["kind"] == "set":
+                node["id"] = (
+                    f"{group[0].get('alternative_group', group[0]['id'])}/{group[0].get('alternative_index', 0)}/s{path}"
+                )
+                for i, child in enumerate(node["children"]):
+                    identify(child, path + f".{i}")
+
+        identify(tree)
+        for run in group:
+            run["source_scope"] = copy.deepcopy(source_scope)
+            run["alternative_scope"] = copy.deepcopy(tree)

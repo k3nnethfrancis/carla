@@ -1009,8 +1009,7 @@ async def test_action_dispatch_validates_before_start_and_records_overrides(setu
     )
     before = copy.deepcopy(project.data)
     for update, match in [
-        (dict(action="continue", count=2), "count and loops"),
-        (dict(action="continue", loops=1), "count and loops"),
+        (dict(action="continue", count=2), "count belongs"),
         (dict(action="continue", model="missing"), "configured local base"),
         (dict(action="continue", visitor_model="missing"), "configured local base"),
         (dict(action="loom", count=0), "positive integer"),
