@@ -50,7 +50,6 @@ func (m *model) openLoomPolicy() tea.Cmd {
 	}
 	if provider == "diffusion" {
 		d.rows = append(d.rows,
-			row{id: "monitor_local_url", label: "Server · " + m.simString("monitor_local_url"), preview: "Start the local OpenJev service first; see docs/local-judge.md. No API key or remote fallback."},
 			row{id: "monitor_local_model", label: "Model · " + m.simString("monitor_local_model")},
 		)
 	} else {
@@ -115,7 +114,7 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 		field := args["field"].(string)
 		delete(args, "field")
 		args[field] = d.fields[0].input.Value()
-		if field == "monitor_model" || field == "monitor_local_model" || field == "monitor_local_url" {
+		if field == "monitor_model" || field == "monitor_local_model" {
 			return m.saveDialog(d, "simulator.configure", map[string]any{field: args[field]})
 		}
 		return m.saveDialog(d, "loom-policy.update", args)
@@ -130,7 +129,11 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 			if r.id == "jev" && m.data.MonitorKeySource == "" {
 				return m.openMonitorKey(d.parent)
 			}
-			return m.saveDialog(d, "simulator.configure", map[string]any{field: r.id})
+			args := map[string]any{field: r.id}
+			if field == "monitor_mode" && r.id == "diffusion" {
+				args["monitor_local_url"] = "auto"
+			}
+			return m.saveDialog(d, "simulator.configure", args)
 		}
 		if field == "delete" {
 			if r.id != "yes" {
@@ -177,7 +180,7 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 			m.dialog.parent = d
 		case "mode":
 			m.policyPicker(d, "", "monitor_mode", []string{"off", "diffusion", "jev"})
-		case "monitor_local_url", "monitor_local_model":
+		case "monitor_local_model":
 			m.policyForm(d, "", r.id, m.simString(r.id))
 		case "model":
 			m.policyForm(d, "", "monitor_model", m.simString("monitor_model"))
@@ -233,9 +236,6 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 }
 func (m *model) policyForm(parent *dialog, id, field, value string) {
 	d := &dialog{kind: "loom-policy-field", title: strings.ReplaceAll(field, "_", " "), parent: parent, args: map[string]any{"id": id, "field": field}}
-	if field == "monitor_local_url" {
-		d.title = "Local judge server"
-	}
 	if field == "monitor_local_model" {
 		d.title = "Local judge model"
 	}

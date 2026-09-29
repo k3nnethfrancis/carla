@@ -240,7 +240,9 @@ The texts are not covered by Carla’s MIT software license.
 
 Monitoring is Off by default. For an entirely local classifier, select
 **DiffusionGemma (local)** and follow [local judge setup](local-judge.md).
-Its Server/Model settings are separate from the hosted Jev settings below.
+After the one-time installation, Carla starts the cached local judge automatically
+on an available loopback port and stops it on exit. No server address or API key
+is needed. Its model setting is separate from the hosted Jev settings below.
 
 The Jev option uses OpenRouter System One. Choose it only when you
 intend to send the full conversation history, including character output and
@@ -273,8 +275,8 @@ not a locally calibrated guarantee. A Stop affects only the flagged conversation
 
 Use `/policy` for monitoring, selection and reusable judge configurations.
 Each judge chooses a local LLM, local DiffusionGemma or hosted Jev, criteria, and
-(for classifiers) a probability threshold. DiffusionGemma needs a loopback OpenJev
-server; see [local setup](local-judge.md). Local judging exposes its complete system prompt. Definitions are
+(for classifiers) a probability threshold. DiffusionGemma uses the automatically managed local OpenJev
+worker after [one-time setup](local-judge.md). Local judging exposes its complete system prompt. Definitions are
 workspace-local and revisioned; results keep the definition used at execution.
 In Evaluate, `/config` configures the opened collection: its name, judges and
 active status. Elsewhere it configures generation. Adding collection items and

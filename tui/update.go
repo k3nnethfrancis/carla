@@ -141,7 +141,7 @@ func (m *model) perform(id string) tea.Cmd {
 		return m.loom(generationOptions{})
 	case "clear":
 		if m.section == 3 {
-			m.loomConversation = nil
+			m.simSelection = nil
 			m.reflow()
 			return nil
 		}
@@ -234,11 +234,8 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		key := m.navigationKey(raw)
-		// Endpoint forms, like file paths, need literal slashes instead of
-		// opening the command bar midway through a URL.
-		literalSlash := m.dialog != nil && (strings.HasPrefix(m.dialog.kind, "setup-") || m.dialog.kind == "import" ||
-			(m.dialog.kind == "loom-policy-field" && m.dialog.args["field"] == "monitor_local_url") ||
-			(m.dialog.kind == "eval-field" && m.dialog.args["field"] == "endpoint"))
+		// File/URL setup forms need literal slashes.
+		literalSlash := m.dialog != nil && (strings.HasPrefix(m.dialog.kind, "setup-") || m.dialog.kind == "import")
 		if raw == "/" && !literalSlash && (m.focus != 3 || m.dialog != nil || m.searching || m.sectionFocus) && !m.keyCapture {
 			m.editor.Blur()
 			m.search.Blur()

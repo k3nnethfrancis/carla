@@ -57,12 +57,17 @@ func (m *model) simulationRows() []row {
 			if m.collapsed[r.ID] {
 				arrow = "▸ "
 			}
-			rows = append(rows, row{id: r.ID, kind: "simulation", depth: depth, label: arrow + fmt.Sprintf("Loom · %d conversations · %s", len(cs), r.Status), preview: r.ID})
+			mark := "  "
+			if m.simSelection != nil && m.simSelection.Run == r.ID && m.simSelection.All {
+				mark = "✓ "
+			}
+			rows = append(rows, row{id: r.ID, kind: "simulation", depth: depth, label: mark + arrow + fmt.Sprintf("Loom · %d conversations · %s", len(cs), r.Status), preview: r.ID})
 			if m.collapsed[r.ID] {
 				return
 			}
 			depth++
 		}
+		addChildren(r.ID, -1, depth)
 		for _, c := range cs {
 			key := conversationKey(r.ID, c.Index)
 			label := fmt.Sprintf("Conversation %d · %s", c.Index+1, conversationStatus(c))
@@ -86,7 +91,7 @@ func (m *model) simulationRows() []row {
 				}
 			}
 			mark := "  "
-			if m.loomConversation != nil && m.loomConversation.Run == r.ID && m.loomConversation.Conversation == c.Index {
+			if m.conversationSelected(r.ID, c.Index) {
 				mark = "✓ "
 			}
 			label = mark + label
@@ -188,6 +193,11 @@ func (m *model) conversationArrow(direction string) {
 func (m *model) editConversation(visitor bool) tea.Cmd {
 	if !m.conversationOpen || m.simulation == nil {
 		m.status = "Open a conversation first"
+		return nil
+	}
+	targets := m.selectedConversations()
+	if len(targets) != 1 || targets[0].Run != m.simulation.ID || targets[0].Conversation != m.gridSelection {
+		m.status = "Open and select one conversation to edit"
 		return nil
 	}
 	if m.data.Busy || m.pending {
@@ -326,17 +336,6 @@ func turnFlagged(t simulationTurn) bool {
 		}
 	}
 	return false
-}
-
-// Preview/focus is separate from the one explicit parent of the next Loom.
-func (m *model) selectLoomConversation(target map[string]any) {
-	m.loomConversation = &conversationParent{Run: target["run"].(string), Conversation: target["conversation"].(int)}
-}
-func (m *model) loomConversationTarget() (map[string]any, bool) {
-	if m.section != 3 || m.loomConversation == nil {
-		return nil, false
-	}
-	return map[string]any{"run": m.loomConversation.Run, "conversation": m.loomConversation.Conversation}, true
 }
 
 func conversationFlags(c simulationConversation) string {

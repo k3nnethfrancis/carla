@@ -70,9 +70,7 @@ func (m *model) openEvaluators() tea.Cmd {
 func (m *model) openEvaluator(id string) tea.Cmd {
 	e := m.evaluator(id)
 	rows := []row{{id: "name", label: e.Name, preview: "Rename judge"}, {id: "kind", label: "Judge · " + judgeLabel(e.Kind)}, {id: "model", label: "Model · " + e.Model}, {id: "spec", label: "Criteria", preview: e.Spec}}
-	if e.Kind == "diffusion" {
-		rows = append(rows, row{id: "endpoint", label: "Server · " + e.Endpoint, preview: "Local OpenJev service; see docs/local-judge.md. This address is frozen with each result."})
-	}
+
 	if e.Kind == "llm" {
 		rows = append(rows, row{id: "prompt", label: "Judge prompt", preview: e.Prompt})
 	} else {
@@ -102,8 +100,8 @@ func (m *model) evaluationTargets() []map[string]any {
 			targets = append(targets, map[string]any{"node": id})
 		}
 	case 3:
-		if args, ok := m.loomConversationTarget(); ok {
-			return []map[string]any{args}
+		for _, target := range m.selectedConversations() {
+			targets = append(targets, map[string]any{"run": target.Run, "conversation": target.Conversation})
 		}
 	case 4:
 		for _, id := range m.evaluationIDs() {
@@ -377,9 +375,6 @@ func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 		if r.id == "model" {
 			value = e.Model
 		}
-		if r.id == "endpoint" {
-			value = e.Endpoint
-		}
 		if r.id == "threshold" {
 			value = fmt.Sprint(e.Threshold * 100)
 		}
@@ -395,7 +390,7 @@ func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 			args["kind"] = r.id
 			if r.id == "diffusion" {
 				args["model"] = m.simString("monitor_local_model")
-				args["endpoint"] = m.simString("monitor_local_url")
+				args["endpoint"] = "auto"
 			} else if r.id == "jev" {
 				args["model"] = m.simString("monitor_model")
 			} else if len(m.data.SelectorModels) > 0 {

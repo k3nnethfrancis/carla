@@ -8,8 +8,9 @@ from urllib.parse import urlsplit
 import httpx
 
 from .credentials import openrouter_key
+from .local_judge import LocalJudgeError, managed
 
-LOCAL_URL = "http://127.0.0.1:8080"
+LOCAL_URL = "auto"
 LOCAL_MODEL = "openjev-latest"
 _HOSTED = (
     object()
@@ -18,6 +19,8 @@ _HOSTED = (
 
 def local_url(value):
     """Local means loopback only, including when reading an edited workspace."""
+    if value == "auto":
+        return "auto"
     try:
         url = urlsplit(value)
         valid = (
@@ -201,7 +204,12 @@ async def classify(request, record, *, endpoint=_HOSTED):
     started = time.monotonic()
     try:
         if endpoint is not _HOSTED:
-            url = local_url(endpoint) + "/v1/systemone"
+            address = local_url(endpoint)
+            if address == "auto":
+                record["status"] = "starting"
+                address = await managed.ensure()
+                record["status"] = "checking"
+            url = address + "/v1/systemone"
             timeout = httpx.Timeout(120, connect=3)
         else:
             key, _ = openrouter_key()
@@ -232,9 +240,9 @@ async def classify(request, record, *, endpoint=_HOSTED):
             record.update(status="complete", scores=scores)
     except Exception as exc:
         # Do not save provider exception strings, which may include secrets.
-        error = type(exc).__name__
+        error = str(exc) if isinstance(exc, LocalJudgeError) else type(exc).__name__
         if endpoint is not _HOSTED and isinstance(exc, httpx.ConnectError):
-            error = "Local judge unavailable. Start OpenJev (see docs/local-judge.md) and check its address in /policy."
+            error = "Configured external local judge is unavailable. Start that service or select DiffusionGemma again to use automatic management."
         record.update(status="unavailable", error=error)
     finally:
         record["elapsed_seconds"] = round(time.monotonic() - started, 3)

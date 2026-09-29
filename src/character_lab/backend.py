@@ -10,6 +10,7 @@ import json
 import secrets
 from pathlib import Path
 
+from .local_judge import managed
 from .models import load_models
 from .service import Session
 from .workspaces import Workspaces
@@ -110,6 +111,8 @@ async def serve(args):
                     await session.close()
                 except ConnectionError:
                     pass
+            if authenticated:
+                await managed.close()
             writer.close()
             if authenticated:
                 done.set()

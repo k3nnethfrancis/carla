@@ -9,7 +9,7 @@ import (
 // Help documents commands independently of availability (busy/edit states).
 var commandDescriptions = map[string]string{
 	"policy":      "Configure monitoring, selection and reusable judge configurations. Jev behavior specs or local LLM judging prompts stay separate from generation settings.",
-	"eval":        "Run /eval [name] on selected document versions or a checked conversation. Uses the active evaluation when no name is given. --train-on-pass true marks passing results for training; default false.",
+	"eval":        "Run /eval [name] on selected document versions or checked conversations. Uses the active evaluation when no name is given. --train-on-pass true marks passing results for training; default false.",
 	"evaluations": "Browse named evaluation collections, add existing material without judging, run selected/pending items, review evidence and mark items for training. /snapshot exports marked items and metadata.",
 	"import":      "Add a local UTF-8 .txt or .md document to the shared Library. Title defaults to filename; author and source URL are optional.",
 	"visitor":     "Write a visitor message in a new conversation fork. Open a conversation first.",
@@ -19,7 +19,7 @@ var commandDescriptions = map[string]string{
 	"rename":      "Give this document a recognizable title without changing its text.",
 	"configure":   "Configure generation models, prompts, temperature, top-p and sampling; in Evaluate, configure the opened collection and its judges. /policy owns monitoring and selection. Loom flags override generation settings for one run.",
 	"branch":      "Fork the selected conversation in Simulator, or saved document in Branches, without generation. Save edits first.",
-	"loom":        "Generate alternatives from one starting point: document continuations outside Simulator, conversation extensions inside it. Defaults: one alternative, one loop, one new Character reply. --tokens caps each generation; --turns counts Character replies per loop; --loops repeats generation and policy selection. --eval judges completed outputs with a named evaluation. --msg/--message supplies a fresh Visitor opener (clear selection first). Quote names/messages containing spaces. Aliases /continue, /generate, /run, /simulate and /grow use the same syntax.",
+	"loom":        "Generate alternatives from one starting point: document continuations outside Simulator, conversation extensions inside it. A checked Loom or subset continues each conversation independently. Defaults: one fresh alternative, one loop; selected conversations use configured turns. The new output group stays selected. --tokens caps each generation; --turns counts Character replies per loop; --loops repeats generation and policy selection. --eval judges completed outputs with a named evaluation. --msg/--message supplies a fresh Visitor opener (clear selection first). Quote names/messages containing spaces. Aliases /continue, /generate, /run, /simulate and /grow use the same syntax.",
 	"add":         "Add highlighted source passages to the workspace seed set.",
 	"remove":      "Library: deselect sources. Anthology: unkeep versions. Branches: confirm deletion of versions and descendants. Evaluate: unmark training items. Alias: /delete.",
 	"keep":        "Keep checked branches (or the highlighted branch) in Anthology. In Evaluate, mark selected items for training.",

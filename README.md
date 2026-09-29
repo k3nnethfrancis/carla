@@ -179,7 +179,8 @@ These use criteria to judge text, but serve different purposes:
 Use `/policy` to configure monitoring, selection and reusable judges. Selection
 uses a local instruct model. Monitoring can use local DiffusionGemma through OpenJev, or optional Jev through
 OpenRouter. Evaluation judges also support the configured local instruct model.
-See [local judge setup](docs/local-judge.md) for the Apple Silicon classifier.
+After [one-time setup](docs/local-judge.md), Carla starts and stops the Apple Silicon
+classifier automatically on an available local port.
 Hosted classification sends the assessed text to an external service and can
 incur charges. Local generation itself uses llama.cpp.
 

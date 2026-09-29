@@ -48,12 +48,14 @@ not a newly trained model. Carla currently ends at dataset curation/export.
 - `/rename` changes a document title. `/find` filters the current list. `/active`
   returns to a running generation. `/stop` cancels work while retaining partial text.
 
-In Simulator, **Space checks/unchecks one conversation; Enter selects and opens
-it**. Hovering previews it but does not make it a Loom target. `/loom 4` creates
-four alternatives from that checked conversation, or four fresh conversations if
-nothing is checked. Starting a Loom consumes the previous selection. `/clear`
-resets the target. `/visitor` writes a Visitor message into a fork; `/loom` then
-supplies the next Character reply. `/edit` changes a saved message in a new fork.
+In Simulator, Space selects a Loom parent (all conversations) or toggles children.
+Selecting a child replaces the parent scope; further children build a subset.
+Enter opens and selects a parent or one conversation. Arrows browse without
+changing the checked set. `/loom` and `/continue` advance that set using configured
+turns; `--turns` overrides them. A finished Loom selects its outputs so you can
+continue immediately. `/clear` makes the next Loom fresh. `/loom 4` with one
+conversation selected creates four alternatives from it. `/eval` shares the same
+selection. `/visitor` writes a Visitor message into a fork; `/loom` responds.
 
 Library/Anthology Loom actions use the same document workflow as Branches and
 return new output there. New descendants are not automatically kept.

@@ -31,7 +31,7 @@ func TestWorkspaceViewRestoresLocationWithoutActions(t *testing.T) {
 		if m.section != section || m.targetRow().id != rowID || m.sectionFocus || m.focus != 3 || !m.command.Focused() {
 			t.Fatalf("section %d restored to %d/%s focus %d", section, m.section, m.targetRow().id, m.focus)
 		}
-		if m.editing != "" || m.loomConversation != nil {
+		if m.editing != "" || m.simSelection != nil {
 			t.Fatal("restoration activated editing/selection")
 		}
 	}
@@ -52,7 +52,7 @@ func TestWorkspaceViewRestoresConversationAtCommandBar(t *testing.T) {
 	run.OpenConversation = &index
 	data, _ := json.Marshal(run)
 	m.apply(event{Type: "simulation", Data: data})
-	if m.sectionFocus || m.focus != 3 || !m.command.Focused() || m.gridSelection != 1 || !m.conversationOpen || m.loomConversation != nil {
+	if m.sectionFocus || m.focus != 3 || !m.command.Focused() || m.gridSelection != 1 || !m.conversationOpen || m.simSelection != nil {
 		t.Fatal("conversation restore must preserve command focus without checking a Loom target")
 	}
 }

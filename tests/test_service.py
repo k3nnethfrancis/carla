@@ -998,7 +998,4 @@ async def test_local_monitor_config_without_credentials_and_bad_endpoint_rejecte
             {"monitor_local_url": "https://remote.example:443"},
             "bad",
         )
-    assert (
-        session.project.data["simulator_config"]["monitor_local_url"]
-        == "http://127.0.0.1:8080"
-    )
+    assert session.project.data["simulator_config"]["monitor_local_url"] == "auto"

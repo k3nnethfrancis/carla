@@ -142,9 +142,8 @@ func (m *model) refreshConfig() {
 	}
 }
 func (m *model) saveDialog(d *dialog, command string, args map[string]any) tea.Cmd {
-	// Keep local service fields visible until backend validation succeeds.
-	// An invalid URL must not silently return to the parent with the old value.
-	if len(d.fields) > 0 && (d.args["field"] == "monitor_local_url" || d.args["field"] == "monitor_local_model" || d.args["field"] == "endpoint") {
+	// Keep the local model field visible until backend validation succeeds.
+	if len(d.fields) > 0 && d.args["field"] == "monitor_local_model" {
 		id, cmd := m.dispatch(command, args)
 		if cmd != nil {
 			delete(d.args, "error")

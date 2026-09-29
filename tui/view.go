@@ -216,10 +216,7 @@ func (m *model) navigation(r rect) string {
 	if m.section != 0 {
 		footer = fmt.Sprintf("%d items", len(rows))
 		if m.section == 3 {
-			count := 0
-			if m.loomConversation != nil {
-				count = 1
-			}
+			count := len(m.selectedConversations())
 			footer = fmt.Sprintf("%d selected · /clear", count)
 		}
 		if m.section == 4 {

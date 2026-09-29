@@ -33,7 +33,7 @@ func (m *model) openSimulatorConfig() tea.Cmd {
 	d := &dialog{kind: "sim-config", title: "Simulator"}
 	for _, entry := range []struct{ key, label string }{
 		{"documents", "Anthology documents"}, {"character_alias", "Character model"}, {"visitor_alias", "Visitor model"},
-		{"openings", "Opening"}, {"visitor_brief", "Visitor brief"},
+		{"openings", "Opening"}, {"turns", "Turns per continuation"}, {"visitor_brief", "Visitor brief"},
 		{"character_settings", "Character sampling"}, {"visitor_settings", "Visitor sampling"},
 		{"character_template", "Character prompt"}, {"visitor_template", "Visitor prompt"},
 	} {

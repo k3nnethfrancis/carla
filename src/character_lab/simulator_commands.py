@@ -113,7 +113,11 @@ async def dispatch(session, command, args, request_id):
         )
         seed = None
         if command == "simulator.run" and "run" in args:
-            seed = simulator.conversation_seed(p, args["run"], args["conversation"])
+            seed = (
+                simulator.conversation_seed(p, args["run"], args["conversation"])
+                if "conversation" in args
+                else simulator.batch_seed(p, args["run"], args.get("conversations"))
+            )
             config[
                 "documents"
             ] = []  # The frozen ancestor anthology is carried by seed.
@@ -135,6 +139,13 @@ async def dispatch(session, command, args, request_id):
             )
         if "count" in args:
             config["conversations"] = args["count"]
+        if seed and "conversations" in seed:
+            size = len(seed["conversations"])
+            if "count" in args and args["count"] != size:
+                raise ValueError(
+                    "A group continuation advances every conversation once; select one conversation to create alternatives"
+                )
+            config["conversations"] = size
         if "turns" in args:
             config["turns"] = args["turns"]
         if "n_predict" in args:

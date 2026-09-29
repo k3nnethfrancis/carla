@@ -14,6 +14,13 @@ func (m *model) commandArguments(id string) []string {
 		count := "[branches]"
 		if m.section == 3 {
 			count = "[conversations]"
+			if m.simSelection != nil {
+				if len(m.selectedConversations()) == 1 {
+					count = "[alternatives]"
+				} else {
+					count = "selected conversations (count inferred)"
+				}
+			}
 		}
 		args := []string{count, "--tokens N|Max"}
 		if m.section == 3 {
@@ -43,7 +50,7 @@ func (m *model) commandHelp(id string) string {
 		text += "\n\nCount can also be written --count N or -n N. Flags accept --flag=value and any order; examples put --loops last. --eval runs after generation, without changing generation prompts. Multiple loops require a configured selection policy."
 	}
 	if id == "configure" && m.section == 3 {
-		text += "\n\nSettings: documents, character_alias, visitor_alias, openings, visitor_brief, character_settings, visitor_settings, character_template, visitor_template."
+		text += "\n\nSettings: documents, character_alias, visitor_alias, openings, turns, visitor_brief, character_settings, visitor_settings, character_template, visitor_template."
 	}
 	return text
 }

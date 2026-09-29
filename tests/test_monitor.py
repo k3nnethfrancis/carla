@@ -157,7 +157,10 @@ async def test_local_monitor_no_key_no_proxy_and_preserves_evidence(monkeypatch)
         return real(transport=httpx.MockTransport(handle), **kw)
 
     monkeypatch.setattr(httpx, "AsyncClient", client)
-    config = simulator.defaults("base") | {"monitor_mode": "diffusion"}
+    config = simulator.defaults("base") | {
+        "monitor_mode": "diffusion",
+        "monitor_local_url": "http://127.0.0.1:8080",
+    }
     turn = {"role": "character", "text": "Again. Again."}
     await monitor.scan(config, {"turns": [turn]}, turn)
     record = turn["monitor"]
@@ -195,7 +198,10 @@ async def test_local_classifier_failures_never_fallback_or_detect(monkeypatch, f
         "AsyncClient",
         lambda **kw: real(transport=httpx.MockTransport(handle), **kw),
     )
-    config = simulator.defaults("base") | {"monitor_mode": "diffusion"}
+    config = simulator.defaults("base") | {
+        "monitor_mode": "diffusion",
+        "monitor_local_url": "http://127.0.0.1:8080",
+    }
     turn = {"role": "character", "text": "text"}
     await monitor.scan(config, {"turns": [turn]}, turn)
     assert len(requests) == 1

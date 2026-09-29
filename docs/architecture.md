@@ -134,8 +134,10 @@ weights. The transfer runs in a child process so cancellation stops the Hub's
 worker threads and leaves its partial cache reusable. Registration and model
 selection happen in the owning Session only after a successful transfer.
 
-The optional DiffusionGemma classifier runs in a separate, explicitly launched
-OpenJev MLX process. It is not managed by the generator admission/swap system;
+The optional DiffusionGemma classifier runs in a Carla-owned OpenJev MLX process.
+`local_judge.py` starts its cached runtime on a kernel-assigned loopback port, shares
+it across checks, and stops it when its owning backend disconnects. It is separate
+from the generator admission/swap system;
 its memory and GPU work coexist with llama.cpp. Local HTTP endpoints are loopback
 only, with redirects/proxy inheritance disabled, no credentials and no remote
 fallback. The pinned launcher disables OpenJev routing and loads cached weights

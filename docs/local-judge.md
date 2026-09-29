@@ -9,54 +9,57 @@ does not establish equivalent judgments or calibrated probabilities.
 Base-model generation and instruct-model selection still use llama.cpp. This
 optional companion service has its own dependencies and model residency.
 
-## Start locally
+## Install once
 
-From the Carla repository, in a second terminal:
+On Apple Silicon, install the optional runtime and checkpoint from the Carla
+repository:
 
 ```sh
 ./scripts/local-judge.sh
 ```
 
-Requires Apple Silicon, `uv`, and internet access for the initial installation
-and model download. The script pins OpenJev and the
+Requires `uv` and internet access for the initial installation and model download.
+Wait for `Application startup complete`, then stop that setup process with Ctrl+C.
+Carla subsequently starts the cached judge automatically when a local monitoring
+or evaluation request needs it. No server address or port is required.
+
+The installer pins OpenJev and the
 [MLX 4-bit checkpoint](https://huggingface.co/mlx-community/diffusiongemma-26B-A4B-it-4bit)
-to specific commits. Weights use the Hugging Face cache, outside the repository;
+to specific commits. Weights use the Hugging Face cache outside the repository;
 Carla's GGUF registry is unchanged. Allow about **17 GB of disk space** plus runtime
 installation space, and at least **16 GB free RAM for the classifier alone**.
 The generator, its KV cache, and other applications need additional memory.
 
-Wait for `Application startup complete`. The service binds `127.0.0.1:8080`.
-To use another port: `OPENJEV_PORT=8081 ./scripts/local-judge.sh`. Stop it with
-Ctrl+C when finished; Carla does not manage or unload this separate process.
-After installation and download, run fully from the cache:
+Automatic startup is cache-only: both the model and `uv` dependency environment
+must already be installed. Missing dependencies produce an installation message,
+not a background download. The worker disables model routing and credential use;
+its dependencies and model load with offline mode enabled.
 
-```sh
-UV_OFFLINE=1 HF_HUB_OFFLINE=1 ./scripts/local-judge.sh
-```
+Carla asks the operating system for an available loopback port and retains that
+socket through startup. Concurrent checks share one owned worker per Carla
+backend. Quitting or restarting Carla stops that worker; a watchdog also handles
+an abruptly terminated backend. Carla never discovers, adopts or kills unrelated
+servers. Multiple separate Carla instances have their own workers and memory use.
+Startup can take longer than a subsequent classification, with a 180-second bound.
 
-Both the model and `uv` dependency environment must already be cached.
-
-The launcher disables OpenJev model routing and binds to loopback, with no API
-key. It sets Hugging Face/Transformers offline mode before loading the model.
-Inference stays local; the initial dependency/model acquisition uses the internet.
-If you manage the service yourself, keep it on loopback and disable remote model
-routes. Carla cannot attest to what a separately managed service does internally.
+Saved explicit loopback addresses remain supported for separately managed servers.
+Selecting DiffusionGemma again switches to automatic management. Such external
+servers are not started or stopped by Carla. The actual endpoint used is recorded
+in each judgment, even when the saved setting is `auto`.
 
 ## Use in Carla
 
 **Live monitoring:** `/policy` → Monitoring → **DiffusionGemma (local)**.
-The Server and Model rows configure the local service; defaults are
-`http://127.0.0.1:8080` and `openjev-latest`. No API key is requested.
+The local worker starts automatically using `openjev-latest`. No API key is requested.
 Heartbeat, behavior specs, detection thresholds and Warn/Stop actions work exactly
 as for Jev. Monitoring remains Off in a new workspace until explicitly enabled.
 The same policy covers document continuations and Character replies; Visitor
 replies are not monitored separately.
 
 **Whole-item evaluations:** `/policy` → Judge configurations → New judge →
-**DiffusionGemma (local)**. Add criteria, choose the pass threshold, and check the
-Server/Model settings. Add that judge to a named evaluation in Evaluate, then run
+**DiffusionGemma (local)**. Add criteria and choose the pass threshold. Add that judge to a named evaluation in Evaluate, then run
 `/eval` on selected material or `/loom … --eval "evaluation name"`. Each result
-freezes its judge configuration, including the endpoint, alongside the exact
+freezes its judge configuration, including automatic or explicit endpoint mode, alongside the exact
 request, response, provider and elapsed time. Later policy changes do not rewrite it.
 
 Selection during multi-loop Loom still uses the configured local instruct model;

@@ -141,7 +141,7 @@ type model struct {
 	editRequest            string // A draft stays owned by the editor until this request succeeds.
 	setupReturn            *dialog
 	conversationOpen       bool
-	loomConversation       *conversationParent
+	simSelection           *simulationSelection
 	conversationEdit       int
 	policyPulses           map[string]policyPulse
 	policySeen             map[string]bool
@@ -350,7 +350,7 @@ func (m *model) activate() tea.Cmd {
 	case "sim-config":
 		return m.perform("sim-config")
 	case "sim-run":
-		m.loomConversation = nil
+		m.simSelection = nil
 		return m.perform("simulate")
 	case "conversation":
 		args, ok := m.conversationTarget()
@@ -363,6 +363,7 @@ func (m *model) activate() tea.Cmd {
 		}
 		return nil
 	case "simulation":
+		m.selectSimulation(r.id)
 		return m.send("simulator.open", map[string]any{"run": r.id})
 
 	case "source", "passage":
@@ -442,7 +443,7 @@ func (m *model) saveEditor() tea.Cmd {
 		args := map[string]any{"name": d.fields[0].input.Value(), "spec": text, "kind": d.args["kind"], "prompt": m.data.EvaluationPrompt, "threshold": 0.8, "model": m.simString("monitor_model")}
 		if args["kind"] == "diffusion" {
 			args["model"] = m.simString("monitor_local_model")
-			args["endpoint"] = m.simString("monitor_local_url")
+			args["endpoint"] = "auto"
 		}
 		if args["kind"] == "llm" {
 			args["model"] = m.data.SelectorModels[0].Alias
@@ -574,11 +575,14 @@ func (m *model) apply(e event) tea.Cmd {
 		}
 		if run.Opened {
 			if run.Forked && run.OpenConversation != nil {
-				m.loomConversation = &conversationParent{Run: run.ID, Conversation: *run.OpenConversation}
+				m.selectLoomConversation(map[string]any{"run": run.ID, "conversation": *run.OpenConversation})
 			}
 			m.pending = false
 		}
 		if !run.Opened {
+			if newView {
+				m.selectSimulation(run.ID)
+			}
 			m.activeSimulation = &run
 		}
 		if run.Opened || m.simulation == nil || m.simulation.ID == run.ID {
@@ -732,7 +736,7 @@ func (m *model) apply(e event) tea.Cmd {
 			m.simulation = nil
 			m.conversationOpen = false
 			m.activeSimulation = nil
-			m.loomConversation = nil
+			m.simSelection = nil
 			m.pages = [5]*pagePosition{}
 			m.restorePage = nil
 			m.commandOrigin = nil

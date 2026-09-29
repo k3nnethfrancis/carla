@@ -855,11 +855,21 @@ class Session:
                         raise ValueError(
                             latest.get("error", "Conversation batch failed")
                         )
-                    prefix = transcript(current_seed["turns"]) if current_seed else ""
+                    prefix = (
+                        transcript(current_seed["turns"])
+                        if current_seed and "turns" in current_seed
+                        else ""
+                    )
                     return [
                         dict(
                             id=str(c["index"]),
-                            prompt=prefix,
+                            prompt=(
+                                transcript(
+                                    current_seed["conversations"][c["index"]]["turns"]
+                                )
+                                if current_seed and "conversations" in current_seed
+                                else prefix
+                            ),
                             text=transcript(c["turns"]),
                         )
                         for c in latest["conversations"]

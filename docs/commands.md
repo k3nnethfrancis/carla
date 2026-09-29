@@ -22,6 +22,8 @@ Simulator ─ opening or transcript ── /loom ── conversation extensions 
 
 Library and Anthology call the same document operation as Branches, then open its results in Branches. They do not implement separate generation systems. New document versions start unkept; the original source or kept version remains unchanged.
 
+The [interaction model](interaction-model.md) explains focus, selection and action scope.
+
 ## The central commands
 
 | Command | Meaning |
@@ -59,7 +61,7 @@ While typing `/lo`, the highlighted `/loom` completion already shows its argumen
 | `--eval "name"` | Judge completed outputs using that named evaluation after generation; does not change generation prompts. | Library, Branches, Anthology, Simulator |
 | `--loops N` | Total generate-and-select cycles, including the first cycle. | Library, Branches, Anthology, Simulator |
 
-**Bare `/loom` is the small, predictable action:** one alternative, one loop, and in Simulator one new Character reply. Model, sampling, token ceilings and monitoring settings still come from configuration. Explicit parameters expand the run.
+**Bare `/loom` uses the selected scope:** one document continuation, one fresh conversation when nothing is checked, or one extension of each selected conversation. Continuations use **Turns per continuation** from Simulator `/config` (default one); `--turns` overrides it. One loop is the default. Model, sampling, token ceilings and monitoring come from configuration.
 
 `--turns` and `--msg` outside Simulator are rejected with an explanation. There are no mode flags. `--loops` greater than one requires a configured selection policy; a single loop does not select a winner.
 
@@ -86,7 +88,7 @@ If all four loops complete, the last example creates twelve continuations. The a
 
 ```text
 /loom
-    One new Character reply from the selected conversation or fresh setup.
+    Continue each selected conversation using configured turns, or start fresh if none are selected.
 
 /loom 4
     Four alternative next replies from the same starting conversation.
@@ -106,18 +108,25 @@ If the conversation ends with a Visitor message, Loom generates the Character re
 
 ## Selection determines the input
 
-A batch is a collection of alternatives, not itself a conversation. In Simulator, highlighting previews a target but does not select it for Loom. **Space** selects or deselects one conversation; **Enter** selects and opens it, including from the grid. Choosing a different conversation replaces the prior checkmark. `/clear` clears the target without deleting anything. The checked conversation stays the Loom target while browsing other items. Starting a Loom consumes that selection; displaying its output does not implicitly select a new target.
+Focus controls what you preview. Selection controls what generation and evaluation operate on. In Simulator:
 
-| Selected context | `/loom` | `/loom 4` |
+- **Space on a Loom parent:** select all its conversations; Space again clears it.
+- **Space on a child:** replace a parent selection with just that child, then toggle additional children into or out of the set. Selecting a child in another Loom starts a new set there.
+- **Enter on a parent:** select it and open its grid. Arrows move between previews; Space checks children. Enter on a child opens and selects that conversation alone.
+- **After generation:** the new result group becomes selected, ready for another `/loom` or `/continue`.
+- **`/clear`:** reset the operation target without deleting saved content. Browsing never silently creates a selection.
+
+| Selected context | `/loom` or `/continue` | `/loom 4` |
 |---|---|---|
 | One document version | One continuation | Four continuations of that version |
-| Explicitly checked conversation | One new Character reply | Four alternative extensions of that conversation |
-| Browsed conversation or batch, nothing checked | Start one fresh conversation | Start four fresh conversations |
-| Fresh Simulator setup | Start one conversation | Start four alternatives from the setup |
+| One checked conversation | Continue it with configured turns | Four alternatives from that conversation |
+| Loom parent with four conversations | Continue each of the four independently | Same four-member continuation |
+| Checked subset of conversations | Continue only those conversations | Count must match the selected set; omit it normally |
+| Nothing checked in Simulator | Start one fresh conversation | Start four fresh conversations |
 
-Never silently pick a batch winner, continue every member, or reuse the original batch input. Automatic policy selection is part of an explicitly configured multi-loop run.
+For example, `/loom 4` → finish → `/continue` advances all four. To advance only conversations 1 and 3, Space-select 1 (replacing the parent scope), then 3, and run `/continue`. `/eval` uses that same selected set. The target line and command completion show the scope. Each new result preserves its own ancestor transcript and provenance; originals remain unchanged.
 
-Continuing several existing conversations is different from making several alternatives of one conversation. Explicit multi-selection is the proposed entry point for that bulk operation, but its command contract is not yet settled.
+With multiple selected conversations, use `--turns` to control how far each advances. To generate alternatives from **one** conversation, select that conversation before specifying a different count. With `--loops > 1`, the existing selection policy still chooses one candidate between loops; it does not independently advance every sibling through all loops.
 
 ## Fork, edit and Visitor messages
 
@@ -137,7 +146,7 @@ Select conversation → /fork    → new version, no generated text
 
 `/config` is one entry point into contextual configuration.
 
-**Library, Branches and Anthology share document Loom settings.** They are views into the same configuration, not three copies. Alternatives, turns and loops are explicit run arguments; their former default controls are hidden to keep bare Loom predictable. Simulator exposes conversation settings alongside the common Loom controls.
+**Library, Branches and Anthology share document Loom settings.** They are views into the same configuration, not three copies. Alternatives and policy loops are explicit run arguments. Simulator also exposes Turns per continuation, used when advancing selected conversations.
 
 ```text
 /config
