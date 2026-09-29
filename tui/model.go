@@ -188,6 +188,7 @@ type model struct {
 	branchSelection             map[string]bool
 	navigator                   textarea.Model
 	cursorNode                  string
+	cursorMoved                 bool // Only deliberate reader navigation defines a generation prefix.
 	awaitingSimulation          bool
 	enterLoom                   bool
 	keySaving                   bool

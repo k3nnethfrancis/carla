@@ -140,16 +140,7 @@ func (m *model) contextualAction(id string) tea.Cmd {
 		}
 		return m.send("node.keep", map[string]any{"node": m.targetRow().id, "kept": true})
 	case "continue":
-		args := map[string]any{"node": m.targetRow().id}
-		if m.section == 0 {
-			args = map[string]any{"refs": m.targetRefs()}
-		}
-		cmd := m.send("continue", args)
-		if cmd != nil {
-			m.section = 1
-			m.focus = 1
-		}
-		return cmd
+		return m.loom(generationOptions{Action: "continue"})
 	}
 	return nil
 }

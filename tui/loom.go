@@ -70,7 +70,18 @@ func (m *model) loom(options generationOptions) tea.Cmd {
 		m.status = "Wait for the selected document to load before running /loom"
 		return m.previewTarget()
 	}
+	// A preview's automatic scroll/cursor is not a request to truncate its text.
+	// Only deliberate navigation in the reader supplies a generation prefix.
+	focus := m.focus
+	if focus == 3 && m.commandOrigin != nil {
+		focus = m.commandOrigin.focus
+	}
+	args := map[string]any{"nodes": []string{m.currentID()}}
+	if focus == 1 && m.cursorMoved {
+		args = map[string]any{"node": m.currentID(), "offset": m.cursorOffset(), "branch": true}
+	}
+	options.apply(args)
 	m.section, m.focus = 1, 1
 	m.reflow()
-	return m.generateAtCursor(true, options)
+	return m.sendDocumentGeneration(args)
 }

@@ -115,6 +115,7 @@ func (m *model) syncCursor(width, height int) {
 	m.navigator.SetHeight(height)
 	if m.editing == "" && m.data.Current != nil && (m.cursorNode != m.currentID() || m.navigator.Value() != m.currentText()) {
 		m.cursorNode = m.currentID()
+		m.cursorMoved = false
 		m.navigator.SetValue(m.currentText())
 		m.navigator.CursorEnd()
 	}
@@ -128,6 +129,7 @@ func (m *model) moveCursor(key string, msg tea.KeyPressMsg) tea.Cmd {
 	}
 	var cmd tea.Cmd
 	m.navigator, cmd = m.navigator.Update(move)
+	m.cursorMoved = true
 	m.reflow()
 	m.revealCursor()
 	return cmd
@@ -304,6 +306,7 @@ func (m *model) revealVersionChange() {
 	text := []rune(m.currentText())
 	offset := max(0, min(m.data.Current.ChangeOffset, len(text)))
 	moveTextCursor(&m.navigator, offset)
+	m.cursorMoved = false
 	m.document.SetContent(m.renderDocument(m.document.Width()))
 	row := strings.Count(ansi.Wrap(safe(string(text[:offset]))+"█", max(1, m.document.Width()), ""), "\n")
 	m.document.SetYOffset(row)

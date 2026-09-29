@@ -64,6 +64,24 @@ set; it never concatenates conversations into one model prompt. Selection polici
 between Loom loops select complete alternatives at that grouping level, rather
 than silently assembling winning children from different alternatives.
 
+## Current scope and limitations
+
+A document continuation from the list uses the complete saved text. Automatic
+scrolling to the first change is a reading aid, not a generation boundary. Moving
+the cursor explicitly in the document reader selects a prefix for generation.
+
+The document backend currently represents one ordered set of saved versions.
+It does not yet represent a nested set of document sets: selecting members from
+multiple sets combines them into a flat selection. Simulator preserves source-run
+groups when targeting conversations from multiple runs. Arbitrary recursive
+nesting is not implemented in either domain.
+
+Document ancestry and set membership are separate relationships. The current
+parent checkbox still selects descendants for batch curation, so inspect the
+checked versions before generating. Continue rejects a selection containing
+multiple revisions of the same logical document. These selection limitations
+remain under review; the action rules above describe the intended contract.
+
 ## Inputs and overrides
 
 ```text

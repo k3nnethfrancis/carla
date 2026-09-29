@@ -203,7 +203,9 @@ func (m *model) visibleDocumentSets() []documentSet {
 	}
 	var out []documentSet
 	for _, s := range m.data.DocumentSets {
-		complete := len(s.Members) > 0
+		// Singleton operation records are provenance, not another collection level.
+		// Keep their document revisions in the ordinary ancestry tree.
+		complete := len(s.Members) > 1
 		for _, id := range s.Members {
 			complete = complete && known[id]
 		}

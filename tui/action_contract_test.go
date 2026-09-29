@@ -121,7 +121,10 @@ func TestAddDoesNotRunEvaluation(t *testing.T) {
 func TestDocumentSetShowsMembershipAndDispatchesGroup(t *testing.T) {
 	m := fixture()
 	m.section = 1
-	m.data.DocumentSets = []documentSet{{ID: "set1", SetID: "logical", Members: []string{m.data.Nodes[0].ID}, Action: "loom"}}
+	copy := m.data.Nodes[0]
+	copy.ID = "second"
+	m.data.Nodes = append(m.data.Nodes, copy)
+	m.data.DocumentSets = []documentSet{{ID: "set1", SetID: "logical", Members: []string{m.data.Nodes[0].ID, copy.ID}, Action: "loom"}}
 	rows := m.rows()
 	if rows[0].kind != "document-set" || rows[1].depth != 1 {
 		t.Fatal(rows)
@@ -245,5 +248,75 @@ func TestNewConversationControlStartsFreshLoom(t *testing.T) {
 	json.Unmarshal(req.Args["action"], &action)
 	if req.Command != "simulator.run" || action != "loom" || req.Args["run"] != nil || req.Args["targets"] != nil || m.simSelection != nil {
 		t.Fatal(req, m.simSelection)
+	}
+}
+
+// Fork opens the reader and previews ChangeOffset=0. That automatic position
+// must not silently turn a subsequent Continue into an empty-prefix branch.
+func TestDocumentContinueUsesWholePreviewUnlessCursorDeliberatelyMoved(t *testing.T) {
+	for _, focus := range []int{0, 1, 3} {
+		for _, action := range []string{"continue", "loom"} {
+			m := fixture()
+			m.section, m.width, m.height = 1, 120, 36
+			m.reflow()
+			m.revealVersionChange()
+			m.focus = focus
+			if focus == 3 {
+				m.commandOrigin = &commandOrigin{focus: 1}
+			}
+			req := captureCommand(t, m, func() tea.Cmd { return m.loom(generationOptions{Action: action}) })
+			if req.Args["offset"] != nil || req.Args["offsets"] != nil {
+				t.Fatalf("%s from focus %d truncated automatic preview: %v", action, focus, req.Args)
+			}
+		}
+	}
+	m := fixture()
+	m.section, m.width, m.height = 1, 120, 36
+	m.reflow()
+	m.revealVersionChange()
+	m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	m.focusCommand(true)
+	req := captureCommand(t, m, func() tea.Cmd { return m.loom(generationOptions{Action: "continue"}) })
+	var offset int
+	json.Unmarshal(req.Args["offset"], &offset)
+	if offset != 1 {
+		t.Fatalf("deliberate cursor lost: %v", req.Args)
+	}
+}
+func TestSingletonOperationVersionsStayInDocumentAncestry(t *testing.T) {
+	m := fixture()
+	m.section = 1
+	parent := m.data.Nodes[0]
+	for _, id := range []string{"fork", "continued", "continued-again"} {
+		n := parent
+		n.ID, n.Parent = id, parent.ID
+		m.data.Nodes = append(m.data.Nodes, n)
+		m.data.DocumentSets = append(m.data.DocumentSets, documentSet{ID: "set-" + id, SetID: "logical-" + id, Action: "continue", Members: []string{id}})
+		parent = n
+	}
+	rows := m.branchRows()
+	if len(rows) != 4 {
+		t.Fatal(rows)
+	}
+	for i, r := range rows {
+		if r.kind != "node" || r.depth != i {
+			t.Fatalf("detached operation wrapper: %v", rows)
+		}
+	}
+}
+func TestContextualContinueUsesSameSelectedTargetsAsCommand(t *testing.T) {
+	m := fixture()
+	m.section, m.focus = 1, 0
+	second := m.data.Nodes[0]
+	second.ID = "selected"
+	m.data.Nodes = append(m.data.Nodes, second)
+	m.branchSelection = map[string]bool{second.ID: true}
+	req := captureCommand(t, m, func() tea.Cmd { return m.contextualAction("continue") })
+	var action string
+	var ids []string
+	json.Unmarshal(req.Args["action"], &action)
+	json.Unmarshal(req.Args["nodes"], &ids)
+	if action != "continue" || len(ids) != 1 || ids[0] != second.ID {
+		t.Fatal(req)
 	}
 }
