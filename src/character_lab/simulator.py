@@ -28,6 +28,7 @@ def defaults(alias):
     sampling = dict(n_predict=512, temperature=1.0, top_p=0.98)
     return dict(
         monitor_mode="off",
+        monitor_call_mode="separate",
         monitor_interval_tokens=512,
         monitor_after_reply=True,
         monitor_during_reply=True,
@@ -67,6 +68,8 @@ def validate(config, project, validate_settings):
         raise ValueError("Token ranges were removed; use a single maximum")
     if config["monitor_mode"] not in {"off", "jev", "diffusion"}:
         raise ValueError("Choose Off, Jev or DiffusionGemma monitoring")
+    if config.get("monitor_call_mode", "separate") not in {"separate", "bundled"}:
+        raise ValueError("Choose Separate or Bundled monitor calls")
     if config["monitor_mode"] == "diffusion":
         monitor.local_url(config.get("monitor_local_url", monitor.LOCAL_URL))
         if (
@@ -201,14 +204,14 @@ def view(run):
                             {
                                 k: v
                                 for k, v in check.items()
-                                if k not in {"request", "response"}
+                                if k not in {"request", "response", "calls"}
                             }
                             for check in turn.get("monitor_checks", [])
                         ],
                         "monitor": {
                             k: v
                             for k, v in turn.get("monitor", {}).items()
-                            if k not in {"request", "response"}
+                            if k not in {"request", "response", "calls"}
                         },
                     }
                     for turn in conversation["turns"]

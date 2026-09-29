@@ -22,6 +22,10 @@ func (m *model) dialogChoice() (dialogChoice, bool) {
 		c.toggle = id == "selection_enabled"
 		return c, c.toggle
 	case "loom-policy":
+		if id == "monitor_call_mode" {
+			c.field, c.current, c.values = id, m.monitorCallMode(), []string{"separate", "bundled"}
+			break
+		}
 		if id != "mode" {
 			return c, false
 		}

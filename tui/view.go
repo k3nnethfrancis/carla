@@ -262,6 +262,9 @@ func (m *model) dialogPreviewLines() []string {
 	r := m.dialogRect()
 	lines := strings.Split(ansi.Wrap(safe(d.rows[d.index].preview), r.w-4, ""), "\n")
 	limit := max(1, min(4, r.h-7))
+	if d.kind == "loom-policy-bundle-confirm" {
+		limit = max(1, r.h-7)
+	}
 	if len(lines) > limit {
 		lines = append(lines[:limit-1], "… ENTER to open")
 	}
@@ -301,7 +304,7 @@ func (m *model) renderDialog() string {
 		}
 		for _, text := range m.dialogPreviewLines() {
 			style := dim
-			if d.kind == "setup-error" {
+			if d.kind == "setup-error" || d.kind == "loom-policy-bundle-confirm" {
 				style = m.accent("#A84F39", "#DB937C")
 			}
 			body = append(body, style.Render(line(text, r.w-4)))
@@ -341,12 +344,15 @@ func (m *model) renderDialog() string {
 		if d.choicePicker() {
 			footer = "←→ choose · SPACE / ENTER apply · ESC back"
 		}
+		if d.kind == "loom-policy-bundle-confirm" {
+			footer = "↑↓ choose · ENTER select · ESC back"
+		}
 		if d.kind == "sim-documents" || d.kind == "eval-judges" || d.kind == "eval-add-items" {
 			footer = "SPACE select · CTRL+S save · ESC cancel"
 		}
 		if d.query != "" {
 			footer = "Filter: " + d.query + " · " + footer
-		} else if d.kind != "keys" && d.kind != "delete" && d.kind != "loom-policy-timing" && !strings.HasPrefix(d.kind, "setup-") {
+		} else if d.kind != "keys" && d.kind != "delete" && d.kind != "loom-policy-bundle-confirm" && d.kind != "loom-policy-timing" && !strings.HasPrefix(d.kind, "setup-") {
 			if d.kind != "help" {
 				footer = "Type to filter · " + footer
 			}

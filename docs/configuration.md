@@ -261,6 +261,21 @@ retains the key for later use. Keys are not included in state events, generation
 configs, traces or dataset exports. Saving a key does not make a paid request or
 verify provider authentication; provider errors remain visible when used.
 
+**Behavior calls** defaults to **Separate**: one request per enabled behavior,
+using the same captured text. **Bundled** asks all enabled behaviors in one
+request. Choosing Bundled opens a confirmation warning: it can reduce calls,
+cost and latency, but asking behaviors together can change scores or miss
+behaviors. Switching back to Separate takes effect directly. Each score remains
+an independent yes/no probability in either mode; the scores do not sum to one.
+Missing settings in older workspaces use Separate; explicit Bundled choices are
+retained. Historical traces are unchanged.
+
+Separate calls run sequentially within a check. Traces retain each request,
+response, timing and error. If one behavior fails, the check is marked partial;
+successful behavior scores and their configured actions still apply. A failed
+behavior is never treated as a negative score or a reason to stop. This setting
+covers live monitoring, not named evaluation judge execution.
+
 Checks apply to character replies and document continuations. In `/policy` →
 Monitoring → Heartbeat, toggle after-reply and during-reply checks separately.
 Both default to on, with a 512-output-token interval when monitoring is enabled.

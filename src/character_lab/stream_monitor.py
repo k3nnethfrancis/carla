@@ -120,6 +120,7 @@ class TurnMonitor:
             self.project.save()
             await self.publish()
         except asyncio.CancelledError:
+            record.update(captured.get("monitor", {}))
             record["status"] = "cancelled"
             raise
 

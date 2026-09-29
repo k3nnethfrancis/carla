@@ -499,14 +499,15 @@ async def test_cancel_during_midturn_scan_drains_task(setup, monkeypatch):
             finally:
                 closed.set()
 
-    async def scan(cfg, conversation, turn):
+    async def classify(request, record):
+        record["request"] = request
         started.set()
         try:
             await asyncio.Event().wait()
         finally:
             cancelled.set()
 
-    monkeypatch.setattr(monitor, "scan", scan)
+    monkeypatch.setattr(monitor, "classify", classify)
     task = asyncio.create_task(simulator.generate(project, config, Streaming, emit))
     await asyncio.wait_for(started.wait(), 1)
     task.cancel()
@@ -517,6 +518,10 @@ async def test_cancel_during_midturn_scan_drains_task(setup, monkeypatch):
         run["conversations"][0]["turns"][-1]["monitor_checks"][0]["status"]
         == "cancelled"
     )
+
+    check = run["conversations"][0]["turns"][-1]["monitor_checks"][0]
+    assert check["calls"][0]["status"] == "cancelled"
+    assert check["calls"][0]["request"]["state"]["history"][-1]["text"] == "x"
 
 
 @pytest.mark.asyncio

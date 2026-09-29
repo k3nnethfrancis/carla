@@ -56,7 +56,9 @@ Run `--help` for all options. No request is retried silently.
 
 A **noul** is a separate yes/no judgment returning P(yes). The three behavior
 scores need not sum to one. Bundled mode asks all three questions in one request;
-separate mode asks each in its own request against identical history. The question
+separate mode asks each in its own request against identical history. Carla
+monitoring now defaults to Separate; this runner continues comparing both modes
+by default. The question
 wording matches Carla's monitor, including its latest-message and incomplete-text
 instructions. Gold labels/rationales are never sent to the models.
 

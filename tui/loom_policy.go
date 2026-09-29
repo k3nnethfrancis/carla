@@ -60,6 +60,7 @@ func (m *model) openLoomPolicy() tea.Cmd {
 	)
 	d.rows = append(d.rows,
 		row{id: "behaviors", label: "Behaviors", preview: "Define what to detect and what happens when it is detected."},
+		row{id: "monitor_call_mode", label: "Behavior calls · " + strings.Title(m.monitorCallMode()), preview: "Separate sends one request per behavior. Bundled checks all enabled behaviors in one request."},
 	)
 	if provider == "jev" {
 		d.rows = append(d.rows, row{id: "key", label: "API key · " + m.data.MonitorKeySource, preview: "Replace the saved key. Keys stay outside workspaces and exported traces."})
@@ -123,8 +124,34 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 		return nil
 	}
 	r := d.rows[d.index]
+	if d.kind == "loom-policy-bundle-confirm" {
+		if r.id != "confirm" {
+			return m.closeDialog()
+		}
+		// Return to settings after confirmation; Escape retains the picker.
+		parent := d.parent
+		if parent.kind == "loom-policy-pick" {
+			parent = parent.parent
+		}
+		m.dialog = parent
+		return m.send("simulator.configure", map[string]any{"monitor_call_mode": "bundled"})
+	}
 	if d.kind == "loom-policy-pick" {
 		field := d.args["field"].(string)
+		if field == "monitor_call_mode" {
+			if r.id == m.monitorCallMode() {
+				return m.closeDialog()
+			}
+			if r.id == "bundled" {
+				parent := d
+				if m.dialog != d {
+					parent = d.parent
+				}
+				m.confirmBundledCalls(parent)
+				return nil
+			}
+			return m.saveDialog(d, "simulator.configure", map[string]any{field: r.id})
+		}
 		if field == "monitor_mode" {
 			if r.id == "jev" && m.data.MonitorKeySource == "" {
 				return m.openMonitorKey(d.parent)
@@ -180,6 +207,11 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 			m.dialog.parent = d
 		case "mode":
 			m.policyPicker(d, "", "monitor_mode", []string{"off", "diffusion", "jev"})
+		case "monitor_call_mode":
+			m.policyPicker(d, "", r.id, []string{"separate", "bundled"})
+			if m.monitorCallMode() == "bundled" {
+				m.dialog.index = 1
+			}
 		case "monitor_local_model":
 			m.policyForm(d, "", r.id, m.simString(r.id))
 		case "model":
@@ -250,6 +282,13 @@ func (m *model) policyPicker(parent *dialog, id, field string, values []string) 
 		if field == "monitor_mode" {
 			d.title = "Monitoring"
 			label = monitorLabel(v)
+		}
+		if field == "monitor_call_mode" {
+			d.title = "Behavior calls"
+			preview = "One request per behavior."
+			if v == "bundled" {
+				preview = "All enabled behaviors in one request."
+			}
 		}
 		if field == "decision" {
 			d.title = "Detection rule"
@@ -331,4 +370,19 @@ func monitorLabel(provider string) string {
 	default:
 		return "Off"
 	}
+}
+
+func (m *model) monitorCallMode() string {
+	if m.simString("monitor_call_mode") == "bundled" {
+		return "bundled"
+	}
+	return "separate"
+}
+
+func (m *model) confirmBundledCalls(parent *dialog) {
+	const warning = "Bundled calls may reduce cost and latency, but asking behaviors together can change scores or miss detections. Switch to bundled?"
+	m.dialog = &dialog{kind: "loom-policy-bundle-confirm", title: "Switch to bundled calls?", parent: parent, rows: []row{
+		{id: "cancel", label: "Keep separate", preview: warning},
+		{id: "confirm", label: "Use bundled", preview: warning},
+	}}
 }
