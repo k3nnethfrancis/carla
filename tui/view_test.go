@@ -1273,3 +1273,34 @@ func TestNotesDocumentActions(t *testing.T) {
 		t.Fatal("cancel should return to document pane")
 	}
 }
+
+func TestMouseFocusesNotesActionsWithoutActivating(t *testing.T) {
+	m := fixture()
+	m.width, m.height, m.section = 120, 36, 1
+	m.openNotes(true)
+	r := m.layout().panels[0].box
+	for i := 1; i < 4; i++ {
+		m.notesClick(i, r)
+		if m.selected != i || m.focus != 0 || m.dialog != nil || m.editing != "" {
+			t.Fatalf("click activated row %d", i)
+		}
+	}
+	m.activateNote()
+	if m.dialog == nil || m.dialog.kind != "delete" {
+		t.Fatal("Enter should activate focused delete")
+	}
+}
+func TestMouseFocusesBranchWithoutEntering(t *testing.T) {
+	m := fixture()
+	m.width, m.height, m.section = 120, 36, 1
+	m.reflow()
+	r := m.layout().panels[0].box
+	m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: r.x + 12, Y: r.y + 3})
+	if m.notesOpen || m.focus != 0 || m.editing != "" || m.dialog != nil {
+		t.Fatal("row click entered document")
+	}
+	m.activate()
+	if !m.notesOpen {
+		t.Fatal("Enter should still open document")
+	}
+}

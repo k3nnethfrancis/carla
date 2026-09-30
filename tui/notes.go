@@ -203,7 +203,10 @@ func (m *model) notesClick(y int, r rect) tea.Cmd {
 	if y >= 0 && y < visible && index < len(m.noteRows()) {
 		m.focus = 0
 		m.selected = index
-		return m.activateNote()
+		m.noteScroll = 0
+		m.editor.Blur()
+		m.reflow()
+		return nil
 	}
 	return nil
 }

@@ -563,7 +563,8 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 							m.reflow()
 							return m, nil
 						}
-						return m, m.activate()
+						m.reflow()
+						return m, m.previewTarget()
 					}
 				}
 				m.reflow()
