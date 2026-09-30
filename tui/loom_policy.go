@@ -50,17 +50,15 @@ func (m *model) openLoomPolicy() tea.Cmd {
 	}
 	if provider == "diffusion" {
 		d.rows = append(d.rows,
-			row{id: "monitor_local_model", label: "Model · " + m.simString("monitor_local_model")},
+			row{id: "monitor_local_model", label: "Model alias · " + m.simString("monitor_local_model"), preview: "The request name sent to OpenJev, not a second model. Carla’s managed local server loads DiffusionGemma 26B-A4B (4-bit); openjev-latest routes requests to it."},
 		)
 	} else {
 		d.rows = append(d.rows, row{id: "model", label: "Model · " + m.simString("monitor_model")})
 	}
 	d.rows = append(d.rows,
-		row{id: "timing", label: "Heartbeat · " + m.monitorTimingSummary(), preview: "Shared with document continuations; Visitor messages are not checked."},
-	)
-	d.rows = append(d.rows,
-		row{id: "behaviors", label: "Behaviors", preview: "Define what to detect and what happens when it is detected."},
 		row{id: "monitor_call_mode", label: "Judge call mode · " + strings.Title(m.monitorCallMode()), preview: "Separate sends one request per behavior. Bundled checks all enabled behaviors in one request."},
+		row{id: "timing", label: "Heartbeat · " + m.monitorTimingSummary(), preview: "Shared with document continuations; Visitor messages are not checked."},
+		row{id: "behaviors", label: "Behaviors · " + m.behaviorCounts(), preview: "Enabled behaviors Warn or Stop on detection. Off behaviors are skipped but their settings remain saved."},
 	)
 	if provider == "jev" {
 		d.rows = append(d.rows, row{id: "key", label: "API key · " + m.data.MonitorKeySource, preview: "Replace the saved key. Keys stay outside workspaces and exported traces."})
@@ -385,4 +383,18 @@ func (m *model) confirmBundledCalls(parent *dialog) {
 		{id: "cancel", label: "Keep separate", preview: warning},
 		{id: "confirm", label: "Use bundled", preview: warning},
 	}}
+}
+
+func (m *model) behaviorCounts() string {
+	warn, stop, off := 0, 0, 0
+	for _, behavior := range m.dimensions() {
+		if !behavior.Enabled {
+			off++
+		} else if behavior.Action == "stop" {
+			stop++
+		} else {
+			warn++
+		}
+	}
+	return fmt.Sprintf("%d warn · %d stop · %d off", warn, stop, off)
 }

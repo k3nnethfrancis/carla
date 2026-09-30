@@ -22,7 +22,7 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 	m.width, m.height = 120, 36
 	m.perform("loom-policy")
 	root := m.dialog
-	root.index = 3
+	root.index = 4
 	m.submitDialog()
 	if m.dialog.kind != "loom-policy-behaviors" {
 		t.Fatal("missing behaviors page")
@@ -68,7 +68,7 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 		t.Fatal("model field not focused")
 	}
 	m.closeDialog()
-	m.dialog.index = 3
+	m.dialog.index = 4
 	m.submitDialog()
 	m.dialog.index = len(m.dialog.rows) - 1
 	m.submitDialog()
@@ -144,7 +144,7 @@ func TestMonitorTimingNavigationAndSavedInterval(t *testing.T) {
 	m.data.SimulatorConfig["monitor_interval_tokens"] = float64(768)
 	m.openLoomPolicy()
 	root := m.dialog
-	root.index = 2
+	root.index = 3
 	m.submitDialog()
 	timing := m.dialog
 	if timing.kind != "loom-policy-timing" || timing.parent != root || len(timing.rows) != 3 {
@@ -211,7 +211,7 @@ func TestMonitoringSetupGatesSettingsAndMasksKey(t *testing.T) {
 	}
 	m.data.MonitorKeySource = "environment"
 	m.openLoomPolicy()
-	if len(m.dialog.rows) < 4 || m.dialog.rows[2].id != "timing" {
+	if len(m.dialog.rows) < 4 || m.dialog.rows[2].id != "monitor_call_mode" {
 		t.Fatal("environment key did not unlock settings")
 	}
 }
@@ -275,5 +275,27 @@ func TestLocalModelSavePreservesRejectedDraftUntilAcknowledged(t *testing.T) {
 	m.apply(stateEvent(t, m, req.ID))
 	if m.dialog.kind != "loom-policy" || m.dialogRequest != "" {
 		t.Fatal("successful save did not go back")
+	}
+}
+
+func TestMonitoringLayoutAndBehaviorCounts(t *testing.T) {
+	m := policyFixture()
+	m.data.SimulatorConfig["monitor_mode"] = "diffusion"
+	m.data.SimulatorConfig["monitor_local_model"] = "openjev-latest"
+	m.data.SimulatorConfig["monitor_dimensions"] = []loomDimension{
+		{Enabled: true, Action: "warn"}, {Enabled: true, Action: "warn"},
+		{Enabled: true, Action: "stop"}, {Enabled: false, Action: "stop"},
+	}
+	m.openLoomPolicy()
+	for i, id := range []string{"mode", "monitor_local_model", "monitor_call_mode", "timing", "behaviors"} {
+		if m.dialog.rows[i].id != id {
+			t.Fatalf("row%d: %s", i, m.dialog.rows[i].id)
+		}
+	}
+	if m.dialog.rows[4].label != "Behaviors · 2 warn · 1 stop · 1 off" {
+		t.Fatal(m.dialog.rows[4].label)
+	}
+	if !strings.Contains(m.dialog.rows[1].label, "Model alias") || !strings.Contains(m.dialog.rows[1].preview, "not a second model") {
+		t.Fatal("missing alias explanation")
 	}
 }

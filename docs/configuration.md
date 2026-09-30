@@ -320,3 +320,7 @@ scrolls with the cursor; use arrows, Page Up/Page Down or the mouse wheel to
 navigate. The heading shows the current line and total lines. New judges
 ask for a name first, then open this editor for criteria. Saving preserves the
 complete multiline text, including content outside the visible window.
+
+The local monitoring **Model alias** is the request identifier sent to OpenJev.
+`openjev-latest` routes to DiffusionGemma in Carla’s managed worker; it is not a
+second model. The Behaviors row counts enabled Warn/Stop rules and disabled Off rules.
