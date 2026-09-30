@@ -141,7 +141,7 @@ func (m *model) commandChoices() []action {
 				a.label = "Continue a new branch from kept versions"
 			}
 		case "policy":
-			a.label = "Monitoring, selection and evaluation judges"
+			a.label = "Monitoring, selection and evals"
 		case "eval":
 			a.label = "Run active or named evaluation on selected items"
 		case "evaluations":

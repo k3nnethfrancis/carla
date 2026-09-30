@@ -54,7 +54,7 @@ func (m *model) openPolicy() tea.Cmd {
 	m.dialog = &dialog{kind: "policy", title: "Policy", rows: []row{
 		{id: "monitor", label: "Monitoring", preview: "Monitor document continuations and character replies; warn or explicitly stop. Shared across Branches and Simulator."},
 		{id: "selection", label: "Selection", preview: selectionTriggerHelp},
-		{id: "evaluators", label: "Evaluation judges", preview: evaluationJudgesHelp},
+		{id: "evaluators", label: "Evals", preview: evaluationJudgesHelp},
 	}}
 	return nil
 }

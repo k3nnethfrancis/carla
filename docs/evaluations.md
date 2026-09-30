@@ -68,7 +68,7 @@ evaluation, then run `/eval` or attach it to generation with `--eval`.
 
 1. Open **Evaluate** → **New evaluation** and name it, for example `Voice`.
 2. Open **Configure** (`/config`). Choose reusable judges. If none exist, create
-   one under **Manage evaluation judges** or `/policy` → **Evaluation judges**.
+   one under **Manage evaluation judges** or `/policy` → **Evals**.
    A local judge has criteria and an editable system prompt. A DiffusionGemma or Jev judge uses a
    spec and pass-probability threshold. Instruct judges currently use the configured
    instruct policy-model alias, not an arbitrary independent model per judge.
