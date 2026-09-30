@@ -112,7 +112,10 @@ func (m *model) renderDocument(width int) string {
 		}
 	}
 	text := m.currentText()
-	if text == "" {
+	if text == "" && m.data.Current != nil && m.editing == "" {
+		return lipgloss.Place(width, m.document.Height(), lipgloss.Center, lipgloss.Center, dim.Render("Empty document"))
+	}
+	if text == "" && m.data.Current == nil {
 		return "Start with a seed.\n\nOpen Library, expand a document and select the passages you want to explore.\n\nContinue writes from the end. Branch lets you choose a position in the text."
 	}
 	runes := []rune(text)

@@ -1193,3 +1193,32 @@ func TestBranchIdentifiersCompactOnlyNestedAutomaticNames(t *testing.T) {
 		t.Fatal("anthology needs source context")
 	}
 }
+
+func TestEmptyDocumentPreview(t *testing.T) {
+	for _, size := range [][2]int{{60, 18}, {120, 36}} {
+		m := fixture()
+		m.section = 1
+		m.width, m.height = size[0], size[1]
+		m.data.Current.Text = ""
+		m.data.Current.Origins = nil
+		m.reflow()
+		body := ansi.Strip(m.renderDocument(m.document.Width()))
+		if strings.TrimSpace(body) != "Empty document" {
+			t.Fatalf("empty document rendered %q", body)
+		}
+		rows := strings.Split(body, "\n")
+		middle := (m.document.Height() - 1) / 2
+		if !strings.Contains(rows[middle], "Empty document") && !strings.Contains(rows[min(middle+1, len(rows)-1)], "Empty document") {
+			t.Fatal("empty state not centered")
+		}
+		m.editing = "document"
+		if strings.Contains(m.renderDocument(m.document.Width()), "Empty document") {
+			t.Fatal("placeholder appeared in editor")
+		}
+		m.editing = ""
+		m.data.Current = nil
+		if !strings.Contains(m.renderDocument(m.document.Width()), "Start with a seed") {
+			t.Fatal("missing document lost onboarding")
+		}
+	}
+}
