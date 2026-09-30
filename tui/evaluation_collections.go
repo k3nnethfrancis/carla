@@ -84,7 +84,7 @@ func (m *model) openCollectionConfig() tea.Cmd {
 	if c.ID == m.data.ActiveEvaluation {
 		active = "Active evaluation"
 	}
-	m.dialog = &dialog{kind: "eval-collection-config", title: c.Name, rows: []row{{id: "name", label: "Name · " + c.Name}, {id: "judges", label: fmt.Sprintf("Judges · %d selected", len(c.Judges))}, {id: "definitions", label: "Manage judge configurations"}, {id: "active", label: active}}}
+	m.dialog = &dialog{kind: "eval-collection-config", title: c.Name, rows: []row{{id: "name", label: "Name · " + c.Name}, {id: "judges", label: fmt.Sprintf("Judges · %d selected", len(c.Judges))}, {id: "definitions", label: "Manage evaluation judges"}, {id: "active", label: active}}}
 	return nil
 }
 func (m *model) enterCollection(id string) {

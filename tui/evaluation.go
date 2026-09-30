@@ -53,17 +53,17 @@ func (m *model) evaluator(id string) evaluator {
 func (m *model) openPolicy() tea.Cmd {
 	m.dialog = &dialog{kind: "policy", title: "Policy", rows: []row{
 		{id: "monitor", label: "Monitoring", preview: "Monitor document continuations and character replies; warn or explicitly stop. Shared across Branches and Simulator."},
-		{id: "selection", label: "Selection", preview: "Evaluate alternatives against criteria and choose which to continue."},
-		{id: "evaluators", label: "Judge configurations", preview: "Reusable specs and judge models. Named evaluations and their items live in Evaluate."},
+		{id: "selection", label: "Selection", preview: selectionTriggerHelp},
+		{id: "evaluators", label: "Evaluation judges", preview: evaluationJudgesHelp},
 	}}
 	return nil
 }
 func (m *model) openEvaluators() tea.Cmd {
-	d := &dialog{kind: "eval-definitions", title: "Judge configurations"}
+	d := &dialog{kind: "eval-definitions", title: "Evaluation judges"}
 	for _, e := range m.data.Evaluators {
 		d.rows = append(d.rows, row{id: e.ID, label: e.Name + " · " + judgeLabel(e.Kind), preview: e.Spec})
 	}
-	d.rows = append(d.rows, row{id: "new", label: "+ New judge"})
+	d.rows = append(d.rows, row{id: "new", label: "+ New judge", preview: "Define criteria and a model, then add this judge to a named evaluation in Evaluate > Configure."})
 	m.dialog = d
 	return nil
 }

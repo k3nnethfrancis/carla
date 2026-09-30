@@ -31,10 +31,14 @@ func (m *model) openSelectionConfig() tea.Cmd {
 		label = "Selection · On"
 	}
 	m.dialog = &dialog{kind: "grow-config", title: "Selection policy", rows: []row{
-		{id: "selection_enabled", label: label, preview: "Choose whole alternatives between split loops. Off continues every alternative; one-output loops always continue directly."},
-		{id: "selector", label: "Evaluator model", preview: m.data.PolicyModel},
-		{id: "spec", label: "Selection criteria", preview: m.data.PolicySpec},
-		{id: "prompt", label: "Classifier and routing prompt", preview: m.data.PolicyPrompt},
+		{id: "selection_enabled", label: label, preview: selectionTriggerHelp},
+		{id: "selector", label: "Selection model", preview: "Local instruct model that judges the alternatives.\nCurrent: " + m.data.PolicyModel},
+		{id: "spec", label: "Selection criteria", preview: "What makes a candidate worth continuing.\n" + m.data.PolicySpec},
+		{id: "prompt", label: "Selection prompt", preview: "Instructions and required response format for the selector.\n" + m.data.PolicyPrompt},
 	}}
 	return nil
 }
+
+// Keep the trigger first so compact dialogs show it before any clipped detail.
+const selectionTriggerHelp = "Runs when On + 2+ alternatives + 2+ loops.\nExample: /loom 4 --loops 3\nChoose one per batch; split again from it.\nNone qualify: stop. Other outputs stay saved."
+const evaluationJudgesHelp = "Criteria + model used by named evaluations.\nChoose judges in Evaluate > Configure.\nRun: /eval or /loom --eval \"name\"\nCreating a judge does not run it."
