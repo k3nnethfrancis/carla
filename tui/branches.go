@@ -48,11 +48,7 @@ func (m *model) branchRows() []row {
 			if n.Kept {
 				label = "★ " + label
 			}
-			if n.Status == "empty" {
-				label += " · no new text"
-			} else if n.Status != "complete" {
-				label += " · " + n.Status
-			}
+			label = documentStatusLabel(n, label)
 			check := m.selectionMark(n.ID)
 			if m.section == 2 {
 				if n.Kept {
@@ -103,7 +99,7 @@ func (m *model) branchRows() []row {
 			if all {
 				mark = "✓ "
 			}
-			rows = append(rows, row{id: set.ID, kind: "document-set", depth: depth, label: mark + arrow + label + fmt.Sprintf(" · %d documents", len(set.Members))})
+			rows = append(rows, row{id: set.ID, kind: "document-set", depth: depth, label: mark + arrow + m.documentSetActivity(set.ID) + label + fmt.Sprintf(" · %d documents", len(set.Members))})
 			if m.collapsed[set.ID] {
 				return
 			}
@@ -118,7 +114,7 @@ func (m *model) branchRows() []row {
 					if m.branchSelection["set:"+path] {
 						mark = "✓ "
 					}
-					rows = append(rows, row{id: path, kind: "document-set", depth: level, label: mark + arrow + "Set"})
+					rows = append(rows, row{id: path, kind: "document-set", depth: level, label: mark + arrow + m.documentSetActivity(path) + "Set"})
 					if m.collapsed[path] {
 						return
 					}
@@ -129,7 +125,7 @@ func (m *model) branchRows() []row {
 				}
 				for _, n := range m.data.Nodes {
 					if n.ID == scope.Node {
-						rows = append(rows, row{id: n.ID, kind: "node", label: m.selectionMark(n.ID) + documentLabel(n), depth: level, preview: n.Preview})
+						rows = append(rows, row{id: n.ID, kind: "node", label: m.selectionMark(n.ID) + documentStatusLabel(n, documentLabel(n)), depth: level, preview: n.Preview})
 						walk(n.ID, level+1)
 						break
 					}
@@ -326,4 +322,39 @@ func (m *model) documentScope(id string) actionScope {
 		return result
 	}
 	return actionScope{Kind: "set"}
+}
+
+func documentStatusLabel(n node, label string) string {
+	switch n.Status {
+	case "generating", "running":
+		label = "▶ generating · " + label
+	case "queued":
+		label = "◷ queued · " + label
+	case "", "complete":
+	case "empty":
+		label = "no new text · " + label
+	default:
+		label = strings.ReplaceAll(n.Status, "_", " ") + " · " + label
+	}
+	if len(n.Monitor.Detections) > 0 {
+		label = "! " + label
+	}
+	if n.Monitor.Status == "checking" {
+		label = "checking · " + label
+	}
+	return label
+}
+func (m *model) documentSetActivity(id string) string {
+	active := 0
+	for _, member := range m.documentSetMembers(id) {
+		for _, n := range m.data.Nodes {
+			if n.ID == member && (n.Status == "generating" || n.Status == "running" || n.Status == "queued") {
+				active++
+			}
+		}
+	}
+	if active > 0 {
+		return fmt.Sprintf("▶ %d active · ", active)
+	}
+	return ""
 }

@@ -52,7 +52,7 @@ func (m *model) evaluator(id string) evaluator {
 }
 func (m *model) openPolicy() tea.Cmd {
 	m.dialog = &dialog{kind: "policy", title: "Policy", rows: []row{
-		{id: "monitor", label: "Monitoring", preview: "Evaluate during generation; warn or explicitly stop."},
+		{id: "monitor", label: "Monitoring", preview: "Monitor document continuations and character replies; warn or explicitly stop. Shared across Branches and Simulator."},
 		{id: "selection", label: "Selection", preview: "Evaluate alternatives against criteria and choose which to continue."},
 		{id: "evaluators", label: "Judge configurations", preview: "Reusable specs and judge models. Named evaluations and their items live in Evaluate."},
 	}}

@@ -111,3 +111,16 @@ While editing, Backspace and Delete edit text. Save with Ctrl+Enter, Ctrl+S, or
 `/save`; Command+Enter also saves when the terminal reports its modifier (Super).
 Some terminals intercept Command+Enter or send plain Enter, which remains a
 newline. Escape cancels the draft. Shortcuts can be changed in keybindings.
+
+### Document generation activity and monitoring
+
+Document continuations use the shared monitoring configuration under `/policy` →
+Monitoring, including heartbeat, judge call mode, behavior specs and warn/stop
+rules. Selection policies remain separately enabled for choosing alternatives.
+The monitor labels source/continuation text without changing the base-model prompt.
+
+Branches show generation status before the name, including documents inside sets.
+Set rows summarize active members, and the app header counts active documents even
+when their rows are collapsed. Live document-monitor events update policy scores
+in the preview footer and Loom grid; `!` marks detections, which remain visible
+on completed documents. Saved monitor summaries restore when reopening a workspace.

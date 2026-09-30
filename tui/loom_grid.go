@@ -38,7 +38,18 @@ func conversationStatus(c simulationConversation) string {
 }
 func (m *model) gridItems() []loomTile {
 	if m.section == 1 {
-		return m.loomTiles
+		items := append([]loomTile(nil), m.loomTiles...)
+		for i := range items {
+			for _, n := range m.data.Nodes {
+				if n.ID == items[i].ID {
+					items[i].Title = documentStatusLabel(n, items[i].Title)
+					if info := monitorSummary(n.Monitor); info != "" {
+						items[i].Text += "\n\n" + info
+					}
+				}
+			}
+		}
+		return items
 	}
 	if m.section != 3 || m.simulation == nil {
 		return nil

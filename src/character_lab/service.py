@@ -148,6 +148,19 @@ class Session:
                 | {
                     "status": generation_status(n),
                     "preview": n["text"][len(n.get("prompt", "")) :][:100],
+                    "monitor": {
+                        k: v
+                        for k, v in n.get("monitor", {}).items()
+                        if k
+                        in {
+                            "status",
+                            "scores",
+                            "detections",
+                            "error",
+                            "phase",
+                            "tokens",
+                        }
+                    },
                     "title": display_title(n),
                     "model": n.get("trace", {}).get("model", {}).get("name", ""),
                 }

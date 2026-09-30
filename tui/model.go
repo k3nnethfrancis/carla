@@ -23,6 +23,7 @@ type origin struct {
 	Kind       string
 }
 type node struct {
+	Monitor                                                      monitorResult
 	DocumentID                                                   string `json:"document_id"`
 	RevisionOf                                                   string `json:"revision_of"`
 	ChangeOffset                                                 int    `json:"change_offset"`
@@ -575,6 +576,23 @@ func (m *model) apply(e event) tea.Cmd {
 		return m.previewTarget()
 	case "setup":
 		return m.setupEvent(e.Data)
+	case "document.monitor":
+		var update struct {
+			Node    string
+			Monitor monitorResult
+		}
+		if err := json.Unmarshal(e.Data, &update); err != nil {
+			return nil
+		}
+		for i := range m.data.Nodes {
+			if m.data.Nodes[i].ID == update.Node {
+				m.data.Nodes[i].Monitor = update.Monitor
+			}
+		}
+		if m.currentID() == update.Node {
+			m.data.Current.Monitor = update.Monitor
+		}
+		m.reflow()
 	case "policy.detection":
 		return m.detectPolicy(e.Data)
 	case "loom.start":

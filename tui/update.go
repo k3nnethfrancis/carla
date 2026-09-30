@@ -713,6 +713,7 @@ func (m *model) nodeTitle() string {
 	if n.Kept {
 		title = "★ " + title
 	}
+	title = documentStatusLabel(*n, title)
 	if n.Model != "" {
 		title += " · " + n.Model
 	}

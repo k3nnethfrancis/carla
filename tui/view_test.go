@@ -1343,3 +1343,28 @@ func TestEditorCompletionAndBackspace(t *testing.T) {
 		t.Fatal("Backspace did not delete text", m.editor.Value())
 	}
 }
+
+func TestDocumentMonitorUpdatesAndActivity(t *testing.T) {
+	m := fixture()
+	m.section = 1
+	m.width, m.height = 120, 36
+	m.data.Nodes[0].Status = "generating"
+	m.data.Current.Status = "generating"
+	raw, _ := json.Marshal(map[string]any{"node": m.currentID(), "monitor": map[string]any{"status": "complete", "scores": map[string]float64{"looping": 0.9}, "detections": []map[string]any{{"id": "looping", "action": "warn"}}}})
+	m.apply(event{Type: "document.monitor", Data: raw})
+	if len(m.data.Current.Monitor.Detections) != 1 || len(m.data.Nodes[0].Monitor.Detections) != 1 {
+		t.Fatal("document monitor event discarded")
+	}
+	label := m.branchRows()[0].label
+	if !strings.Contains(label, "▶ generating") || !strings.Contains(label, "!") {
+		t.Fatal(label)
+	}
+	frame := ansi.Strip(m.View().Content)
+	if !strings.Contains(frame, "1 active docs") || !strings.Contains(frame, "looping 90%") {
+		t.Fatal(frame)
+	}
+	m.data.Nodes[0].Status = "complete"
+	if strings.Contains(m.branchRows()[0].label, "generating") {
+		t.Fatal("completed document still active")
+	}
+}

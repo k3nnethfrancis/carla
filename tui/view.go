@@ -234,6 +234,9 @@ func (m *model) navigation(r rect) string {
 		if i == mIndex {
 			label = selectedStyle.Render(label)
 		}
+		if item.kind == "node" {
+			label = m.pulseLabel(conversationKey(item.id, 0), label)
+		}
 		if item.kind == "conversation" && strings.Contains(item.label, "! ") {
 			label = m.pulseLabel(item.id, label)
 		}
@@ -465,6 +468,11 @@ func (m *model) View() tea.View {
 				}
 			}
 			body = m.document.View() + "\n" + "Source · " + m.aiStyle().Render("AI") + " · " + m.humanStyle().Render("Human edits")
+			if (m.section == 1 || m.section == 2) && m.data.Current != nil {
+				if info := monitorSummary(m.data.Current.Monitor); info != "" {
+					body = m.document.View() + "\n" + dim.Render(safe(info))
+				}
+			}
 			if m.section == 3 || m.section == 4 {
 				body = m.document.View()
 			}
@@ -524,6 +532,15 @@ func (m *model) View() tea.View {
 		modelName = fmt.Sprintf("%d collections · %d items · %d training", len(m.data.EvaluationSets), items, training)
 	}
 
+	activeDocuments := 0
+	for _, n := range m.data.Nodes {
+		if n.Status == "generating" || n.Status == "running" || n.Status == "queued" {
+			activeDocuments++
+		}
+	}
+	if activeDocuments > 0 {
+		heading += fmt.Sprintf(" · ▶ %d active docs", activeDocuments)
+	}
 	header := line(bold.Render(heading), max(20, m.width/2)) + dim.Render(line(safe(modelName), max(1, m.width-2-max(20, m.width/2))))
 	lines := []string{"", " " + header, m.sectionBar(), lipgloss.NewStyle().PaddingLeft(1).Render(lipgloss.JoinHorizontal(lipgloss.Top, joinPanels(parts)...)), " " + dim.Render(line(m.targetLabel(), m.width-2))}
 	if m.section == 0 && m.editing == "" {
