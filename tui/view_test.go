@@ -1258,20 +1258,42 @@ func TestNotesDocumentActions(t *testing.T) {
 	}
 }
 
-func TestMouseFocusesNotesActionsWithoutActivating(t *testing.T) {
-	m := fixture()
-	m.width, m.height, m.section = 120, 36, 1
-	m.openNotes(true)
-	r := m.layout().panels[0].box
-	for i := 1; i < 3; i++ {
-		m.notesClick(i, r)
-		if m.selected != i || m.focus != 0 || m.dialog != nil || m.editing != "" {
-			t.Fatalf("click activated row %d", i)
+func TestMouseActivatesDocumentButtons(t *testing.T) {
+	for _, width := range []int{60, 120} {
+		for index := 0; index < 3; index++ {
+			m := fixture()
+			m.width, m.height, m.section = width, 36, 1
+			m.openNotes(true)
+			r := m.layout().panels[0].box
+			m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: r.x + 4, Y: r.y + 3 + index})
+			switch index {
+			case 0:
+				if m.notesOpen || m.section != 1 {
+					t.Fatal("Back button did not return")
+				}
+			case 1:
+				if m.dialog == nil || m.dialog.kind != "note-new" {
+					t.Fatal("New note button did not open")
+				}
+			case 2:
+				if m.editing != "document" || m.focus != 1 {
+					t.Fatal("Edit button did not enter editor")
+				}
+			}
 		}
 	}
+	m := fixture()
+	m.width, m.height, m.section = 120, 36, 1
+	m.data.Annotations = []annotation{{ID: "note", Node: m.currentID(), Note: "Existing note"}}
+	m.openNotes(true)
+	r := m.layout().panels[0].box
+	m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: r.x + 4, Y: r.y + 6})
+	if m.selected != 3 || m.dialog != nil {
+		t.Fatal("saved note click should only focus")
+	}
 	m.activateNote()
-	if m.editing != "document" {
-		t.Fatal("Enter should activate focused edit")
+	if m.dialog == nil || m.dialog.kind != "note-edit" {
+		t.Fatal("Enter should open saved note")
 	}
 }
 func TestMouseFocusesBranchWithoutEntering(t *testing.T) {

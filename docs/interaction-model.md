@@ -104,7 +104,8 @@ keyboard actions and the command palette. Stopping retains saved partial work.
 The preview label identifies the **focused** item. Space checks items into an
 explicit selection; the pane shows the selected count. Enter with checked
 branches opens their actions, including deletion with confirmation. Single mouse
-clicks focus list rows; Enter opens or activates them. Document notes offer New
+clicks focus document and saved-note rows; Enter opens them. Action rows such as
+Back to Branches, New note and Edit document activate with either a click or Enter. Document notes offer New
 note and Edit document; deletion belongs to the selected-item actions.
 
 While editing, Backspace and Delete edit text. Save with Ctrl+Enter, Ctrl+S, or

@@ -199,6 +199,11 @@ func (m *model) notesClick(y int, r rect) tea.Cmd {
 		m.noteScroll = 0
 		m.editor.Blur()
 		m.reflow()
+		// Action rows are buttons; saved notes remain focus-first list items.
+		switch m.noteRows()[index].kind {
+		case "note-back", "note-new", "document-edit":
+			return m.activateNote()
+		}
 		return nil
 	}
 	return nil
