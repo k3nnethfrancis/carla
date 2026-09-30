@@ -96,7 +96,7 @@ func (m *model) targetLabel() string {
 	if r.id == "" {
 		return "No item selected"
 	}
-	return "Selected · " + strings.TrimSpace(strings.TrimLeft(r.label, "▾▸★ "))
+	return "Focused · " + strings.TrimSpace(strings.TrimLeft(r.label, "▾▸★ "))
 }
 
 // Opening the highlighted branch keeps the preview and command target aligned.

@@ -11,7 +11,7 @@ type action struct{ id, label, key string }
 
 var allActions = []action{
 	{"continue", "Continue", "ctrl+r"}, {"generate", "Generate (alias for continue)", ""}, {"branch", "Branch current version", "ctrl+b"}, {"loom", "Generate alternatives", ""},
-	{"add", "Add to seeds", ""}, {"remove", "Remove from collection", "delete"},
+	{"add", "Add to seeds", ""}, {"remove", "Remove from collection", ""},
 	{"delete", "Delete selected branches", ""}, {"keep", "Keep branch", "k"}, {"grow", "Grow", "g"},
 	{"settings", "Settings", "ctrl+t"}, {"models", "Model", "m"},
 	{"workspaces", "Workspace", "ctrl+w"}, {"edit", "Edit document", "e"},
@@ -311,7 +311,7 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.previewTarget()
 		}
 
-		if m.editing != "" && m.boundAction(raw, "editor") == "save" {
+		if m.editing != "" && m.saveKey(msg) {
 			return m, m.saveEditor()
 		}
 		if m.focus == 3 {
@@ -483,11 +483,6 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 						}
 					}
 				}
-			}
-		}
-		for i, r := range m.selectionRects() {
-			if r.contains(msg.X, msg.Y) {
-				return m, m.selectionAction([]string{"clear", m.collectionAction(), "delete"}[i])
 			}
 		}
 		choices := m.commandChoices()

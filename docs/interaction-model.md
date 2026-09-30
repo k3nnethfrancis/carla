@@ -98,3 +98,16 @@ Go resolves focus and explicit selection into a structured scope. Python validat
 that scope, freezes generation inputs, owns revisions and group provenance, and
 schedules leaves with bounded concurrency. The same command handler serves
 keyboard actions and the command palette. Stopping retains saved partial work.
+
+### Document browsing and editing
+
+The preview label identifies the **focused** item. Space checks items into an
+explicit selection; the pane shows the selected count. Enter with checked
+branches opens their actions, including deletion with confirmation. Single mouse
+clicks focus list rows; Enter opens or activates them. Document notes offer New
+note and Edit document; deletion belongs to the selected-item actions.
+
+While editing, Backspace and Delete edit text. Save with Ctrl+Enter, Ctrl+S, or
+`/save`; Command+Enter also saves when the terminal reports its modifier (Super).
+Some terminals intercept Command+Enter or send plain Enter, which remains a
+newline. Escape cancels the draft. Shortcuts can be changed in keybindings.

@@ -529,9 +529,6 @@ func (m *model) View() tea.View {
 	if m.section == 0 && m.editing == "" {
 		lines[len(lines)-1] = " " + dim.Render(line(m.seedSummary(), m.width-2))
 	}
-	if m.selectionVisible() {
-		lines[len(lines)-1] = m.selectionBar()
-	}
 	lines = append(lines, m.commandView())
 	status := m.status
 	if m.data.Busy && m.backgroundStatus != "" && !strings.HasPrefix(status, "Error:") {
@@ -541,7 +538,7 @@ func (m *model) View() tea.View {
 		}
 	}
 	if m.editing != "" {
-		status = "Editing · " + m.keyLabel("save") + " save · " + m.keyLabel("nav.back") + " cancel"
+		status = "Editing · " + m.keyLabel("save") + " / " + m.keyLabel("save.alt") + " save · " + m.keyLabel("nav.back") + " cancel"
 		if m.editing == "document" {
 			status += " · /save · /cancel"
 		}

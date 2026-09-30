@@ -16,7 +16,7 @@ func bindingCatalog() []binding {
 	out = append(out,
 		binding{"commands", "Open command list", "/", "panels"},
 		binding{"commands.alt", "Open commands (alternate)", "ctrl+k", "panels"},
-		binding{"remove.alt", "Remove (Backspace)", "backspace", "panels"},
+
 		binding{"keep.alt", "Keep branch (alternate)", "", "panels"},
 		binding{"select", "Select / deselect item", "space", "panels"},
 		binding{"find", "Find passage", "ctrl+f", "panels"},
@@ -26,6 +26,8 @@ func bindingCatalog() []binding {
 		binding{"restart", "Restart Carla", "", "panels"},
 		binding{"quit", "Exit Carla (/quit or /exit)", "ctrl+q", "global"},
 		binding{"save", "Save draft", "ctrl+enter", "editor"},
+		binding{"save.alt", "Save draft (alternate)", "ctrl+s", "editor"},
+		binding{"save.cmd", "Save draft (Command)", "super+enter", "editor"},
 		binding{"discard", "Discard draft", "", "editor"},
 		binding{"edit.branch", "Branch current draft", "ctrl+b", "editor"},
 		binding{"edit.review", "Review selection", "ctrl+u", "editor"},
@@ -59,7 +61,7 @@ func (m *model) keyLabel(id string) string {
 	if key == "" {
 		return "—"
 	}
-	return strings.ToUpper(key)
+	return strings.ReplaceAll(strings.ToUpper(key), "SUPER+", "CMD+")
 }
 func (m *model) navigationKey(raw string) string {
 	for _, b := range bindingCatalog() {
@@ -202,4 +204,11 @@ func navigationMessage(key string, original tea.KeyPressMsg) tea.KeyPressMsg {
 		return tea.KeyPressMsg{}
 	}
 	return original
+}
+
+// Terminals supporting enhanced keys report macOS Command as Super.
+// Plain Enter remains a newline; Ctrl+S works when modified Enter is unavailable.
+func (m *model) saveKey(msg tea.KeyPressMsg) bool {
+	action := m.boundAction(msg.String(), "editor")
+	return action == "save" || action == "save.alt" || action == "save.cmd"
 }

@@ -9,8 +9,7 @@ import (
 
 func (m *model) noteRows() []row {
 	rows := []row{{id: "back", kind: "note-back", label: "← Branches"}, {id: "new", kind: "note-new", label: "+ New note"},
-		{id: "edit-document", kind: "document-edit", label: "Edit document", preview: "Edit this document. Save commits a new version; Escape cancels."},
-		{id: "delete-document", kind: "document-delete", label: "Delete document…", preview: "Review this document and its descendants before deleting."}}
+		{id: "edit-document", kind: "document-edit", label: "Edit document", preview: "Edit this document. Save commits a new version; Escape cancels."}}
 	for _, a := range m.data.Annotations {
 		if a.Node != m.currentID() {
 			continue
@@ -80,12 +79,6 @@ func (m *model) activateNote() tea.Cmd {
 		return m.backFromNotes()
 	case "document-edit":
 		return m.editDocumentWithNotes()
-	case "document-delete":
-		if m.editing != "" {
-			m.status = "Save or cancel your edit before deleting this document"
-			return nil
-		}
-		return m.selectionAction("delete")
 	case "note-new":
 		if m.editing == "document" {
 			m.status = "Use /save before attaching a note to these edits"
@@ -150,7 +143,7 @@ func moveTextCursor(area *textarea.Model, offset int) {
 }
 func (m *model) notesKey(msg tea.KeyPressMsg) tea.Cmd {
 	key := m.navigationKey(msg.String())
-	if m.boundAction(msg.String(), "editor") == "save" && m.editing == "document" {
+	if m.saveKey(msg) && m.editing == "document" {
 		return m.saveEditor()
 	}
 	switch key {

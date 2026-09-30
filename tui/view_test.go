@@ -506,14 +506,10 @@ func TestBranchSelectionActions(t *testing.T) {
 	for _, size := range [][2]int{{60, 18}, {80, 24}} {
 		m.width, m.height = size[0], size[1]
 		m.reflow()
-		if !strings.Contains(ansi.Strip(m.View().Content), "[ Delete… ]") {
-			t.Fatal("actions not visible")
+		if strings.Contains(ansi.Strip(m.View().Content), "[ Delete… ]") {
+			t.Fatal("selection strip should not appear")
 		}
-		for _, r := range m.selectionRects() {
-			if r.x+r.w > m.width {
-				t.Fatal("button clipped")
-			}
-		}
+
 	}
 }
 
@@ -1059,10 +1055,10 @@ func TestDocumentNotesNavigation(t *testing.T) {
 		t.Fatal("opening kept document did not open notes and editor")
 	}
 	rows := m.rows()
-	if len(rows) != 5 || rows[0].label != "← Branches" || rows[1].label != "+ New note" {
+	if len(rows) != 4 || rows[0].label != "← Branches" || rows[1].label != "+ New note" {
 		t.Fatal(rows)
 	}
-	m.selected = 4
+	m.selected = 3
 	m.activateNote()
 	if m.cursorOffset() != 50 {
 		t.Fatal("note anchor not revealed", m.cursorOffset())
@@ -1121,7 +1117,7 @@ func TestExistingNoteSaveUpdatesInPlace(t *testing.T) {
 	m.width, m.height, m.section = 120, 36, 1
 	m.data.Annotations = []annotation{{ID: "note-1", Node: m.currentID(), Note: "Before", Start: 3, End: 3}}
 	m.openNotes(true)
-	m.selected = 4
+	m.selected = 3
 	m.activateNote()
 	m.dialog.fields[0].input.SetValue("After")
 	cmd := m.submitDialog()
@@ -1246,31 +1242,16 @@ func TestNotesDocumentActions(t *testing.T) {
 	m := fixture()
 	m.section = 1
 	m.width, m.height = 120, 36
-	m.branchSelection = map[string]bool{"unrelated": true}
 	m.openNotes(true)
 	m.selected = 2
 	m.activateNote()
 	if m.editing != "document" || m.focus != 1 {
-		t.Fatal("edit document did not open draft")
+		t.Fatal("missing document editor")
 	}
-	m.selected = 3
-	m.activateNote()
-	if m.dialog != nil {
-		t.Fatal("delete must not discard draft")
-	}
-	m.cancelEdit()
-	m.selected = 3
-	m.activateNote()
-	if m.dialog == nil || m.dialog.kind != "delete" {
-		t.Fatal("missing delete confirmation")
-	}
-	ids := m.dialog.args["nodes"].([]string)
-	if len(ids) != 1 || ids[0] != m.currentID() {
-		t.Fatalf("wrong delete scope: %v", ids)
-	}
-	m.submitDialog()
-	if m.dialog != nil || !m.notesOpen {
-		t.Fatal("cancel should return to document pane")
+	for _, r := range m.noteRows() {
+		if r.kind == "document-delete" {
+			t.Fatal("delete belongs in selection actions")
+		}
 	}
 }
 
@@ -1279,15 +1260,15 @@ func TestMouseFocusesNotesActionsWithoutActivating(t *testing.T) {
 	m.width, m.height, m.section = 120, 36, 1
 	m.openNotes(true)
 	r := m.layout().panels[0].box
-	for i := 1; i < 4; i++ {
+	for i := 1; i < 3; i++ {
 		m.notesClick(i, r)
 		if m.selected != i || m.focus != 0 || m.dialog != nil || m.editing != "" {
 			t.Fatalf("click activated row %d", i)
 		}
 	}
 	m.activateNote()
-	if m.dialog == nil || m.dialog.kind != "delete" {
-		t.Fatal("Enter should activate focused delete")
+	if m.editing != "document" {
+		t.Fatal("Enter should activate focused edit")
 	}
 }
 func TestMouseFocusesBranchWithoutEntering(t *testing.T) {
@@ -1336,5 +1317,26 @@ func TestRapidDocumentPreviewCatchesLatestSelection(t *testing.T) {
 	req := captureCommand(t, m, func() tea.Cmd { return m.apply(event{Type: "state", Data: raw}) })
 	if req.Command != "node.open" || string(req.Args["node"]) != `"second"` {
 		t.Fatalf("wrong preview: %#v", req)
+	}
+}
+
+func TestEditorCompletionAndBackspace(t *testing.T) {
+	m := fixture()
+	m.section = 1
+	m.width, m.height = 120, 36
+	for _, key := range []tea.KeyPressMsg{{Code: tea.KeyEnter, Mod: tea.ModSuper}, {Code: tea.KeyEnter, Mod: tea.ModCtrl}, {Code: 's', Mod: tea.ModCtrl}} {
+		if !m.saveKey(key) {
+			t.Fatalf("save key not recognized: %s", key.String())
+		}
+	}
+	if m.saveKey(tea.KeyPressMsg{Code: tea.KeyEnter}) {
+		t.Fatal("plain Enter must remain newline")
+	}
+	m.editDocumentWithNotes()
+	m.editor.SetValue("AB")
+	m.editor.CursorEnd()
+	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	if m.editor.Value() != "A" || m.dialog != nil {
+		t.Fatal("Backspace did not delete text", m.editor.Value())
 	}
 }
