@@ -119,7 +119,7 @@ newline. Escape cancels the draft. Shortcuts can be changed in keybindings.
 ### Document generation activity and monitoring
 
 Document continuations use the shared monitoring configuration under `/policy` →
-Monitoring, including heartbeat, judge call mode, behavior specs and warn/stop
+Monitoring, including heartbeat, call mode, behavior specs and warn/stop
 rules. Selection policies remain separately enabled for choosing alternatives.
 The monitor labels source/continuation text without changing the base-model prompt.
 

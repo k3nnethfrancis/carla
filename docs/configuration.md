@@ -261,7 +261,7 @@ retains the key for later use. Keys are not included in state events, generation
 configs, traces or dataset exports. Saving a key does not make a paid request or
 verify provider authentication; provider errors remain visible when used.
 
-**Judge call mode** defaults to **Separate**: one request per enabled behavior,
+**Call mode** defaults to **Separate**: one request per enabled behavior,
 using the same captured text. **Bundled** asks all enabled behaviors in one
 request. Choosing Bundled opens a confirmation warning: it can reduce calls,
 cost and latency, but asking behaviors together can change scores or miss

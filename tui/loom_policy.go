@@ -53,11 +53,11 @@ func (m *model) openLoomPolicy() tea.Cmd {
 			row{id: "monitor_local_model", label: "Model alias · " + m.simString("monitor_local_model"), preview: "The request name sent to OpenJev, not a second model. Carla’s managed local server loads DiffusionGemma 26B-A4B (4-bit); openjev-latest routes requests to it."},
 		)
 	} else {
-		d.rows = append(d.rows, row{id: "model", label: "Model · " + m.simString("monitor_model")})
+		d.rows = append(d.rows, row{id: "model", label: "Model · " + m.simString("monitor_model"), preview: "The OpenRouter model used to classify the enabled behaviors."})
 	}
 	d.rows = append(d.rows,
-		row{id: "monitor_call_mode", label: "Judge call mode · " + strings.Title(m.monitorCallMode()), preview: "Separate sends one request per behavior. Bundled checks all enabled behaviors in one request."},
-		row{id: "timing", label: "Heartbeat · " + m.monitorTimingSummary(), preview: "Shared with document continuations; Visitor messages are not checked."},
+		row{id: "monitor_call_mode", label: "Call mode · " + strings.Title(m.monitorCallMode()), preview: "Separate sends one request per behavior. Bundled checks all enabled behaviors in one request."},
+		row{id: "timing", label: "Heartbeat · " + m.monitorTimingSummary(), preview: "Choose whether to check streaming output, completed replies, or both. Also applies to document continuations; Visitor messages are not checked."},
 		row{id: "behaviors", label: "Behaviors · " + m.behaviorCounts(), preview: "Enabled behaviors Warn or Stop on detection. Off behaviors are skipped but their settings remain saved."},
 	)
 	if provider == "jev" {
@@ -74,21 +74,21 @@ func (m *model) openDimension(id string) tea.Cmd {
 	}
 	d := &dialog{kind: "loom-policy-dimension", title: item.Name, args: map[string]any{"id": id}, rows: []row{
 		{id: "enabled", label: "Enabled · " + map[bool]string{true: "On", false: "Off"}[item.Enabled], preview: "Off skips this behavior entirely; its detection and action settings remain saved."},
-		{id: "name", label: "Name · " + item.Name}, {id: "spec", label: "Behavior spec", preview: item.Spec},
+		{id: "name", label: "Name · " + item.Name, preview: "The behavior label shown in policy results and warnings."}, {id: "spec", label: "Behavior spec", preview: "Defines what the judge should detect. " + item.Spec},
 		{id: "action", label: "Action · " + item.Action, preview: "Warn highlights a detection. Stop interrupts this conversation, including an in-progress reply."},
 		{id: "decision", label: "Detection rule · " + decision, preview: "Determines when the behavior counts as detected. Most likely: estimated probability > 50%. Threshold: probability ≥ your cutoff. Action then decides Warn or Stop; probabilities are not calibrated confidence."},
 	}}
 	if item.Decision == "threshold" {
-		d.rows = append(d.rows, row{id: "threshold", label: fmt.Sprintf("Threshold · %.0f%%", item.Threshold*100)})
+		d.rows = append(d.rows, row{id: "threshold", label: fmt.Sprintf("Threshold · %.0f%%", item.Threshold*100), preview: "Minimum estimated probability that triggers this behavior’s action."})
 	}
 	if item.Action == "warn" {
-		d.rows = append(d.rows, row{id: "color", label: "Warning color · " + item.Color})
+		d.rows = append(d.rows, row{id: "color", label: "Warning color · " + item.Color, preview: "The highlight color used when this behavior is detected."})
 	}
 	if id == "draft" {
 		d.title = "New behavior"
 		d.rows = append(d.rows, row{id: "create", label: "Create behavior", preview: "Save the name, full spec and all settings shown here."})
 	} else if !item.builtin() {
-		d.rows = append(d.rows, row{id: "delete", label: "Delete behavior"})
+		d.rows = append(d.rows, row{id: "delete", label: "Delete behavior", preview: "Remove this custom behavior from the monitoring policy. Confirmation is required."})
 	}
 	m.dialog = d
 	return nil
@@ -282,7 +282,7 @@ func (m *model) policyPicker(parent *dialog, id, field string, values []string) 
 			label = monitorLabel(v)
 		}
 		if field == "monitor_call_mode" {
-			d.title = "Judge call mode"
+			d.title = "Call mode"
 			preview = "One request per behavior."
 			if v == "bundled" {
 				preview = "All enabled behaviors in one request."
