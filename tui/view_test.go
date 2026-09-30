@@ -1059,10 +1059,10 @@ func TestDocumentNotesNavigation(t *testing.T) {
 		t.Fatal("opening kept document did not open notes and editor")
 	}
 	rows := m.rows()
-	if len(rows) != 3 || rows[0].label != "← Branches" || rows[1].label != "+ New note" {
+	if len(rows) != 5 || rows[0].label != "← Branches" || rows[1].label != "+ New note" {
 		t.Fatal(rows)
 	}
-	m.selected = 2
+	m.selected = 4
 	m.activateNote()
 	if m.cursorOffset() != 50 {
 		t.Fatal("note anchor not revealed", m.cursorOffset())
@@ -1121,7 +1121,7 @@ func TestExistingNoteSaveUpdatesInPlace(t *testing.T) {
 	m.width, m.height, m.section = 120, 36, 1
 	m.data.Annotations = []annotation{{ID: "note-1", Node: m.currentID(), Note: "Before", Start: 3, End: 3}}
 	m.openNotes(true)
-	m.selected = 2
+	m.selected = 4
 	m.activateNote()
 	m.dialog.fields[0].input.SetValue("After")
 	cmd := m.submitDialog()
@@ -1239,5 +1239,37 @@ func TestNavigationFooterFitsNarrowPane(t *testing.T) {
 		if len(strings.Split(body, "\n")) > 14 {
 			t.Fatal("footer exceeds panel body")
 		}
+	}
+}
+
+func TestNotesDocumentActions(t *testing.T) {
+	m := fixture()
+	m.section = 1
+	m.width, m.height = 120, 36
+	m.branchSelection = map[string]bool{"unrelated": true}
+	m.openNotes(true)
+	m.selected = 2
+	m.activateNote()
+	if m.editing != "document" || m.focus != 1 {
+		t.Fatal("edit document did not open draft")
+	}
+	m.selected = 3
+	m.activateNote()
+	if m.dialog != nil {
+		t.Fatal("delete must not discard draft")
+	}
+	m.cancelEdit()
+	m.selected = 3
+	m.activateNote()
+	if m.dialog == nil || m.dialog.kind != "delete" {
+		t.Fatal("missing delete confirmation")
+	}
+	ids := m.dialog.args["nodes"].([]string)
+	if len(ids) != 1 || ids[0] != m.currentID() {
+		t.Fatalf("wrong delete scope: %v", ids)
+	}
+	m.submitDialog()
+	if m.dialog != nil || !m.notesOpen {
+		t.Fatal("cancel should return to document pane")
 	}
 }
