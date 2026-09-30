@@ -83,8 +83,8 @@ this operation. `--eval` judges generated versions without changing prompts.
 
 `/add` imports sources or adds exact versions to the current collection.
 `/remove` removes membership or, in Branches, confirms deletion of documents and
-affected descendants. Delete is its default panel binding. In text editors Delete
-edits text; saved custom bindings remain respected. `/eval` judges individual saved
+affected descendants. Use Space then Enter to open selected-item actions. In text
+editors Delete edits text; saved custom bindings remain respected. `/eval` judges individual saved
 items; selection policies can instead compare complete alternative structures.
 `/export` freezes selected items or the collection into a provenance-bearing bundle.
 
@@ -140,3 +140,16 @@ Document IDs, source attribution, contents and custom titles are unchanged.
 Older automatic labels are retained as `legacy_label` when migrated on normal
 workspace save. Historical groups without a recorded shared invocation remain
 separate; Carla does not infer a common Loom from timestamps.
+
+### Branch tree width
+
+Expanding the tree widens its pane in four steps: one quarter, half, three quarters,
+and the full content width. The widest expanded row determines the step; moving
+the highlight alone does not resize the panes. The document preview uses the
+remaining space and disappears at full width. Collapsing branches restores it.
+
+Indentation retains the actual nesting depth. When the tree exceeds the available
+width, Ctrl+Left and Ctrl+Right scroll it horizontally; ordinary Left and Right
+still collapse and expand. The scrolling shortcuts appear in the pane when needed
+and can be changed in keybindings. Opening a document restores its reading/editing
+layout with Notes, even when the branch tree occupied the full screen.

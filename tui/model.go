@@ -150,6 +150,8 @@ type dialog struct {
 type loomTile struct{ ID, Title, Text, Status string }
 
 type model struct {
+	branchScroll                int
+	branchScrollRow             string
 	pendingDocumentNodes        map[string]bool
 	preserveSimulationSelection bool
 	pendingDocumentSelection    map[string]bool
@@ -849,6 +851,7 @@ func (m *model) apply(e event) tea.Cmd {
 			}
 		}
 		if oldWorkspace != m.data.Workspace.Path {
+			m.branchScroll, m.branchScrollRow = 0, ""
 			m.gridGroup = ""
 			m.simulationViews = nil
 			m.behaviorDraft = nil

@@ -414,6 +414,11 @@ func (m *model) cycleFocus(step int) tea.Cmd {
 	}
 	previousFocus := m.focus
 	m.focus = (m.focus + step + 4) % 4
+	if m.adaptiveBranches() && len(m.layout().panels) == 1 {
+		for m.focus == 1 || m.focus == 2 {
+			m.focus = (m.focus + step + 4) % 4
+		}
+	}
 	if m.focus == 2 && !m.showInspector {
 		m.focus = (m.focus + step + 4) % 4
 	}

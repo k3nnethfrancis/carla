@@ -31,6 +31,8 @@ func bindingCatalog() []binding {
 		binding{"discard", "Discard draft", "", "editor"},
 		binding{"edit.branch", "Branch current draft", "ctrl+b", "editor"},
 		binding{"edit.review", "Review selection", "ctrl+u", "editor"},
+		binding{"tree.scroll-left", "Scroll branch tree left", "ctrl+left", "branches"},
+		binding{"tree.scroll-right", "Scroll branch tree right", "ctrl+right", "branches"},
 		binding{"nav.next", "Next panel", "tab", "navigation"},
 		binding{"nav.prev", "Previous panel", "shift+tab", "navigation"},
 		binding{"nav.back", "Move outward / dismiss", "esc", "navigation"},

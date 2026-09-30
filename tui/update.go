@@ -322,6 +322,14 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, m.commandKey(msg)
 		}
+		if m.adaptiveBranches() && m.focus == 0 && (m.boundAction(raw, "branches") == "tree.scroll-left" || m.boundAction(raw, "branches") == "tree.scroll-right") {
+			delta := 8
+			if m.boundAction(raw, "branches") == "tree.scroll-left" {
+				delta = -delta
+			}
+			m.scrollBranches(delta)
+			return m, nil
+		}
 		if m.notesOpen && m.focus == 0 {
 			return m, m.notesKey(msg)
 		}
@@ -538,10 +546,11 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					index := msg.Y - panel.box.y - 3 + m.navStart(m.navigationRows(panel.box))
 					if index >= 0 && index < len(m.rows()) {
-						m.selected = index
 						r := m.rows()[index]
+						rowX := m.treeRowX(r, panel.box)
+						m.selected = index
 						if m.section == 1 || m.section == 2 {
-							checkX := panel.box.x + 2 + len([]rune(m.treeIndent(r.depth, panel.box)))
+							checkX := rowX
 							if m.section == 1 {
 								checkX += 2
 							}
@@ -549,11 +558,11 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 								return m, m.toggleTarget()
 							}
 						}
-						if m.section == 3 && (strings.HasPrefix(r.label, "▾") || strings.HasPrefix(r.label, "▸")) && msg.X == panel.box.x+2+len([]rune(m.treeIndent(r.depth, panel.box))) {
+						if m.section == 3 && (strings.HasPrefix(r.label, "▾") || strings.HasPrefix(r.label, "▸")) && msg.X == rowX {
 							m.collapsed[r.id] = !m.collapsed[r.id]
 							return m, nil
 						}
-						if m.section == 1 && m.hasChildren(r.id) && msg.X == panel.box.x+2+len([]rune(m.treeIndent(r.depth, panel.box))) {
+						if m.section == 1 && m.hasChildren(r.id) && msg.X == rowX {
 							m.collapsed[r.id] = !m.collapsed[r.id]
 							m.reflow()
 							return m, nil

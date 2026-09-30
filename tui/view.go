@@ -32,6 +32,18 @@ func (m *model) layout() layout {
 	height := max(4, m.height-10-m.suggestionCount()-len(m.commandHints()))
 	l := layout{bodyHeight: height, actionY: 4 + height}
 	width := max(1, m.width-2)
+	if m.adaptiveBranches() {
+		nav := m.branchPaneWidth(width)
+		l.panels = []panel{{0, rect{1, 3, nav, height}}}
+		if nav < width {
+			kind := 1
+			if m.showInspector && m.focus == 2 {
+				kind = 2
+			}
+			l.panels = append(l.panels, panel{kind, rect{nav + 2, 3, max(1, width-nav-1), height}})
+		}
+		return l
+	}
 	if (m.editing != "" && m.editing != "document") || m.width < 90 {
 		focus := m.focus
 		if focus == 3 {
@@ -149,7 +161,18 @@ func (m *model) renderDocument(width int) string {
 }
 func (m *model) reflow() {
 	m.command.SetWidth(max(1, m.width-7))
-	for _, p := range m.layout().panels {
+	panels := m.layout().panels
+	if m.adaptiveBranches() && len(panels) == 1 && (m.focus == 1 || m.focus == 2) {
+		m.focus = 0
+	}
+	for _, p := range panels {
+		if p.kind == 0 && m.adaptiveBranches() {
+			m.branchScroll = m.branchHorizontalOffset(p.box)
+			rows := m.rows()
+			if len(rows) > 0 {
+				m.branchScrollRow = rows[min(m.selected, len(rows)-1)].id
+			}
+		}
 		width, height := max(1, p.box.w-4), max(1, p.box.h-5)
 		switch p.kind {
 		case 1:
@@ -194,7 +217,7 @@ func (m *model) navigation(r rect) string {
 	var lines []string
 	for i := start; i < min(len(rows), start+visible); i++ {
 		item := rows[i]
-		label := m.treeIndent(item.depth, r) + safe(item.label)
+		label := m.branchRowText(item, r)
 		label = line(label, r.w-4)
 		if item.kind == "evaluation" {
 			if strings.Contains(item.label, "PASS") {
@@ -641,23 +664,6 @@ func (m *model) sectionBar() string {
 	return bar
 }
 
-// Keep enough room for a readable name while preserving relative subtree depth.
-// A shifted tree marks the omitted ancestor columns rather than flattening depth.
-func (m *model) treeIndent(depth int, r rect) string {
-	rows := m.rows()
-	if m.section != 1 || len(rows) == 0 {
-		return strings.Repeat(" ", depth)
-	}
-	selectedDepth := rows[min(m.selected, len(rows)-1)].depth
-	shift := max(0, selectedDepth-max(2, r.w-4-18))
-	if shift == 0 {
-		return strings.Repeat(" ", depth)
-	}
-	if depth < shift {
-		return "… "
-	}
-	return "… " + strings.Repeat(" ", depth-shift)
-}
 func (m *model) navigationRows(r rect) int {
 	return max(1, r.h-6-strings.Count(m.navigationFooter(r), "\n"))
 }
@@ -682,6 +688,9 @@ func (m *model) navigationFooter(r rect) string {
 		if m.section == 1 || m.section == 2 {
 			footer = fmt.Sprintf("%d selected · %s actions", len(m.selectedBranches()), m.keyLabel("nav.enter"))
 		}
+	}
+	if m.adaptiveBranches() && m.branchHorizontalLimit(r) > 0 {
+		footer += "\n" + m.keyLabel("tree.scroll-left") + "/" + m.keyLabel("tree.scroll-right") + " scroll"
 	}
 	if m.searching {
 		footer = m.search.View()
