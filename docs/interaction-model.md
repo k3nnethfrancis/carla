@@ -143,13 +143,21 @@ separate; Carla does not infer a common Loom from timestamps.
 
 ### Branch tree width
 
-Expanding the tree widens its pane in four steps: one quarter, half, three quarters,
-and the full content width. The widest expanded row determines the step; moving
-the highlight alone does not resize the panes. The document preview uses the
-remaining space and disappears at full width. Collapsing branches restores it.
+The tree fits the widest expanded row, with a minimum of 24 terminal columns,
+rounded up in four-column increments. Moving the highlight alone does not resize
+it. The document preview uses the remaining space and disappears when the tree
+needs the full width. Collapsing branches restores that space.
 
 Indentation retains the actual nesting depth. When the tree exceeds the available
 width, Ctrl+Left and Ctrl+Right scroll it horizontally; ordinary Left and Right
 still collapse and expand. The scrolling shortcuts appear in the pane when needed
 and can be changed in keybindings. Opening a document restores its reading/editing
 layout with Notes, even when the branch tree occupied the full screen.
+
+### Custom document names
+
+Open a document and choose **Rename document** beside Edit document, or use
+`/rename` on the focused document. Give favorite versions memorable names to find
+in Branches and Anthology. Clear the name to restore the automatic operation name.
+Renaming changes only the display title; text, IDs, ancestry and other versions
+remain unchanged. The automatic label remains saved with the document.

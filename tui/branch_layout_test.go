@@ -8,34 +8,30 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-func TestBranchesGrowInQuarterStepsWithoutHoverResize(t *testing.T) {
+func TestBranchesFitExpandedRowsWithoutHoverResize(t *testing.T) {
 	for _, width := range []int{60, 120, 180} {
 		m := fixture()
 		m.width, m.height, m.section, m.focus = width, 36, 1, 0
-		available := width - 2
-		for chunk := 1; chunk <= 4; chunk++ {
-			// Each row has four marker cells and the pane has four framing cells.
-			nameWidth := max(5, available*(chunk-1)/4+1-8)
-			if chunk == 1 {
-				nameWidth = 5
-			}
+		for _, nameWidth := range []int{5, 27, 48, 200} {
 			m.data.Nodes = []node{{ID: "root", Title: "doc-1"}, {ID: "child", Parent: "root", Title: strings.Repeat("x", nameWidth)}}
-			got := m.layout()
-			if got.panels[0].box.w != available*chunk/4 {
-				t.Fatalf("width%d chunk%d: %+v", width, chunk, got)
+			got := m.layout().panels[0].box.w
+			needed := 0
+			for _, r := range m.rows() {
+				needed = max(needed, r.depth+ansi.StringWidth(r.label)+4)
 			}
-			if (len(got.panels) == 1) != (chunk == 4) {
-				t.Fatal(got)
+			want := min(width-2, max(24, (needed+3)/4*4))
+			if got != want {
+				t.Fatalf("got %d want %d", got, want)
 			}
 			m.selected = 1
-			if m.layout().panels[0].box.w != got.panels[0].box.w {
+			if m.layout().panels[0].box.w != got {
 				t.Fatal("hover resized pane")
 			}
 		}
 		m.collapsed["root"] = true
 		m.selected = 0
 		m.reflow()
-		if m.layout().panels[0].box.w != available/4 {
+		if m.layout().panels[0].box.w != 24 {
 			t.Fatal("collapse did not restore preview")
 		}
 	}
@@ -103,5 +99,22 @@ func TestBranchHorizontalViewportMatchesMouseTargets(t *testing.T) {
 	m.reflow()
 	if m.branchScroll != 0 {
 		t.Fatal("stale horizontal scroll after collapse")
+	}
+}
+
+func TestRenameDocumentAction(t *testing.T) {
+	m := fixture()
+	m.section = 1
+	m.width = 120
+	m.height = 36
+	m.openNotes(true)
+	for i, r := range m.noteRows() {
+		if r.kind == "document-rename" {
+			m.selected = i
+			m.activateNote()
+		}
+	}
+	if m.dialog == nil || m.dialog.kind != "rename" || m.dialog.args["node"] != m.currentID() {
+		t.Fatal("rename must target opened document")
 	}
 }

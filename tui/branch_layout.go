@@ -11,19 +11,14 @@ func (m *model) adaptiveBranches() bool {
 }
 
 // Measure all expanded rows, not the hovered row: navigation cannot resize the
-// panes. Four predictable steps trade preview space for the visible ancestry.
+// panes. Small cell increments preserve as much document space as possible.
 func (m *model) branchPaneWidth(available int) int {
 	needed := 4
 	for _, r := range m.rows() {
 		needed = max(needed, r.depth+ansi.StringWidth(safe(r.label))+4)
 	}
-	for chunks := 1; chunks <= 4; chunks++ {
-		width := max(1, available*chunks/4)
-		if needed <= width || chunks == 4 {
-			return width
-		}
-	}
-	return available
+	// Four-cell increments avoid wasting a quarter screen on a short name.
+	return min(available, max(24, (needed+3)/4*4))
 }
 
 func (m *model) branchHorizontalLimit(r rect) int {

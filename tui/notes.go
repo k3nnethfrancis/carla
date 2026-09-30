@@ -9,7 +9,8 @@ import (
 
 func (m *model) noteRows() []row {
 	rows := []row{{id: "back", kind: "note-back", label: "← Branches"}, {id: "new", kind: "note-new", label: "+ New note"},
-		{id: "edit-document", kind: "document-edit", label: "Edit document", preview: "Edit this document. Save commits a new version; Escape cancels."}}
+		{id: "edit-document", kind: "document-edit", label: "Edit document", preview: "Edit this document. Save commits a new version; Escape cancels."},
+		{id: "rename-document", kind: "document-rename", label: "Rename document", preview: "Choose a memorable name. Clear it to restore the automatic ancestry name."}}
 	for _, a := range m.data.Annotations {
 		if a.Node != m.currentID() {
 			continue
@@ -64,6 +65,8 @@ func (m *model) activateNote() tea.Cmd {
 	switch r.kind {
 	case "note-back":
 		return m.backFromNotes()
+	case "document-rename":
+		return m.renameDocument()
 	case "document-edit":
 		return m.editDocumentWithNotes()
 	case "note-new":
@@ -188,7 +191,7 @@ func (m *model) notesClick(y int, r rect) tea.Cmd {
 		m.reflow()
 		// Action rows are buttons; saved notes remain focus-first list items.
 		switch m.noteRows()[index].kind {
-		case "note-back", "note-new", "document-edit":
+		case "note-back", "note-new", "document-edit", "document-rename":
 			return m.activateNote()
 		}
 		return nil
@@ -234,4 +237,14 @@ func (m *model) revealNote(a annotation) {
 		m.focus = 0
 	}
 	m.reflow()
+}
+
+func (m *model) renameDocument() tea.Cmd {
+	if m.data.Current == nil || m.pending {
+		return nil
+	}
+	d := &dialog{kind: "rename", title: "Rename document", args: map[string]any{"node": m.currentID()}}
+	d.add("Name (blank restores automatic)", m.data.Current.Title)
+	m.dialog = d
+	return d.fields[0].input.Focus()
 }

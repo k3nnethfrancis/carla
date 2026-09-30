@@ -197,10 +197,7 @@ func (m *model) perform(id string) tea.Cmd {
 	case "active":
 		return m.openActive()
 	case "rename":
-		d := &dialog{kind: "rename", title: "Document title", args: map[string]any{"node": m.currentID()}}
-		d.add("Title", documentLabel(*m.data.Current))
-		m.dialog = d
-		return d.fields[0].input.Focus()
+		return m.renameDocument()
 	case "character-sampling", "visitor-sampling":
 		return m.openSampling(strings.TrimSuffix(id, "-sampling") + "_settings")
 	case "workspaces", "review":

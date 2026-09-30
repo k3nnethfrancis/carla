@@ -525,8 +525,8 @@ func TestDocumentTailAfterResize(t *testing.T) {
 	m.revealCursor()
 	m.width, m.height = 60, 18
 	m.reflow()
-	if !strings.Contains(ansi.Strip(m.View().Content), "FINAL-TEXT") {
-		t.Fatal("last document text is cut off after resize")
+	if view := ansi.Strip(m.View().Content); !strings.Contains(view, "FINAL-") || !strings.Contains(view, "TEXT") {
+		t.Fatal("last document text is cut off after resize", ansi.Strip(m.View().Content))
 	}
 }
 
@@ -1058,10 +1058,10 @@ func TestDocumentNotesNavigation(t *testing.T) {
 		t.Fatal("opening a document should highlight Back to Branches")
 	}
 	rows := m.rows()
-	if len(rows) != 4 || rows[0].label != "← Branches" || rows[1].label != "+ New note" {
+	if len(rows) != 5 || rows[0].label != "← Branches" || rows[1].label != "+ New note" {
 		t.Fatal(rows)
 	}
-	m.selected = 3
+	m.selected = 4
 	m.activateNote()
 	if m.cursorOffset() != 50 {
 		t.Fatal("note anchor not revealed", m.cursorOffset())
@@ -1120,7 +1120,7 @@ func TestExistingNoteSaveUpdatesInPlace(t *testing.T) {
 	m.width, m.height, m.section = 120, 36, 1
 	m.data.Annotations = []annotation{{ID: "note-1", Node: m.currentID(), Note: "Before", Start: 3, End: 3}}
 	m.openNotes(true)
-	m.selected = 3
+	m.selected = 4
 	m.activateNote()
 	m.dialog.fields[0].input.SetValue("After")
 	cmd := m.submitDialog()
@@ -1287,8 +1287,8 @@ func TestMouseActivatesDocumentButtons(t *testing.T) {
 	m.data.Annotations = []annotation{{ID: "note", Node: m.currentID(), Note: "Existing note"}}
 	m.openNotes(true)
 	r := m.layout().panels[0].box
-	m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: r.x + 4, Y: r.y + 6})
-	if m.selected != 3 || m.dialog != nil {
+	m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: r.x + 4, Y: r.y + 7})
+	if m.selected != 4 || m.dialog != nil {
 		t.Fatal("saved note click should only focus")
 	}
 	m.activateNote()

@@ -1017,3 +1017,19 @@ async def test_selection_policy_toggle_is_explicit_and_persisted(session):
     assert s.project.data["selection_enabled"] is True
     await s.execute("policy.configure", {"selection_enabled": False}, "disable")
     assert json.loads(s.project.path.read_text())["selection_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_rename_keeps_ancestry_and_can_restore_label(session):
+    s = session
+    doc = s.project.add("Unchanged text", kind="source")
+    label = doc["label"]
+    await s.execute(
+        "node.rename", {"node": doc["id"], "title": "Favorite path"}, "name"
+    )
+    assert doc["title"] == "Favorite path"
+    assert doc["label"] == label
+    await s.execute("node.rename", {"node": doc["id"], "title": ""}, "reset")
+    assert doc["title"] == ""
+    assert doc["label"] == label
+    assert doc["text"] == "Unchanged text"

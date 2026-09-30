@@ -370,8 +370,6 @@ class Session:
             )
         elif command == "node.rename":
             title = args.get("title", "").strip()
-            if not title:
-                raise ValueError("Enter a document title")
             p.node(args["node"])["title"] = title
             p.save()
         elif command == "node.edit":
