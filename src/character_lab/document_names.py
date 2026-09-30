@@ -15,8 +15,7 @@ def assign_labels(data):
     visited = set()
 
     def allocate(record, category, parent_key, suffix=""):
-        if record.get("name_version") == 2 and record.get("label"):
-            return record["label"]
+        # Rebuild ancestry suffixes after an opted-in rename; retain allocated numbers.
         key = json.dumps([category, parent_key], separators=(",", ":"))
         if record.get("name_version") != 2:
             if record.get("label"):
@@ -59,7 +58,7 @@ def assign_labels(data):
 
     def node_name(node):
         if ("node", node["id"]) in visited:
-            return node["label"]
+            return node.get("ancestry_name") or node["label"]
         parent = nodes.get(node.get("parent"))
         group = groups.get(node.get("document_set"))
         if parent is None:
@@ -78,7 +77,7 @@ def assign_labels(data):
             )
             label = allocate(node, category, parent["id"], node_name(parent))
         visited.add(("node", node["id"]))
-        return label
+        return node.get("ancestry_name") or label
 
     for node in data["nodes"]:
         node_name(node)

@@ -370,7 +370,10 @@ class Session:
             )
         elif command == "node.rename":
             title = args.get("title", "").strip()
-            p.node(args["node"])["title"] = title
+            node = p.node(args["node"])
+            node["title"] = title
+            if args.get("rename_children", False):
+                node["ancestry_name"] = title
             p.save()
         elif command == "node.edit":
             self.edit(args)

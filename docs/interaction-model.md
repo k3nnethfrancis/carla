@@ -161,3 +161,10 @@ Open a document and choose **Rename document** beside Edit document, or use
 in Branches and Anthology. Clear the name to restore the automatic operation name.
 Renaming changes only the display title; text, IDs, ancestry and other versions
 remain unchanged. The automatic label remains saved with the document.
+
+The rename dialog also offers **Update child ancestry names**, off by default.
+Enable it to use the new name in descendant operation names, including Loom groups
+and future children: renaming `doc-1` to `paths` produces `continue-1-paths`.
+Carla follows saved ancestry rather than replacing matching text in unrelated
+names. Custom descendant titles remain unchanged. To restore descendants to the
+automatic ancestry, clear the name and enable this option when saving.

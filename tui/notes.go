@@ -245,6 +245,7 @@ func (m *model) renameDocument() tea.Cmd {
 	}
 	d := &dialog{kind: "rename", title: "Rename document", args: map[string]any{"node": m.currentID()}}
 	d.add("Name (blank restores automatic)", m.data.Current.Title)
+	d.add("Update child ancestry names (SPACE toggles)", "Off")
 	m.dialog = d
 	return d.fields[0].input.Focus()
 }

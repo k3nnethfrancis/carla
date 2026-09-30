@@ -70,3 +70,18 @@ def test_migration_retains_content_custom_titles_and_ids():
     before = [n["label"] for n in data["nodes"]]
     assign_labels(data)
     assert before == [n["label"] for n in data["nodes"]]
+
+
+def test_renamed_ancestor_relabels_loom_groups_and_survives_reload(tmp_path):
+    p = Project(tmp_path)
+    root = p.add("Seed", kind="source")
+    plans = document_actions.begin(
+        p, document_actions.plan(p, "loom", [root["id"]], count=2)
+    )
+    children = [document_actions.create_revision(p, plan) for plan in plans]
+    root["ancestry_name"] = "paths"
+    p.save()
+    assert children[0]["label"] == "branch-1-loom-1-paths"
+    assert children[1]["label"] == "branch-2-loom-1-paths"
+    assert p.data["document_sets"][0]["operation_label"] == "loom-1-paths"
+    assert Project(tmp_path).node(children[0]["id"])["label"] == children[0]["label"]

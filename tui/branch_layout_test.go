@@ -118,3 +118,21 @@ func TestRenameDocumentAction(t *testing.T) {
 		t.Fatal("rename must target opened document")
 	}
 }
+
+func TestRenameDescendantsToggle(t *testing.T) {
+	m := fixture()
+	m.renameDocument()
+	d := m.dialog
+	if d.fields[1].input.Value() != "Off" {
+		t.Fatal("rename should default to this document")
+	}
+	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m.dialogKey(tea.KeyPressMsg{Code: tea.KeySpace})
+	if d.fields[1].input.Value() != "On" {
+		t.Fatal("space should toggle child names")
+	}
+	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyLeft})
+	if d.fields[1].input.Value() != "Off" {
+		t.Fatal("left should toggle child names")
+	}
+}

@@ -176,6 +176,7 @@ func (m *model) submitDialog() tea.Cmd {
 		case "rename":
 			command = "node.rename"
 			args["title"] = values[0]
+			args["rename_children"] = values[1] == "On"
 		case "sim-text":
 			command = "simulator.configure"
 			args = map[string]any{d.args["field"].(string): values[0]}
@@ -303,6 +304,21 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if d.kind == "settings" {
 		return m.settingsKey(msg)
+	}
+	if d.kind == "rename" && d.field == 1 {
+		switch msg.Code {
+		case tea.KeySpace, tea.KeyLeft, tea.KeyRight:
+			value := "On"
+			if d.fields[1].input.Value() == "On" {
+				value = "Off"
+			}
+			d.fields[1].input.SetValue(value)
+			return nil
+		}
+		// Keep this choice a toggle, not an editable text value.
+		if msg.Text != "" {
+			return nil
+		}
 	}
 	key := m.navigationKey(msg.String())
 	if msg.String() == "ctrl+s" || m.boundAction(msg.String(), "editor") == "save" {
