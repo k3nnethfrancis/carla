@@ -186,7 +186,37 @@ func (m *model) navigation(r rect) string {
 		return m.notesView(r)
 	}
 	rows := m.rows()
-	visible := max(1, r.h-6)
+	footer := fmt.Sprintf("%d selected · CTRL+F filter", len(m.data.Selected))
+	if m.section != 0 {
+		footer = fmt.Sprintf("%d items", len(rows))
+		if m.section == 3 {
+			count := len(m.selectedConversations())
+			footer = fmt.Sprintf("%d selected · /clear", count)
+		}
+		if m.section == 4 {
+			count := 0
+			for _, selected := range m.evalSelection {
+				if selected {
+					count++
+				}
+			}
+			footer = fmt.Sprintf("%d selected · ENTER opens", count)
+		}
+		if m.section == 1 || m.section == 2 {
+			footer = fmt.Sprintf("%d selected · %s actions", len(m.selectedBranches()), m.keyLabel("nav.enter"))
+		}
+	}
+	if m.searching {
+		footer = m.search.View()
+	} else if m.filter != "" {
+		footer = "Filter: " + m.filter
+	}
+	if !m.searching && m.filter == "" && ansi.StringWidth(footer) > r.w-4 {
+		footer = strings.ReplaceAll(footer, " · ", "\n")
+	}
+	footer = ansi.Wrap(footer, max(1, r.w-4), "")
+	// Reserve every footer row so hints wrap instead of being clipped by the panel.
+	visible := max(1, r.h-5-strings.Count(footer, "\n")-1)
 	mIndex := min(m.selected, max(0, len(rows)-1))
 	start := max(0, mIndex-visible+1)
 	var lines []string
@@ -215,31 +245,7 @@ func (m *model) navigation(r rect) string {
 	for len(lines) < visible {
 		lines = append(lines, "")
 	}
-	footer := fmt.Sprintf("%d selected · CTRL+F filter", len(m.data.Selected))
-	if m.section != 0 {
-		footer = fmt.Sprintf("%d items", len(rows))
-		if m.section == 3 {
-			count := len(m.selectedConversations())
-			footer = fmt.Sprintf("%d selected · /clear", count)
-		}
-		if m.section == 4 {
-			count := 0
-			for _, selected := range m.evalSelection {
-				if selected {
-					count++
-				}
-			}
-			footer = fmt.Sprintf("%d selected · ENTER opens", count)
-		}
-		if m.section == 1 || m.section == 2 {
-			footer = fmt.Sprintf("%d selected · %s actions", len(m.selectedBranches()), m.keyLabel("nav.enter"))
-		}
-	}
-	if m.searching {
-		footer = m.search.View()
-	} else if m.filter != "" {
-		footer = "Filter: " + m.filter
-	}
+
 	return strings.Join(append(lines, dim.Render(footer)), "\n")
 }
 func (m *model) dialogRect() rect {

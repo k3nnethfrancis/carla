@@ -1222,3 +1222,22 @@ func TestEmptyDocumentPreview(t *testing.T) {
 		}
 	}
 }
+
+func TestNavigationFooterFitsNarrowPane(t *testing.T) {
+	m := fixture()
+	for _, section := range []int{0, 1, 2, 3, 4} {
+		m.section = section
+		body := ansi.Strip(m.navigation(rect{0, 0, 26, 18}))
+		for _, row := range strings.Split(body, "\n") {
+			if ansi.StringWidth(row) > 22 {
+				t.Fatalf("section %d: clipped footer %q", section, row)
+			}
+		}
+		if (section == 1 || section == 2) && !strings.Contains(body, "ENTER actions") {
+			t.Fatalf("missing action hint: %q", body)
+		}
+		if len(strings.Split(body, "\n")) > 14 {
+			t.Fatal("footer exceeds panel body")
+		}
+	}
+}
