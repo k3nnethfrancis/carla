@@ -173,6 +173,10 @@ func (m *model) submitDialog() tea.Cmd {
 				return nil
 			}
 			return m.send("library.import", map[string]any{"path": strings.TrimSpace(values[0]), "title": values[1], "author": values[2], "url": values[3]})
+		case "sim-rename":
+			command = "simulator.rename"
+			args["title"] = values[0]
+			args["update_children"] = values[1] == "On"
 		case "rename":
 			command = "node.rename"
 			args["title"] = values[0]
@@ -305,7 +309,7 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 	if d.kind == "settings" {
 		return m.settingsKey(msg)
 	}
-	if d.kind == "rename" && d.field == 1 {
+	if (d.kind == "rename" || d.kind == "sim-rename") && d.field == 1 {
 		switch msg.Code {
 		case tea.KeySpace, tea.KeyLeft, tea.KeyRight:
 			value := "On"

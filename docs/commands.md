@@ -35,6 +35,7 @@ The shared controls are:
 - `/policy`: monitoring, selection and evaluation definitions.
 - `/stop`: cancel the active operation, retaining partial output.
 - `/help`: command descriptions and arguments.
+- `/rename`: name a focused document or individual conversation; optionally update descendant ancestry names.
 
 Arrows move focus and preview content. Space selects/unselects. Enter opens a
 selected object or its actions. Tab/Shift+Tab move between panes; Escape unwinds

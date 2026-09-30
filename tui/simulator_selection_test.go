@@ -152,12 +152,12 @@ func TestCompletedPolicyFlagsLeaveSidebarButRemainInHeader(t *testing.T) {
 	m.openGridTile(1)
 	for _, width := range []int{45, 80} {
 		heading := ansi.Strip(m.conversationHeading(width))
-		if !strings.HasPrefix(heading, "Conversation 2 · complete") || !strings.HasSuffix(heading, "! looping") || ansi.StringWidth(heading) != width {
+		if !strings.HasPrefix(heading, "convo-2 · complete") || !strings.HasSuffix(heading, "! looping") || ansi.StringWidth(heading) != width {
 			t.Fatal(heading)
 		}
 	}
 	c.Status = "failed"
-	if !strings.Contains(ansi.Strip(m.conversationHeading(80)), "Conversation 2 · failed") {
+	if !strings.Contains(ansi.Strip(m.conversationHeading(80)), "convo-2 · failed") {
 		t.Fatal("missing status in title")
 	}
 	if strings.Contains(ansi.Strip(m.conversationDocument(80)), "failed") {

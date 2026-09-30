@@ -168,3 +168,24 @@ and future children: renaming `doc-1` to `paths` produces `continue-1-paths`.
 Carla follows saved ancestry rather than replacing matching text in unrelated
 names. Custom descendant titles remain unchanged. To restore descendants to the
 automatic ancestry, clear the name and enable this option when saving.
+
+### Simulator names
+
+Simulator names identify saved conversations and their ancestry. A fresh Loom
+is `loom-1`, with conversations such as `convo-1-loom-1`. Continue (including
+`/loom 1`) advances existing conversations without changing their names.
+An explicit branch is `branch-1-convo-1-loom-1`. Splitting a set creates a new
+Loom with numbered branch sets containing separate conversations.
+
+The tree displays the local operation name (`loom-2`, `branch-1`, `convo-1`)
+when its parent is visible above it. Conversation headings and inspection retain
+the full name. Status, message counts and policy flags remain separate from names. Message counts
+include both visitor and character messages; `--turns` still counts character replies.
+Numbers are persisted rather than derived from the visible row order, so
+collapsing or deleting other items does not renumber surviving conversations.
+
+Use `/rename` on one conversation to give it a memorable title. As with documents,
+the optional child-ancestry toggle carries that name into descendants while
+preserving their custom titles. Clearing a title restores its automatic name.
+Names are display metadata; saved IDs, turns, prompts and evaluation references
+remain unchanged.

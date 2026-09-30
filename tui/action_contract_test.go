@@ -55,7 +55,7 @@ func TestAlternativeSetsStayNestedAndTargetWholeGroup(t *testing.T) {
 		m.data.SimulationRuns = append(m.data.SimulationRuns, runSummary{ID: []string{"a", "b"}[i], Status: "complete", Count: 2, Conversations: []simulationConversation{{Index: 0}, {Index: 1}}, AlternativeGroup: "g", AlternativeIndex: i, AlternativeCount: 2})
 	}
 	rows := m.simulationRows()
-	if rows[2].kind != "simulation-group" || rows[3].depth != 1 || rows[4].depth != 2 || rows[5].depth != 3 {
+	if rows[2].kind != "simulation-group" || rows[3].depth != 1 || rows[4].depth != 2 || rows[5].depth != 2 {
 		t.Fatal(rows)
 	}
 	m.simSelection = &simulationSelection{Group: "g"}

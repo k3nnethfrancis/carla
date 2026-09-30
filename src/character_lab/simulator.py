@@ -15,6 +15,7 @@ from itertools import groupby
 from . import monitor, simulator_actions
 from .domain import now
 from .scheduling import parallel_map
+from .simulator_names import NAME_FIELDS
 
 CHARACTER_TEMPLATE = (
     "{anthology}\n\nFull conversation with Model C:\n\n{history}\n\n**Model C:**"
@@ -153,7 +154,7 @@ def summary(run):
             if turn.get("model"):
                 names[turn["role"]] = turn["model"]["name"]
     return {key: run.get(key) for key in ("id", "status", "created")} | {
-        "label": ("Opening preview · " if run.get("preview") else "")
+        "models_label": ("Opening preview · " if run.get("preview") else "")
         + " / ".join(
             names.get(role, run["config"][role + "_alias"])
             for role in ("character", "visitor")
@@ -171,11 +172,20 @@ def summary(run):
                 "alternative_scope",
                 "revision",
                 "action",
+                *NAME_FIELDS,
+                "operation_label",
+                "operation_short_label",
+                "operation_title",
+                "alternative_label",
+                "alternative_short_label",
+                "alternative_title",
             )
             if key in run
         },
         "conversations": [
-            {"index": c["index"], "status": c["status"]} for c in run["conversations"]
+            {key: c[key] for key in ("index", "status", *NAME_FIELDS) if key in c}
+            | {"turn_count": len(c["turns"])}
+            for c in run["conversations"]
         ],
         "policy_stops": sum(
             c["status"] == "policy_stopped" for c in run["conversations"]
@@ -222,7 +232,7 @@ def view(run):
     }
 
 
-def new_run(project, config, seed=None):
+def new_run(project, config, seed=None, metadata=None):
     docs = (
         seed["documents"]
         if seed
@@ -249,8 +259,10 @@ def new_run(project, config, seed=None):
         parent_revision=seed.get("source_revision", 0) if seed else None,
         action=config.get("action", "loom"),
     )
+    if config.get("source_scope"):
+        run["source_scope"] = copy.deepcopy(config["source_scope"])
+    run.update(metadata or {})
     project.data.setdefault("simulation_runs", []).append(run)
-    project.save()
     for index in range(config["conversations"]):
         ancestor = (
             seed["conversations"][index] if seed and "conversations" in seed else seed
@@ -342,7 +354,7 @@ async def _generate(project, config, runtime_factory, emit, plans):
         if config.get("action") == "continue":
             run, selected = simulator_actions.continue_run(project, local, seed)
         else:
-            run, selected = new_run(project, local, seed)
+            run, selected = new_run(project, local, seed, metadata)
         run.update(metadata)
         runs.append(run)
         for conversation in selected:

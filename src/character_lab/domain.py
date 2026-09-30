@@ -12,6 +12,7 @@ from pathlib import Path
 from . import ancestry
 from .document_names import assign_labels
 from .persistence import WorkspaceStore
+from .simulator_names import assign_labels as assign_simulator_labels
 
 
 def now():
@@ -119,6 +120,7 @@ class Project:
             node.setdefault("document_id", node["id"])
             heads.setdefault(node["document_id"], node["id"])
         assign_labels(self.data)
+        assign_simulator_labels(self.data)
         self.store.checkpoint()
 
     @property

@@ -21,7 +21,7 @@ var allActions = []action{
 	{"library", "Library", "1"}, {"branches", "Branches", "2"},
 	{"kept", "Anthology", "3"}, {"notes", "Notes", "4"}, {"simulator", "Simulator", "5"}, {"sim-config", "Configure simulator", ""}, {"simulate", "Run conversations", ""}, {"grow-config", "Configure Grow", ""}, {"grow-policy", "Grow selection criteria", ""},
 	{"run", "Run Simulator conversations", ""}, {"configure", "Configure this page", ""},
-	{"find", "Filter this list", "ctrl+f"}, {"active", "View active generation", ""}, {"rename", "Rename document", ""},
+	{"find", "Filter this list", "ctrl+f"}, {"active", "View active generation", ""}, {"rename", "Rename document or conversation", ""},
 	{"visitor", "Write a visitor message in a conversation fork", ""}, {"grid", "Show Loom grid", ""}, {"loom-policy", "Configure conversation warnings and stop rules", ""},
 	{"character-sampling", "Character temperature, top-p and output tokens", ""}, {"visitor-sampling", "Visitor temperature, top-p and output tokens", ""},
 	{"import", "Import a document into Library", ""},
@@ -127,7 +127,7 @@ func (m *model) perform(id string) tea.Cmd {
 		}
 		return m.send("simulator.inspect", map[string]any{"run": m.simulation.ID})
 	}
-	if documentAction(id) && !(id == "branch" && len(m.actionNodeIDs()) > 0) && !(m.section == 3 && id == "branch") && (m.targetRow().kind != "node" || m.targetRow().id != m.currentID() || m.pending) {
+	if documentAction(id) && !(id == "branch" && len(m.actionNodeIDs()) > 0) && !(m.section == 3 && (id == "branch" || id == "rename")) && (m.targetRow().kind != "node" || m.targetRow().id != m.currentID() || m.pending) {
 		m.status = "Select a branch and wait for its preview before /" + id
 		return m.previewTarget()
 	}
@@ -197,6 +197,9 @@ func (m *model) perform(id string) tea.Cmd {
 	case "active":
 		return m.openActive()
 	case "rename":
+		if m.section == 3 {
+			return m.renameSimulation()
+		}
 		return m.renameDocument()
 	case "character-sampling", "visitor-sampling":
 		return m.openSampling(strings.TrimSuffix(id, "-sampling") + "_settings")

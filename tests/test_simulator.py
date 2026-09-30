@@ -199,7 +199,7 @@ async def test_preview_only_generates_openings(setup):
     assert len(run["conversations"]) == 3
     assert all(len(c["turns"]) == 1 for c in run["conversations"])
     assert all(c["turns"][0]["model"]["alias"] == "other" for c in run["conversations"])
-    assert simulator.summary(run)["label"].startswith("Opening preview")
+    assert simulator.summary(run)["models_label"].startswith("Opening preview")
 
 
 def test_opening_validation(setup):

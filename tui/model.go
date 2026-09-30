@@ -60,11 +60,25 @@ type simulationTurn struct {
 	Flags                      []string
 }
 type simulationConversation struct {
-	Index  int
-	Status string
-	Turns  []simulationTurn
+	TurnCount  int    `json:"turn_count"`
+	Label      string `json:"label"`
+	Title      string `json:"title"`
+	ShortLabel string `json:"short_label"`
+	Index      int
+	Status     string
+	Turns      []simulationTurn
 }
 type simulationRun struct {
+	Label                 string `json:"label"`
+	Title                 string `json:"title"`
+	ShortLabel            string `json:"short_label"`
+	OperationTitle        string `json:"operation_title"`
+	AlternativeTitle      string `json:"alternative_title"`
+	OperationLabel        string `json:"operation_label"`
+	OperationShortLabel   string `json:"operation_short_label"`
+	AlternativeLabel      string `json:"alternative_label"`
+	AlternativeShortLabel string `json:"alternative_short_label"`
+
 	GridGroup         string       `json:"grid_group"`
 	AlternativeScope  *actionScope `json:"alternative_scope"`
 	SourceScope       *actionScope `json:"source_scope"`
@@ -642,11 +656,12 @@ func (m *model) apply(e event) tea.Cmd {
 				if m.data.SimulationRuns[i].ID == run.ID {
 					m.data.SimulationRuns[i].Conversations = run.Conversations
 					m.data.SimulationRuns[i].Status = run.Status
+					copySimulationNames(&m.data.SimulationRuns[i], &run)
 					updated = true
 				}
 			}
 			if !updated {
-				m.data.SimulationRuns = append(m.data.SimulationRuns, runSummary{ID: run.ID, Count: len(run.Conversations), Status: run.Status, Conversations: run.Conversations, Parent: run.Parent, AlternativeScope: run.AlternativeScope, SourceScope: run.SourceScope, AlternativeGroup: run.AlternativeGroup, AlternativeIndex: run.AlternativeIndex, AlternativeCount: run.AlternativeCount})
+				m.data.SimulationRuns = append(m.data.SimulationRuns, runSummary{Label: run.Label, Title: run.Title, ShortLabel: run.ShortLabel, OperationTitle: run.OperationTitle, AlternativeTitle: run.AlternativeTitle, OperationLabel: run.OperationLabel, OperationShortLabel: run.OperationShortLabel, AlternativeLabel: run.AlternativeLabel, AlternativeShortLabel: run.AlternativeShortLabel, ID: run.ID, Count: len(run.Conversations), Status: run.Status, Conversations: run.Conversations, Parent: run.Parent, AlternativeScope: run.AlternativeScope, SourceScope: run.SourceScope, AlternativeGroup: run.AlternativeGroup, AlternativeIndex: run.AlternativeIndex, AlternativeCount: run.AlternativeCount})
 			}
 		}
 		newView := run.Opened || m.simulation == nil && (m.awaitingSimulation || m.simSelection == nil)

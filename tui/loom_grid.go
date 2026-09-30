@@ -88,10 +88,8 @@ func (m *model) gridItems() []loomTile {
 			}
 			fmt.Fprintln(&body)
 		}
-		title := fmt.Sprintf("Conversation %d", c.Index+1)
-		if m.gridGroup != "" {
-			title = fmt.Sprintf("%s · %s", m.gridRunLabel(target.Run), title)
-		}
+		title := conversationName(c, false)
+
 		if m.conversationSelected(target.Run, c.Index) {
 			title = "✓ " + title
 		}
@@ -336,20 +334,4 @@ func gridConversation(id string) (conversationParent, bool) {
 	}
 	n, err := strconv.Atoi(parts[1])
 	return conversationParent{Run: parts[0], Conversation: n}, err == nil
-}
-func (m *model) gridRunLabel(id string) string {
-	if scope := m.simulationGroupScope(m.gridGroup); scope != nil {
-		seen := map[string]bool{}
-		n := 0
-		for _, leaf := range simulationScopeLeaves(*scope) {
-			if !seen[leaf.Run] {
-				seen[leaf.Run] = true
-				n++
-			}
-			if leaf.Run == id {
-				return fmt.Sprintf("Set %d", n)
-			}
-		}
-	}
-	return "Set"
 }

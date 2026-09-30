@@ -29,7 +29,7 @@ func (m *model) simulationText() string {
 	if m.conversationOpen {
 		return m.conversationDocument(max(1, m.document.Width()))
 	}
-	return fmt.Sprintf("%s · %s\n\nSelect a conversation, or open the Loom grid.", m.simulation.ID, m.simulation.Status)
+	return fmt.Sprintf("%s · %s\n\nSelect a conversation, or open the Loom grid.", simulationName(m.simulation.Title, "", m.simulation.Label, m.simulation.ID), m.simulation.Status)
 }
 
 func (m *model) openSimulatorConfig() tea.Cmd {

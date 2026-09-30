@@ -16,7 +16,7 @@ var commandDescriptions = map[string]string{
 	"grid":        "Show concurrent Loom outputs. Arrows select a tile; Enter opens it. /grid returns.",
 	"find":        "Filter documents or runs on the current page; type in the focused filter.",
 	"active":      "Jump to the active generation while leaving background work running.",
-	"rename":      "Name this document; clear the name to restore its automatic ancestry label.",
+	"rename":      "Name a document, conversation or Loom; clear the name to restore its automatic ancestry label.",
 	"configure":   "Configure generation models, prompts, temperature, top-p and sampling; in Evaluate, configure the opened collection and its judges. /policy owns monitoring and selection. Loom flags override generation settings for one run.",
 	"branch":      "Copy selected documents, conversations or sets without generation, preserving ancestry. Anthology opens the copies in Branches. Unavailable in Library and Evaluate. Save edits first.",
 	"continue":    "Continue selected documents or conversations. Documents save a child revision; conversations advance in place with prior evidence retained. Anthology creates a new continuation in Branches without keeping it. Unavailable in Library and Evaluate. --loops repeats continuation; --tokens caps each completion. Simulator accepts --turns and --visitor. --model overrides this operation; --eval judges outputs. Aliases: /generate, /run.",

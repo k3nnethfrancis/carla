@@ -62,6 +62,15 @@ async def dispatch(session, command, args, request_id):
         p.save()
         await session.snapshot(request_id)
         return
+    if command == "simulator.rename":
+        from . import simulator_names
+
+        simulator_names.rename(p.data, args)
+        p.save()
+        await session.snapshot(request_id)
+        for run in p.data.get("simulation_runs", []):
+            await session.emit("simulation", simulator.view(run), request_id)
+        return
     if command == "simulator.fork":
         seed = simulator_actions.resolve_seed(p, args)
         if seed is None:
