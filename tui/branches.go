@@ -62,7 +62,7 @@ func (m *model) branchRows() []row {
 						marker = "▸ "
 					}
 				}
-				rows = append(rows, row{id: n.ID, label: marker + check + label, kind: "node", preview: n.Preview, depth: min(depth, 3)})
+				rows = append(rows, row{id: n.ID, label: marker + check + label, kind: "node", preview: n.Preview, depth: depth})
 			}
 			if m.section == 2 || m.filter != "" || !m.collapsed[n.ID] {
 				walk(n.ID, depth+1)

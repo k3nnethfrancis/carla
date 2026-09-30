@@ -186,43 +186,15 @@ func (m *model) navigation(r rect) string {
 		return m.notesView(r)
 	}
 	rows := m.rows()
-	footer := fmt.Sprintf("%d selected · CTRL+F filter", len(m.data.Selected))
-	if m.section != 0 {
-		footer = fmt.Sprintf("%d items", len(rows))
-		if m.section == 3 {
-			count := len(m.selectedConversations())
-			footer = fmt.Sprintf("%d selected · /clear", count)
-		}
-		if m.section == 4 {
-			count := 0
-			for _, selected := range m.evalSelection {
-				if selected {
-					count++
-				}
-			}
-			footer = fmt.Sprintf("%d selected · ENTER opens", count)
-		}
-		if m.section == 1 || m.section == 2 {
-			footer = fmt.Sprintf("%d selected · %s actions", len(m.selectedBranches()), m.keyLabel("nav.enter"))
-		}
-	}
-	if m.searching {
-		footer = m.search.View()
-	} else if m.filter != "" {
-		footer = "Filter: " + m.filter
-	}
-	if !m.searching && m.filter == "" && ansi.StringWidth(footer) > r.w-4 {
-		footer = strings.ReplaceAll(footer, " · ", "\n")
-	}
-	footer = ansi.Wrap(footer, max(1, r.w-4), "")
+	footer := m.navigationFooter(r)
 	// Reserve every footer row so hints wrap instead of being clipped by the panel.
-	visible := max(1, r.h-5-strings.Count(footer, "\n")-1)
+	visible := m.navigationRows(r)
 	mIndex := min(m.selected, max(0, len(rows)-1))
 	start := max(0, mIndex-visible+1)
 	var lines []string
 	for i := start; i < min(len(rows), start+visible); i++ {
 		item := rows[i]
-		label := strings.Repeat(" ", item.depth) + safe(item.label)
+		label := m.treeIndent(item.depth, r) + safe(item.label)
 		label = line(label, r.w-4)
 		if item.kind == "evaluation" {
 			if strings.Contains(item.label, "PASS") {
@@ -667,4 +639,58 @@ func (m *model) sectionBar() string {
 		}
 	}
 	return bar
+}
+
+// Keep enough room for a readable name while preserving relative subtree depth.
+// A shifted tree marks the omitted ancestor columns rather than flattening depth.
+func (m *model) treeIndent(depth int, r rect) string {
+	rows := m.rows()
+	if m.section != 1 || len(rows) == 0 {
+		return strings.Repeat(" ", depth)
+	}
+	selectedDepth := rows[min(m.selected, len(rows)-1)].depth
+	shift := max(0, selectedDepth-max(2, r.w-4-18))
+	if shift == 0 {
+		return strings.Repeat(" ", depth)
+	}
+	if depth < shift {
+		return "… "
+	}
+	return "… " + strings.Repeat(" ", depth-shift)
+}
+func (m *model) navigationRows(r rect) int {
+	return max(1, r.h-6-strings.Count(m.navigationFooter(r), "\n"))
+}
+func (m *model) navigationFooter(r rect) string {
+	rows := m.rows()
+	footer := fmt.Sprintf("%d selected · CTRL+F filter", len(m.data.Selected))
+	if m.section != 0 {
+		footer = fmt.Sprintf("%d items", len(rows))
+		if m.section == 3 {
+			count := len(m.selectedConversations())
+			footer = fmt.Sprintf("%d selected · /clear", count)
+		}
+		if m.section == 4 {
+			count := 0
+			for _, selected := range m.evalSelection {
+				if selected {
+					count++
+				}
+			}
+			footer = fmt.Sprintf("%d selected · ENTER opens", count)
+		}
+		if m.section == 1 || m.section == 2 {
+			footer = fmt.Sprintf("%d selected · %s actions", len(m.selectedBranches()), m.keyLabel("nav.enter"))
+		}
+	}
+	if m.searching {
+		footer = m.search.View()
+	} else if m.filter != "" {
+		footer = "Filter: " + m.filter
+	}
+	if !m.searching && m.filter == "" && ansi.StringWidth(footer) > r.w-4 {
+		footer = strings.ReplaceAll(footer, " · ", "\n")
+	}
+	footer = ansi.Wrap(footer, max(1, r.w-4), "")
+	return footer
 }

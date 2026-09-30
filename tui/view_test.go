@@ -1390,3 +1390,31 @@ func TestDocumentMonitorUpdatesAndActivity(t *testing.T) {
 		t.Fatal("completed document still active")
 	}
 }
+
+func TestDeepBranchTreeRetainsDepth(t *testing.T) {
+	m := fixture()
+	m.section = 1
+	m.width, m.height = 120, 36
+	m.data.Nodes = nil
+	parent := ""
+	for i := 0; i < 20; i++ {
+		id := fmt.Sprintf("node-%d", i)
+		m.data.Nodes = append(m.data.Nodes, node{ID: id, Parent: parent, Title: id, Kind: "edit", Status: "complete"})
+		parent = id
+	}
+	rows := m.branchRows()
+	for i, r := range rows {
+		if r.depth != i {
+			t.Fatalf("depth %d flattened to %d", i, r.depth)
+		}
+	}
+	m.selected = 19
+	r := rect{1, 3, 26, 26}
+	body := ansi.Strip(m.navigation(r))
+	if !strings.Contains(body, "node-19") || !strings.Contains(body, "…") {
+		t.Fatal("deep focused name hidden", body)
+	}
+	if len(m.treeIndent(19, r)) <= len(m.treeIndent(18, r)) {
+		t.Fatal("adjacent levels flattened")
+	}
+}

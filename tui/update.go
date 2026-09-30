@@ -536,12 +536,12 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					if m.section == 0 && msg.Y == panel.box.y+panel.box.h-3 {
 						return m, m.perform("clear")
 					}
-					index := msg.Y - panel.box.y - 3 + m.navStart(panel.box.h-6)
+					index := msg.Y - panel.box.y - 3 + m.navStart(m.navigationRows(panel.box))
 					if index >= 0 && index < len(m.rows()) {
 						m.selected = index
 						r := m.rows()[index]
 						if m.section == 1 || m.section == 2 {
-							checkX := panel.box.x + 2 + r.depth
+							checkX := panel.box.x + 2 + len([]rune(m.treeIndent(r.depth, panel.box)))
 							if m.section == 1 {
 								checkX += 2
 							}
@@ -549,11 +549,11 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 								return m, m.toggleTarget()
 							}
 						}
-						if m.section == 3 && (strings.HasPrefix(r.label, "▾") || strings.HasPrefix(r.label, "▸")) && msg.X == panel.box.x+2+r.depth {
+						if m.section == 3 && (strings.HasPrefix(r.label, "▾") || strings.HasPrefix(r.label, "▸")) && msg.X == panel.box.x+2+len([]rune(m.treeIndent(r.depth, panel.box))) {
 							m.collapsed[r.id] = !m.collapsed[r.id]
 							return m, nil
 						}
-						if m.section == 1 && m.hasChildren(r.id) && msg.X == panel.box.x+2+r.depth {
+						if m.section == 1 && m.hasChildren(r.id) && msg.X == panel.box.x+2+len([]rune(m.treeIndent(r.depth, panel.box))) {
 							m.collapsed[r.id] = !m.collapsed[r.id]
 							m.reflow()
 							return m, nil
