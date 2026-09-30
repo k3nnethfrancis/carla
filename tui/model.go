@@ -223,6 +223,7 @@ type model struct {
 	search                      textinput.Model
 	document, inspector         viewport.Model
 	previewChangePending        bool
+	previewSelectionPending     bool
 	inspection                  string
 	showInspector               bool
 	editor                      textarea.Model
@@ -926,7 +927,7 @@ func (m *model) apply(e event) tea.Cmd {
 
 		m.selected = max(0, min(m.selected, len(m.rows())-1))
 		if oldID != m.currentID() {
-			m.previewChangePending = (m.section == 1 || m.section == 2) && !m.data.Busy && m.editing == ""
+			m.previewChangePending = (m.section == 1 || m.section == 2) && m.editing == ""
 		}
 		m.reflow()
 		if noteSaved {
@@ -943,6 +944,12 @@ func (m *model) apply(e event) tea.Cmd {
 		}
 		if startDocumentEdit {
 			return m.openDocumentWithNotes()
+		}
+		if m.previewSelectionPending {
+			m.previewSelectionPending = false
+			if m.focus == 0 && !m.notesOpen && (m.section == 1 || m.section == 2) {
+				return m.previewTarget()
+			}
 		}
 	case "token":
 		var t struct{ Node, Text string }

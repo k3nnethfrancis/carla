@@ -102,6 +102,10 @@ func (m *model) targetLabel() string {
 // Opening the highlighted branch keeps the preview and command target aligned.
 // If a request is pending, the next state event catches up to the latest highlight.
 func (m *model) previewTarget() tea.Cmd {
+	// Coalesce fast navigation: after the pending reply, preview the latest row.
+	if m.pending && m.focus == 0 && !m.notesOpen && (m.section == 1 || m.section == 2) {
+		m.previewSelectionPending = true
+	}
 	if m.pending || m.editing != "" || m.dialog != nil {
 		return nil
 	}

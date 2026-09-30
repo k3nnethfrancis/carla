@@ -1304,3 +1304,37 @@ func TestMouseFocusesBranchWithoutEntering(t *testing.T) {
 		t.Fatal("Enter should still open document")
 	}
 }
+
+func TestVersionPreviewWhileGenerationBusy(t *testing.T) {
+	m := fixture()
+	m.width, m.height, m.section, m.focus = 120, 36, 1, 0
+	prefix := strings.Repeat("Source line\n", 100)
+	n := node{ID: "busy-preview", Text: prefix + "LATEST CHANGE", Kind: "generated", ChangeOffset: len([]rune(prefix))}
+	next := m.data
+	next.Busy = true
+	next.Current = &n
+	next.Nodes = []node{n}
+	raw, _ := json.Marshal(next)
+	m.apply(event{Type: "state", Data: raw})
+	if !strings.Contains(ansi.Strip(m.document.View()), "LATEST CHANGE") {
+		t.Fatal("busy state suppressed preview focus")
+	}
+}
+func TestRapidDocumentPreviewCatchesLatestSelection(t *testing.T) {
+	m := fixture()
+	m.section, m.focus, m.width, m.height = 1, 0, 120, 36
+	first := *m.data.Current
+	second := node{ID: "second", Kind: "source", Text: "Second document"}
+	m.data.Nodes = []node{first, second}
+	m.pending = true
+	m.selected = 1
+	if m.previewTarget() != nil || !m.previewSelectionPending {
+		t.Fatal("navigation not queued")
+	}
+	next := m.data
+	raw, _ := json.Marshal(next)
+	req := captureCommand(t, m, func() tea.Cmd { return m.apply(event{Type: "state", Data: raw}) })
+	if req.Command != "node.open" || string(req.Args["node"]) != `"second"` {
+		t.Fatalf("wrong preview: %#v", req)
+	}
+}
