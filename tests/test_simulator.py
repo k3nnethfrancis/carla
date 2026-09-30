@@ -1011,6 +1011,7 @@ async def test_action_dispatch_validates_before_start_and_records_overrides(setu
         runtime=SimpleNamespace(model={"alias": "base"}),
         validate_settings=Session.validate_settings,
         start_simulation=start,
+        policy_model={},
     )
     before = copy.deepcopy(project.data)
     for update, match in [

@@ -61,9 +61,6 @@ func (m *model) loom(options generationOptions) tea.Cmd {
 	if options.Count == 0 && options.Action == "loom" {
 		options.Count = 1
 	}
-	if options.Loops == 0 && options.Action == "loom" {
-		options.Loops = 1
-	}
 
 	if m.selectionVisible() || m.targetRow().kind == "document-set" {
 		args := m.documentGroupArgs()

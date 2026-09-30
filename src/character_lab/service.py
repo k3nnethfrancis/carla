@@ -5,6 +5,7 @@ emission, so a slow frontend applies backpressure rather than dropping tokens.
 """
 
 import asyncio
+import copy
 import json
 import math
 import random
@@ -603,9 +604,28 @@ class Session:
         self.project.edit(node["id"], args["text"])
 
     async def generate(
-        self, command, parent, prefix, settings, count, *, nested=False, candidates=None
+        self,
+        command,
+        parent,
+        prefix,
+        settings,
+        count,
+        *,
+        nested=False,
+        candidates=None,
+        policy_config=None,
     ):
         p = self.project
+        policy_config = (
+            copy.deepcopy(policy_config)
+            if policy_config is not None
+            else simulator.configuration(p, self.runtime.model["alias"])
+        )
+        policy_record = {
+            key: value
+            for key, value in policy_config.items()
+            if key.startswith("monitor_") or key in {"selection_enabled", "loops"}
+        }
         self.view_node = None
         job_id = self.job_id
         node = None
@@ -631,6 +651,7 @@ class Session:
                         status="queued",
                         loom_index=i,
                     )
+                    item["policy_config"] = copy.deepcopy(policy_record)
                     branches.append(item)
                 await self.snapshot()
 
@@ -657,6 +678,7 @@ class Session:
                     )
                 if candidate is None:
                     branches.append(node)
+                node["policy_config"] = copy.deepcopy(policy_record)
                 node["loom_index"] = i
                 node["status"] = "generating"
                 self.active_node = node["id"]
@@ -679,7 +701,7 @@ class Session:
                     job_id,
                 )
                 try:
-                    config = simulator.configuration(p, self.runtime.model["alias"])
+                    config = policy_config
 
                     async def monitor_event(kind, data):
                         await self.emit(kind, data, job_id)
@@ -1021,7 +1043,9 @@ class Session:
             current_seed = simulator_actions.selected_seed(p, latest, key)
 
         try:
-            if config.get("loops", 1) == 1:
+            if config.get("loops", 1) == 1 and not config.get(
+                "selection_enabled", False
+            ):
                 await batch()
             elif (
                 config.get("selection_enabled", False)

@@ -69,9 +69,12 @@ Branches which must be kept separately.
 
 Without selection, a split creates N alternatives once, then later loops advance
 those outputs. It does not multiply N on every loop. With Selection enabled in
-`/policy`, split loops judge complete alternatives, select one, then split again
+`/policy` and an explicit `--loops`, split loops judge complete alternatives, select one, then split again
 from that winner. One-output loops always continue directly. Selection defaults
-to Off and is separate from optional monitoring.
+to Off and is separate from optional monitoring. `--selection on|off` and
+`--monitoring on|off` override only the current operation. Explicit selection On
+requires 2+ alternatives and explicit `--loops`; one loop generates and selects
+once, with no subsequent generation.
 
 `--tokens` caps each model completion. `--turns` counts additional character replies
 per Simulator loop; it is unavailable for document continuations. `--visitor`

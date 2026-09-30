@@ -27,7 +27,7 @@ func (m *model) commandArguments(id string) []string {
 			args = append(args, "--turns N", "--visitor \"text\"", "--visitor-model alias")
 		}
 		args = append(args, "--eval \"name\"")
-		args = append(args, "--loops N")
+		args = append(args, "--selection on|off", "--monitoring on|off", "--loops N")
 		return args
 	case "eval":
 		return []string{"[\"evaluation name\"]", "--train-on-pass true|false"}
@@ -50,6 +50,9 @@ func (m *model) commandHelp(id string) string {
 	}
 	if id == "loom" {
 		text += "\n\nCount can also be written --count N or -n N. Flags accept --flag=value and any order; examples put --loops last. --eval runs after generation, without changing generation prompts. One output continues the current target. Two or more split alternatives. Loops continue each output; enabled selection can choose whole alternatives between split loops."
+	}
+	if id == "loom" || id == "continue" {
+		text += "\n\n--monitoring on|off overrides the configured monitor for this run; on requires a configured provider. --selection on|off overrides selection for this run. Selection needs /loom with at least two alternatives and an explicit --loops N. With --loops 1 it records the selected winner; additional loops continue from the winner. /continue cannot enable selection. These flags never save policy settings."
 	}
 	if id == "configure" && m.section == 3 {
 		text += "\n\nSettings: documents, character_alias, visitor_alias, openings, turns, visitor_brief, character_settings, visitor_settings, character_template, visitor_template."

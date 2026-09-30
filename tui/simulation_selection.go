@@ -130,9 +130,6 @@ func (m *model) simulationLoomPlan(options generationOptions) (map[string]any, s
 	if options.Action == "loom" && options.Count == 0 {
 		options.Count = 1
 	}
-	if options.Loops == 0 && options.Action == "loom" {
-		options.Loops = 1
-	}
 	if options.Turns == 0 && m.simSelection == nil {
 		options.Turns = 1
 	}

@@ -15,7 +15,7 @@ func TestCommandPrefixesExposeContextualFlags(t *testing.T) {
 		for _, input := range []string{"/lo", "/loom", "/generate", `/simulate 2 --eval "Voice"`} {
 			m.command.SetValue(input)
 			hints := strings.Join(m.commandHints(), " ")
-			for _, flag := range []string{"--tokens", "--eval", "--model"} {
+			for _, flag := range []string{"--tokens", "--eval", "--model", "--selection", "--monitoring"} {
 				if !strings.Contains(hints, flag) {
 					t.Fatalf("%s: %s", input, hints)
 				}
@@ -53,7 +53,7 @@ func TestLoomFlagsAndFooterFitSmallTerminals(t *testing.T) {
 		m.command.SetValue("/lo")
 		m.reflow()
 		frame := ansi.Strip(m.View().Content)
-		for _, s := range []string{"/loom", "--eval", "--loops", "--turns", "ENTER run"} {
+		for _, s := range []string{"/loom", "--eval", "--loops", "--turns", "--selection", "--monitoring", "ENTER run"} {
 			if !strings.Contains(frame, s) {
 				t.Fatalf("%v missing %s:\n%s", size, s, frame)
 			}

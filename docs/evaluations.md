@@ -7,7 +7,7 @@ inputs, triggers and effects. Configuring one does not silently enable another.
 | Role | Input / trigger | Result and effect |
 | --- | --- | --- |
 | Monitoring | Partial or completed generation and its context, at configured Heartbeat checkpoints | Local DiffusionGemma or hosted Jev behavior probabilities; enabled rules annotate, warn or explicitly stop. |
-| Selection | Selection On, 2+ alternatives and 2+ loops | Local instruct model reviews candidates and chooses one eligible continuation, or none. Others remain saved. |
+| Selection | Selection On, 2+ alternatives and explicit `--loops N` | Local instruct model reviews candidates and chooses one eligible continuation, or none. Others remain saved. |
 | Evaluation | Frozen document/conversation items in a named collection | One or more instruct/DiffusionGemma/Jev judges record whole-item results for comparison and dataset curation. |
 
 All are inspectable. A monitor flag is not automatically a training rejection;
@@ -15,7 +15,10 @@ a selected branch is not automatically an anthology or training member.
 
 ## Monitoring
 
-Open `/policy` → Monitoring. Default is Off. DiffusionGemma (local) uses an
+Open `/policy` → Monitoring. Default is Off. `--monitoring on|off` overrides it
+for one Continue/Loom run without changing saved settings. On uses the configured
+provider, or the last explicitly selected provider if monitoring is currently Off.
+If no provider has been configured, choose one in `/policy` first. DiffusionGemma (local) uses an
 [OpenJev service](local-judge.md) without an API key. Selecting Jev requires a saved or
 environment OpenRouter key before other settings appear. [Credential storage
 and external data flow](configuration.md#optional-monitoring) apply here.
@@ -39,8 +42,11 @@ and classifier/routing prompt. The generator's raw prompt never receives these
 instructions. The selector receives candidate text and criteria separately.
 
 Selection triggers only when it is **On**, the Loom has **2 or more alternatives**,
-and `--loops` is **2 or more**. Bare `/loom`, `/continue`, and a single-loop
-`/loom 4` do not call the selector. With Selection Off, loops continue all outputs.
+and `--loops` is **explicitly supplied**. Bare `/loom`, `/continue`, and `/loom 4`
+without `--loops` do not call the selector. `--loops 1` generates and judges one
+batch, records a winner, and finishes. With Selection Off, loops continue all outputs.
+Use `--selection on|off` to override the saved setting for one run. Explicit On
+requires at least two alternatives and `--loops`; invalid combinations fail early.
 
 With Selection On, `/loom 3 --tokens 512 --loops 4` creates three candidates per loop, classifies them
 and advances one eligible path. The classifier must review every candidate with

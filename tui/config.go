@@ -40,5 +40,5 @@ func (m *model) openSelectionConfig() tea.Cmd {
 }
 
 // Keep the trigger first so compact dialogs show it before any clipped detail.
-const selectionTriggerHelp = "Runs when On + 2+ alternatives + 2+ loops.\nExample: /loom 4 --loops 3\nChoose one per batch; split again from it.\nNone qualify: stop. Other outputs stay saved."
+const selectionTriggerHelp = "On + 2+ alternatives + explicit --loops.\n/loom 4 --selection on --loops 1\nOne loop selects; more split from the winner.\nNone qualify: stop. Other outputs stay saved."
 const evaluationJudgesHelp = "Criteria + model used by named evaluations.\nChoose judges in Evaluate > Configure.\nRun: /eval or /loom --eval \"name\"\nCreating a judge does not run it."

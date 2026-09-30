@@ -7,7 +7,14 @@ Simulator's command arguments and emits its domain events through that session.
 import copy
 from uuid import uuid4
 
-from . import credentials, evaluation_sets, monitor, simulator, simulator_actions
+from . import (
+    credentials,
+    evaluation_sets,
+    monitor,
+    policy_overrides,
+    simulator,
+    simulator_actions,
+)
 from .exploration import require_selector
 
 
@@ -17,6 +24,7 @@ async def dispatch(session, command, args, request_id):
         credentials.save_openrouter_key(args.get("key"))
         config = simulator.configuration(p, session.runtime.model["alias"])
         config["monitor_mode"] = "jev"
+        config["monitor_provider"] = "jev"
         p.data["simulator_config"] = config
         p.save()
         await session.snapshot(request_id)
@@ -57,6 +65,7 @@ async def dispatch(session, command, args, request_id):
                 "Configure an OpenRouter API key in /policy → Monitoring first"
             )
         config = {**simulator.configuration(p, session.runtime.model["alias"]), **args}
+        policy_overrides.remember_provider(config, p.data.get("simulator_config", {}))
         simulator.validate(config, p, session.validate_settings)
         p.data["simulator_config"] = config
         p.save()
@@ -160,12 +169,9 @@ async def dispatch(session, command, args, request_id):
         config = copy.deepcopy(
             simulator.configuration(p, session.runtime.model["alias"])
         )
-        config["selection_enabled"] = args.get(
-            "selection", p.data.get("selection_enabled", False)
-        )
-        if type(config["selection_enabled"]) is not bool:
-            raise ValueError("Selection must be enabled or disabled")
         action = args.get("action")
+        if action is None and any(key in args for key in ("selection", "monitoring")):
+            action = "loom"
         if action is not None and action not in {"continue", "loom"}:
             raise ValueError("Choose Continue or Loom")
         if action == "continue" and "count" in args:
@@ -229,13 +235,15 @@ async def dispatch(session, command, args, request_id):
         config["loops"] = args.get("loops", 1)
         if type(config["loops"]) is not int or config["loops"] < 1:
             raise ValueError("Loops must be a positive integer")
-        if config["loops"] > 1 and (
-            action is None
-            or (
-                config.get("selection_enabled", False)
-                and config.get("alternatives", 1) > 1
-            )
-        ):
+        config["selection_enabled"] = policy_overrides.selection(
+            args,
+            p.data.get("selection_enabled", False),
+            action or "loom",
+            config.get("alternatives", config["conversations"]),
+            session.policy_model,
+        )
+        config = policy_overrides.monitoring(config, args)
+        if action is None and config["loops"] > 1:
             require_selector(session.policy_model)
         simulator.validate(config, p, session.validate_settings)
         if not config["documents"] and not config.get("preview") and not seed:
