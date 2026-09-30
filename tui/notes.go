@@ -28,7 +28,7 @@ func (m *model) openNotes(focus bool) tea.Cmd {
 		return nil
 	}
 	m.notesOpen = true
-	m.selected = 1
+	m.selected = 0
 	m.noteScroll = 0
 	m.showInspector = false
 	if focus {

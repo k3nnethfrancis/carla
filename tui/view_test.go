@@ -1054,6 +1054,9 @@ func TestDocumentNotesNavigation(t *testing.T) {
 	if !m.notesOpen || m.focus != 1 || m.editing != "" {
 		t.Fatal("opening kept document did not open notes and editor")
 	}
+	if m.selected != 0 {
+		t.Fatal("opening a document should highlight Back to Branches")
+	}
 	rows := m.rows()
 	if len(rows) != 4 || rows[0].label != "← Branches" || rows[1].label != "+ New note" {
 		t.Fatal(rows)
