@@ -191,10 +191,12 @@ def begin(project, action_plan):
         and all(_can_advance(project, target) for target in action_plan.targets)
     )
     candidates = []
+    operation_id = uuid.uuid4().hex[:12]
     for alternative in range(action_plan.count):
         key = uuid.uuid4().hex[:12]
         result = dict(
             id=key,
+            operation_id=operation_id,
             set_id=source["set_id"] if advance_set else key,
             parent=source["id"] if source else None,
             previous_revision=source["id"] if advance_set else None,

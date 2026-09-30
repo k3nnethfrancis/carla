@@ -44,10 +44,12 @@ checkpoint and journal on next open; interrupted output is labeled accordingly.
 ## Persistence
 
 `domain.py` owns source, generated and edited document lineage, annotations,
-selection, simulation runs and anthology snapshots. Document versions receive stable
-workspace-wide identifiers such as `paths-branch-0001`, `paths-gen-0001`,
-and `paths-edit-0001`. Nested tree rows omit the source prefix; headings and
-Anthology retain it. Counters survive deletion; explicit user titles override labels.
+selection, simulation runs and anthology snapshots. `document_names.py` assigns
+operation-first labels such as `doc-1`, `branch-2-loom-1-doc-1` and
+`continue-1-branch-2-loom-1-doc-1`. These are display/provenance labels; immutable
+node IDs remain reference keys. Parent-scoped counters survive deletion; explicit
+user titles override labels. A shared operation ID groups Loom alternatives without
+changing document ancestry or evaluation references.
 Existing workspaces receive labels on their next save without changing text or lineage.
 Source text and generation
 prompts are copied into the artifacts so later library edits cannot rewrite history.

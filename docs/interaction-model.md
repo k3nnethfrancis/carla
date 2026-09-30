@@ -125,3 +125,18 @@ Set rows summarize active members, and the app header counts active documents ev
 when their rows are collapsed. Live document-monitor events update policy scores
 in the preview footer and Loom grid; `!` marks detections, which remain visible
 on completed documents. Saved monitor summaries restore when reopening a workspace.
+
+### Document names
+
+Automatic names start with the newest operation and end with their ancestry:
+`doc-1`, `loom-1-doc-1`, `branch-2-loom-1-doc-1`, then
+`continue-1-branch-2-loom-1-doc-1`. Human edits use `edit`, explicit copies use
+`branch`, and generated continuations use `continue`. Loom outputs are numbered
+branches beneath their Loom operation. Bare Loom (one output) remains Continue.
+
+Numbers are local to the parent and operation type. They are allocated before
+inference, survive deletion/restart, and do not depend on completion order.
+Document IDs, source attribution, contents and custom titles are unchanged.
+Older automatic labels are retained as `legacy_label` when migrated on normal
+workspace save. Historical groups without a recorded shared invocation remain
+separate; Carla does not infer a common Loom from timestamps.

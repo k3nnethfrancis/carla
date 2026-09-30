@@ -9,6 +9,9 @@ import (
 // Walk parent links, rather than insertion order: new siblings may arrive after
 // their cousins. Collapse is UI state and never deletes a saved continuation.
 func (m *model) branchRows() []row {
+	if m.section == 1 && m.hasDocumentOperations() {
+		return m.operationBranchRows()
+	}
 	children := map[string][]node{}
 	known := map[string]bool{}
 	for _, n := range m.data.Nodes {
@@ -37,14 +40,6 @@ func (m *model) branchRows() []row {
 				continue
 			}
 			label := documentLabel(n)
-			// The parent tree supplies source context; detached anthology rows
-			// and document headings retain the complete identifier.
-			if depth > 0 && m.section != 2 && n.Label != "" && label == n.Label {
-				parts := strings.Split(label, "-")
-				if len(parts) >= 3 {
-					label = strings.Join(parts[len(parts)-2:], "-")
-				}
-			}
 			if n.Kept {
 				label = "★ " + label
 			}
@@ -195,20 +190,11 @@ func (m *model) branchArrow(key string) {
 		m.collapsed[id] = true
 		return
 	}
-	for _, n := range m.data.Nodes {
-		if n.ID == id {
-			for i, r := range rows {
-				if r.id == n.Parent {
-					m.selected = i
-					return
-				}
-			}
-		}
-	}
+	m.selected = parentBranchRow(rows, m.selected)
 }
 
 func (m *model) documentSetMembers(id string) []string {
-	if strings.Contains(id, "/scope/") {
+	if strings.HasPrefix(id, "loom:") || strings.Contains(id, "/scope/") {
 		var ids []string
 		var visit func(actionScope)
 		visit = func(s actionScope) {
@@ -268,6 +254,15 @@ func (m *model) visibleDocumentSets() []documentSet {
 // documentScope preserves saved nested membership while resolving current heads.
 // Set IDs describe provenance; exact leaf IDs remain the execution authority.
 func (m *model) documentScope(id string) actionScope {
+	if strings.HasPrefix(id, "loom:") {
+		result := actionScope{Kind: "set"}
+		for _, set := range m.data.DocumentSets {
+			if "loom:"+set.OperationID == id {
+				result.Children = append(result.Children, m.documentScope(set.ID))
+			}
+		}
+		return result
+	}
 	if base, path, ok := strings.Cut(id, "/scope/"); ok {
 		scope := m.documentScope(base)
 		for _, part := range strings.Split(path, "/") {

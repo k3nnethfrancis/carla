@@ -1184,7 +1184,7 @@ func TestBranchIdentifiersCompactOnlyNestedAutomaticNames(t *testing.T) {
 		{ID: "edit", Parent: "gen", Title: "My name", Label: "paths-edit-0001", Status: "complete"},
 	}
 	rows := m.branchRows()
-	if !strings.Contains(rows[0].label, "paths-branch-0001") || strings.Contains(rows[1].label, "paths-") || !strings.Contains(rows[1].label, "gen-0001") || !strings.Contains(rows[2].label, "My name") {
+	if !strings.Contains(rows[0].label, "paths-branch-0001") || !strings.Contains(rows[1].label, "paths-") || !strings.Contains(rows[1].label, "gen-0001") || !strings.Contains(rows[2].label, "My name") {
 		t.Fatalf("unexpected labels: %#v", rows)
 	}
 	m.section = 2

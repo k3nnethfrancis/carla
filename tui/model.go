@@ -80,13 +80,16 @@ type simulationRun struct {
 	Conversations     []simulationConversation
 }
 type documentSet struct {
-	Scope       *actionScope `json:"scope"`
-	SourceScope *actionScope `json:"source_scope"`
-	ID          string
-	SetID       string `json:"set_id"`
-	Members     []string
-	Parent      string
-	Action      string
+	OperationID    string       `json:"operation_id"`
+	OperationLabel string       `json:"operation_label"`
+	Label          string       `json:"label"`
+	Scope          *actionScope `json:"scope"`
+	SourceScope    *actionScope `json:"source_scope"`
+	ID             string
+	SetID          string `json:"set_id"`
+	Members        []string
+	Parent         string
+	Action         string
 }
 type state struct {
 	SelectionEnabled bool                   `json:"selection_enabled"`

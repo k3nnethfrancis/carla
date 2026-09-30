@@ -244,6 +244,9 @@ func documentLabel(n node) string {
 	if n.Title != "" {
 		return n.Title
 	}
+	if n.Label != "" {
+		return n.Label
+	}
 	for _, line := range strings.Split(n.Preview+"\n"+n.Text, "\n") {
 		if strings.TrimSpace(line) != "" {
 			return strings.TrimSpace(line)

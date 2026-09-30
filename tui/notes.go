@@ -51,20 +51,7 @@ func (m *model) backFromNotes() tea.Cmd {
 	m.notesOpen = false
 	m.section, m.focus = 1, 0
 	m.branchSelection = map[string]bool{}
-	// Reveal the current version even when its ancestors were collapsed.
-	parents := map[string]string{}
-	for _, n := range m.data.Nodes {
-		parents[n.ID] = n.Parent
-	}
-	for id := parents[m.currentID()]; id != ""; id = parents[id] {
-		delete(m.collapsed, id)
-	}
-	for i, r := range m.rows() {
-		if r.id == m.currentID() {
-			m.selected = i
-			break
-		}
-	}
+	m.selectDocument(m.currentID())
 	m.reflow()
 	return nil
 }
