@@ -18,6 +18,9 @@ func (m *model) dialogChoice() (dialogChoice, bool) {
 	id := d.rows[d.index].id
 	c := dialogChoice{field: id}
 	switch d.kind {
+	case "operational-policy-list":
+		purpose, _ := d.args["purpose"].(string)
+		return c, m.operationalPolicy(purpose, id).ID != ""
 	case "grow-config":
 		c.toggle = id == "selection_enabled"
 		return c, c.toggle
@@ -70,6 +73,10 @@ func (m *model) cycleDialogChoice(step int) tea.Cmd {
 		return nil
 	}
 	d := m.dialog
+	// List rows keep Enter for opening; only quick-choice keys toggle.
+	if d.kind == "operational-policy-list" {
+		return m.toggleOperationalPolicy()
+	}
 	if c.toggle {
 		if d.kind == "grow-config" {
 			return m.send("policy.configure", map[string]any{"selection_enabled": !m.selectionEnabled()})

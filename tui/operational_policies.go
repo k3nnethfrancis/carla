@@ -25,6 +25,15 @@ func (m *model) operationalContext() (string, string) {
 			if purpose != "" && id != "" {
 				return purpose, id
 			}
+			// A list-row toggle targets that named policy. Nested setup dialogs
+			// retain this list as parent, including its selected row and filter.
+			if d.kind == "operational-policy-list" && len(d.rows) > 0 {
+				purpose, _ = d.args["purpose"].(string)
+				id = d.rows[d.index].id
+				if m.operationalPolicy(purpose, id).ID != "" {
+					return purpose, id
+				}
+			}
 		}
 	}
 	return "", ""
@@ -86,11 +95,19 @@ func (m *model) selectionModelName() string {
 func (m *model) openOperationalPolicies(purpose string) tea.Cmd {
 	d := &dialog{kind: "operational-policy-list", title: strings.Title(purpose) + " policies", args: map[string]any{"purpose": purpose}}
 	for _, p := range m.data.OperationalPolicies[purpose] {
-		label := p.Name
+		enabled := p.Config["selection_enabled"] == true
+		if purpose == "monitoring" {
+			enabled = p.Config["monitor_mode"] == "diffusion" || p.Config["monitor_mode"] == "jev"
+		}
+		state := "Off"
+		if enabled {
+			state = "On"
+		}
+		label := p.Name + " · " + state
 		if m.data.ActiveOperationalPolicies[purpose] == p.ID {
 			label += " · active"
 		}
-		d.rows = append(d.rows, row{id: p.ID, label: label, preview: "Configure judges, behaviors and policy actions. Opening this policy does not activate it."})
+		d.rows = append(d.rows, row{id: p.ID, label: label, preview: "Enter configures judges, behaviors and actions. Space or Left/Right toggles On/Off; this does not change which policy is active."})
 	}
 	d.rows = append(d.rows, row{id: "new", label: "+ New policy", preview: "Create a named policy from the current settings. Activate it explicitly when ready."})
 	m.dialog = d
@@ -385,4 +402,15 @@ func orderOperationalRows(d *dialog) {
 	}
 	order := map[string]int{"rename-policy": 0, "mode": 1, "selection_enabled": 1, "key": 2, "judges": 2, "actions": 3, "timing": 4, "activate-policy": 5, "delete-policy": 6}
 	sort.SliceStable(d.rows, func(i, j int) bool { return order[d.rows[i].id] < order[d.rows[j].id] })
+}
+
+func (m *model) toggleOperationalPolicy() tea.Cmd {
+	purpose, id := m.operationalContext()
+	if id == "" {
+		return nil
+	}
+	if purpose == "monitoring" {
+		return m.toggleMonitoring(m.dialog)
+	}
+	return m.send("policy.configure", map[string]any{"selection_enabled": !m.selectionEnabled()})
 }

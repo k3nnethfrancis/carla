@@ -350,6 +350,8 @@ func (m *model) renderDialog() string {
 			footer = "SPACE / ←→ change · ENTER open · ESC back"
 			if choice.toggle {
 				footer = "SPACE / ←→ / ENTER toggle · ESC back"
+			} else if d.kind == "operational-policy-list" {
+				footer = "SPACE / ←→ toggle · ENTER open · ESC back"
 			}
 		}
 		if d.choicePicker() {
@@ -418,6 +420,8 @@ func (m *model) renderDialog() string {
 			footer = "SPACE / ←→ change · ENTER open · ESC back"
 			if choice.toggle {
 				footer = "SPACE / ←→ / ENTER toggle · ESC back"
+			} else if d.kind == "operational-policy-list" {
+				footer = "SPACE / ←→ toggle · ENTER open · ESC back"
 			}
 		}
 		if d.choicePicker() {

@@ -309,6 +309,12 @@ local to the policy. Saved runs
 retain the configurations used at execution. Adding data never invokes a model.
 See [evaluations](evaluations.md) for the Data / Policies / Runs workflow.
 
+Named Monitoring and Selection policy rows show **On/Off** separately from the
+**active** marker (the policy chosen for future runs). Space or Left/Right toggles
+the focused policy directly from the list; Enter opens its configuration. Toggling
+an inactive policy changes only its saved enabled state. Enabling monitoring uses
+its remembered judge, with model/key setup when needed.
+
 Choice rows in policy configuration support Space to cycle forward and Left/Right
 to cycle backward/forward, without opening a picker. Enter still opens the full
 picker. Heartbeat toggles use the same keys; Interval opens its numeric control.
