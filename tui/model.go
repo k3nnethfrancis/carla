@@ -106,38 +106,41 @@ type documentSet struct {
 	Action         string
 }
 type state struct {
-	SelectionEnabled bool                   `json:"selection_enabled"`
-	DocumentHeads    map[string]string      `json:"document_heads"`
-	DocumentSetHeads map[string]string      `json:"document_set_heads"`
-	DocumentSets     []documentSet          `json:"document_sets"`
-	EvaluationSets   []evaluationCollection `json:"evaluation_sets"`
-	ActiveEvaluation string                 `json:"active_evaluation"`
-	MonitorKeySource string                 `json:"monitor_key_source"`
-	Evaluators       []evaluator
-	Evaluations      []evaluationSummary
-	EvaluationPrompt string `json:"evaluation_prompt"`
-	Workspace        workspace
-	Workspaces       []workspace
-	Selected         []string
-	Nodes            []node
-	Current          *node
-	Models           []localModel
-	ModelAlias       string `json:"model_alias"`
-	ModelContext     int    `json:"model_context"`
-	NativeContext    int    `json:"native_context"`
-	Settings         settings
-	PolicySpec       string `json:"policy_spec"`
-	PolicyPrompt     string `json:"policy_prompt"`
-	PolicyModel      string `json:"policy_model"`
-	Annotations      []annotation
-	SimulatorConfig  map[string]any    `json:"simulator_config"`
-	SimulationRuns   []runSummary      `json:"simulation_runs"`
-	GrowSettings     settings          `json:"grow_settings"`
-	SelectorModels   []localModel      `json:"selector_models"`
-	PolicyRuns       []policyRun       `json:"policy_runs"`
-	Bindings         map[string]string `json:"bindings"`
-	ActiveNode       string            `json:"active_node"`
-	Busy             bool
+	SelectionEnabled       bool                   `json:"selection_enabled"`
+	DocumentHeads          map[string]string      `json:"document_heads"`
+	DocumentSetHeads       map[string]string      `json:"document_set_heads"`
+	DocumentSets           []documentSet          `json:"document_sets"`
+	EvaluationPolicies     []evaluationPolicy     `json:"evaluation_policies"`
+	ActiveEvaluationPolicy string                 `json:"active_evaluation_policy"`
+	EvaluationRuns         []evaluationRun        `json:"evaluation_runs"`
+	EvaluationSets         []evaluationCollection `json:"evaluation_sets"`
+	ActiveEvaluation       string                 `json:"active_evaluation"`
+	MonitorKeySource       string                 `json:"monitor_key_source"`
+	Evaluators             []evaluator
+	Evaluations            []evaluationSummary
+	EvaluationPrompt       string `json:"evaluation_prompt"`
+	Workspace              workspace
+	Workspaces             []workspace
+	Selected               []string
+	Nodes                  []node
+	Current                *node
+	Models                 []localModel
+	ModelAlias             string `json:"model_alias"`
+	ModelContext           int    `json:"model_context"`
+	NativeContext          int    `json:"native_context"`
+	Settings               settings
+	PolicySpec             string `json:"policy_spec"`
+	PolicyPrompt           string `json:"policy_prompt"`
+	PolicyModel            string `json:"policy_model"`
+	Annotations            []annotation
+	SimulatorConfig        map[string]any    `json:"simulator_config"`
+	SimulationRuns         []runSummary      `json:"simulation_runs"`
+	GrowSettings           settings          `json:"grow_settings"`
+	SelectorModels         []localModel      `json:"selector_models"`
+	PolicyRuns             []policyRun       `json:"policy_runs"`
+	Bindings               map[string]string `json:"bindings"`
+	ActiveNode             string            `json:"active_node"`
+	Busy                   bool
 }
 type row struct {
 	id, label, kind, preview string
@@ -171,8 +174,11 @@ type model struct {
 	pendingDocumentSelection    map[string]bool
 	pendingDocumentGroups       map[string][]string
 	pendingDocumentSet          string
+	evalArea                    string
+	evalRun                     *evaluationRun
 	evalCollection              string
 	evalCreating                bool
+	evalPolicyCreating          bool
 	behaviorDraft               *loomDimension
 	behaviorEditID              string
 	behaviorCreating            string
@@ -383,7 +389,7 @@ func (m *model) activate() tea.Cmd {
 	m.selected = min(m.selected, len(rows)-1)
 	r := rows[m.selected]
 	switch r.kind {
-	case "eval-collection", "eval-create", "eval-back", "eval-config", "eval-add", "eval-execute":
+	case "eval-area", "eval-run", "eval-policy", "eval-policy-new", "eval-collection", "eval-create", "eval-back", "eval-config", "eval-add", "eval-execute":
 		return m.evaluationCollectionAction(r.kind, r.id)
 	case "evaluation":
 		m.focus = 1
@@ -579,6 +585,18 @@ func (m *model) branch() tea.Cmd {
 }
 func (m *model) apply(e event) tea.Cmd {
 	switch e.Type {
+	case "evaluation_run":
+		var run evaluationRun
+		if err := json.Unmarshal(e.Data, &run); err != nil {
+			return func() tea.Msg { return failure{err} }
+		}
+		if m.evalRun == nil || m.evalRun.ID != run.ID {
+			m.document.GotoTop()
+		}
+		m.evalRun = &run
+		m.pending = false
+		m.reflow()
+		return nil
 	case "evaluation":
 		var record evaluationRecord
 		if err := json.Unmarshal(e.Data, &record); err != nil {
@@ -845,6 +863,12 @@ func (m *model) apply(e event) tea.Cmd {
 			m.behaviorDraft = nil
 		}
 		m.refreshConfig()
+		if m.evalPolicyCreating {
+			m.evalPolicyCreating = false
+			parent := m.dialog
+			m.openEvaluationPolicy(m.data.ActiveEvaluationPolicy)
+			m.dialog.parent = parent
+		}
 		if m.evalCreating {
 			m.evalCreating = false
 			m.enterCollection(m.data.ActiveEvaluation)
@@ -872,6 +896,8 @@ func (m *model) apply(e event) tea.Cmd {
 			m.behaviorDraft = nil
 			m.behaviorCreating = ""
 			m.evalCollection = ""
+			m.evalArea = ""
+			m.evalRun = nil
 			m.evaluation = nil
 			m.evalViewedID = ""
 			m.evaluationRaw = nil
@@ -990,6 +1016,9 @@ func (m *model) apply(e event) tea.Cmd {
 				return m.previewTarget()
 			}
 		}
+		if m.section == 4 && m.evalArea == "runs" {
+			return m.previewTarget()
+		}
 	case "token":
 		var t struct{ Node, Text string }
 		json.Unmarshal(e.Data, &t)
@@ -1055,6 +1084,7 @@ func (m *model) apply(e event) tea.Cmd {
 		m.keySaving = false
 		m.restoringView = false
 		m.behaviorCreating = ""
+		m.evalPolicyCreating = false
 		var err struct{ Message string }
 		json.Unmarshal(e.Data, &err)
 		m.pending = false

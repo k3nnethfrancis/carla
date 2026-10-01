@@ -108,6 +108,10 @@ func (m *model) refreshConfig() {
 		return
 	}
 	switch d.kind {
+	case "eval-policy-list":
+		m.openEvaluationPolicies()
+	case "eval-policy-config":
+		m.openEvaluationPolicy(d.args["id"].(string))
 	case "eval-collection-config":
 		m.openConfig()
 	case "eval-definitions":

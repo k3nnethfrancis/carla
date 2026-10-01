@@ -16,6 +16,7 @@ from . import (
     credentials,
     document_actions,
     evaluation,
+    evaluation_policies,
     evaluation_sets,
     exports,
     simulator,
@@ -179,6 +180,9 @@ class Session:
             evaluators=evaluation.definitions(p),
             evaluations=evaluation.summaries(p),
             evaluation_sets=evaluation_sets.summaries(p),
+            evaluation_policies=p.data.get("evaluation_policies", []),
+            active_evaluation_policy=p.data.get("active_evaluation_policy", ""),
+            evaluation_runs=evaluation_policies.run_summaries(p),
             active_evaluation=p.data.get("active_evaluation", ""),
             evaluation_prompt=evaluation.DEFAULT_PROMPT,
             selection_enabled=p.data.get("selection_enabled", False),
@@ -222,6 +226,7 @@ class Session:
             "simulator.inspect",
             "evaluation.open",
             "evaluation.item.open",
+            "evaluation.run.open",
         }:
             raise ValueError(
                 "Stop the active operation before changing the workspace or document"

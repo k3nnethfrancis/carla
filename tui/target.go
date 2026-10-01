@@ -110,6 +110,9 @@ func (m *model) previewTarget() tea.Cmd {
 		return nil
 	}
 	r := m.targetRow()
+	if m.section == 4 && r.kind == "eval-run" && m.evaluationRunStale(r.id) {
+		return m.send("evaluation.run.open", map[string]any{"id": r.id})
+	}
 	if m.section == 4 && r.kind == "evaluation" && (m.evaluation == nil || m.evaluation.ID != r.id) {
 		return m.send("evaluation.item.open", map[string]any{"collection": m.evalCollection, "id": r.id})
 	}

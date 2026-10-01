@@ -83,7 +83,7 @@ Selection and local evaluation are separate instruct-model judge calls.
 | Generated opener | Simulator → `/config` → Opening → Generated → Generation prompt | Raw completion using its selected model/sampling, once per fresh conversation. |
 | Selection | `/policy` → Selection | Criteria and system prompt for candidate classification; never injected into generator text. |
 | Monitoring | `/policy` → Monitoring → Behaviors | Named behavior specs sent to local DiffusionGemma or Jev with context. The provider envelope is managed by Carla. |
-| Evaluation | `/policy` → Judge configurations | Criteria and local judge system prompt, or DiffusionGemma/Jev behavior spec/threshold. |
+| Evaluation | Evaluate → Policies | Criteria and local judge system prompt, or DiffusionGemma/Jev behavior spec/threshold. |
 
 ### Document continuations
 
@@ -289,15 +289,18 @@ not a locally calibrated guarantee. A Stop affects only the flagged conversation
 
 ## Policy and evaluation configuration
 
-Use `/policy` for monitoring, selection and reusable judge configurations.
-Each judge chooses a local LLM, local DiffusionGemma or hosted Jev, criteria, and
-(for classifiers) a probability threshold. DiffusionGemma uses the automatically managed local OpenJev
-worker after [one-time setup](local-judge.md). Local judging exposes its complete system prompt. Definitions are
-workspace-local and revisioned; results keep the definition used at execution.
-In Evaluate, `/config` configures the opened collection: its name, judges and
-active status. Elsewhere it configures generation. Adding collection items and
-running judges are separate actions. See
-[commands](commands.md#policies-and-evaluated-datasets) for targeting and exports.
+Use `/policy` for monitoring and selection; in Evaluate it opens Policies.
+Evaluation policies group behaviors, each with a model, spec and passing rule.
+Models can be the configured local LLM, local DiffusionGemma or hosted Jev.
+Classifiers use probability thresholds; local LLM behaviors expose the full system
+prompt and return a boolean judgment with evidence. DiffusionGemma uses the
+managed local OpenJev worker after [one-time setup](local-judge.md).
+
+Data collections and policies are independent. Choose an active policy for bare
+`/eval`, or use `/eval "policy name"`. `/config` handles the current view's
+settings. Behavior definitions are workspace-local and revisioned; saved runs
+retain the configurations used at execution. Adding data never invokes a model.
+See [evaluations](evaluations.md) for the Data / Policies / Runs workflow.
 
 Choice rows in policy configuration support Space to cycle forward and Left/Right
 to cycle backward/forward, without opening a picker. Enter still opens the full
@@ -317,7 +320,7 @@ Disabling a behavior skips it while retaining its settings.
 
 Long specs, criteria and prompts use the full document editor. Text wraps and
 scrolls with the cursor; use arrows, Page Up/Page Down or the mouse wheel to
-navigate. The heading shows the current line and total lines. New judges
+navigate. The heading shows the current line and total lines. New evaluation behaviors
 ask for a name first, then open this editor for criteria. Saving preserves the
 complete multiline text, including content outside the visible window.
 

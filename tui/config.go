@@ -10,6 +10,9 @@ func (m *model) openConfig() tea.Cmd {
 		}
 	}()
 	if m.section == 4 {
+		if m.evalArea == "policies" {
+			return m.openEvaluationPolicies()
+		}
 		cmd := m.openCollectionConfig()
 		if m.dialog == nil {
 			m.dialog = &dialog{kind: "loom-config", title: "Configuration"}

@@ -354,7 +354,7 @@ func (m *model) renderDialog() string {
 		if d.kind == "loom-policy-bundle-confirm" {
 			footer = "↑↓ choose · ENTER select · ESC back"
 		}
-		if d.kind == "sim-documents" || d.kind == "eval-judges" || d.kind == "eval-add-items" {
+		if d.kind == "sim-documents" || d.kind == "eval-policy-behaviors" || d.kind == "eval-add-items" {
 			footer = "SPACE select · CTRL+S save · ESC cancel"
 		}
 		if d.query != "" {
@@ -419,7 +419,7 @@ func (m *model) renderDialog() string {
 		if d.choicePicker() {
 			footer = "←→ choose · SPACE / ENTER apply · ESC back"
 		}
-		if d.kind == "sim-documents" || d.kind == "eval-judges" || d.kind == "eval-add-items" {
+		if d.kind == "sim-documents" || d.kind == "eval-policy-behaviors" || d.kind == "eval-add-items" {
 			footer = "No anthology documents. Keep a branch first. ESC close"
 		}
 		body = append(body, line(footer, r.w-4))
@@ -446,6 +446,9 @@ func (m *model) View() tea.View {
 		switch p.kind {
 		case 0:
 			title = sections[m.section]
+			if m.section == 4 && m.evalArea != "" {
+				title = strings.Title(m.evalArea)
+			}
 			if m.notesOpen {
 				title = "Notes"
 			}
@@ -456,6 +459,15 @@ func (m *model) View() tea.View {
 				continue
 			}
 			title = m.nodeTitle()
+			if m.section == 4 {
+				title = "Evaluate"
+				if m.evalArea != "" {
+					title += " / " + strings.Title(m.evalArea)
+				}
+				if c := m.currentEvaluation(); c != nil {
+					title += " / " + c.Name
+				}
+			}
 			if m.section == 3 && m.editing == "" {
 				title = "Simulator"
 				if m.conversationOpen {
@@ -524,7 +536,7 @@ func (m *model) View() tea.View {
 				}
 			}
 		}
-		modelName = fmt.Sprintf("%d collections · %d items · %d training", len(m.data.EvaluationSets), items, training)
+		modelName = fmt.Sprintf("%d items · %d training · policy: %s", items, training, m.activePolicyName())
 	}
 
 	activeDocuments := 0

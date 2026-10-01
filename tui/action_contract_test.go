@@ -113,6 +113,7 @@ func TestConfigExposesWorkspaceAndBindings(t *testing.T) {
 func TestAddDoesNotRunEvaluation(t *testing.T) {
 	m := evalFixture()
 	m.section = 4
+	m.evalCollection = "set"
 	m.addItem()
 	if m.dialog == nil || m.dialog.kind != "eval-add-items" {
 		t.Fatal(m.dialog)

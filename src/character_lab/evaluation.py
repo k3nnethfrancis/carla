@@ -295,6 +295,11 @@ async def evaluate(session, records, *, manage_job=True):
 
 async def dispatch(session, command, args, request_id):
     p = session.project
+    if command.startswith(("evaluation.policy.", "evaluation.run.")):
+        from .evaluation_policies import dispatch as dispatch_policy
+
+        await dispatch_policy(session, command, args, request_id)
+        return
     if command.startswith(("evaluation.collection.", "evaluation.item.")):
         from .evaluation_sets import dispatch as dispatch_collection
 
@@ -304,6 +309,13 @@ async def dispatch(session, command, args, request_id):
         save_definition(p, args)
     elif command == "evaluation.definition.delete":
         items = p.data.setdefault("evaluators", [])
+        if any(
+            args["id"] in policy["judges"]
+            for policy in p.data.get("evaluation_policies", [])
+        ):
+            raise ValueError(
+                "Remove this behavior from its policies before deleting it"
+            )
         items.remove(find(items, args["id"]))
         p.save()
     elif command == "evaluation.open":
@@ -375,6 +387,18 @@ async def dispatch(session, command, args, request_id):
                     metadata_history=[],
                 )
             )
+        # Keep the original single-behavior endpoint visible in Data and Runs.
+        from . import evaluation_policies, evaluation_sets
+
+        group = evaluation_sets.data_collection(p)
+        items = [evaluation_sets.add_capture(group, item) for item in captures]
+        for item, record in zip(items, records):
+            record.update(collection=group["id"], item=item["id"])
+            item["judgments"].append(record["id"])
+        frozen = evaluation_policies.Definitions(
+            {"name": definition["name"]}, [definition]
+        )
+        evaluation_policies.record_run(p, batch_id, group, frozen, items, records)
         session.runtime.close()
         p.data.setdefault("evaluations", []).extend(records)
         p.save()

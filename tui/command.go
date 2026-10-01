@@ -92,7 +92,7 @@ func (m *model) commandChoices() []action {
 		}
 	}
 	if m.section == 4 && len(m.evaluationIDs()) > 0 {
-		actions = append(actions, action{id: "keep", label: "Mark selected items for training"}, action{id: "remove", label: "Remove selected items from this evaluation"}, action{id: "notes", label: "Edit evaluation note"}, action{id: "inspect", label: "Exact evaluated input and judge result"})
+		actions = append(actions, action{id: "keep", label: "Mark selected items for training"}, action{id: "remove", label: "Remove selected items from this collection"}, action{id: "notes", label: "Edit evaluation note"}, action{id: "inspect", label: "Exact evaluated input and judge result"})
 	}
 	actions = append(actions, action{id: "help", label: "All commands and navigation"}, action{id: "keys", label: "Edit keybindings"}, action{id: "quit", label: "Quit Carla"}, action{id: "exit", label: "Exit Carla"}, action{id: "restart", label: "Restart Carla in this workspace"})
 	if m.data.Busy {
@@ -143,7 +143,7 @@ func (m *model) commandChoices() []action {
 		case "policy":
 			a.label = "Monitoring, selection and evals"
 		case "eval":
-			a.label = "Run active or named evaluation on selected items"
+			a.label = "Apply active or named policy to selected data"
 		case "evaluations":
 			a.label = "Named collections, judgments and training items"
 		case "snapshot":
@@ -173,7 +173,7 @@ func (m *model) commandChoices() []action {
 		if a.id == "configure" {
 			a.label = "Generation models, prompts and sampling"
 			if m.section == 4 {
-				a.label = "Configure the opened evaluation and its judges"
+				a.label = "Configure the current data collection or policy"
 			}
 		}
 		if a.id == "remove" && m.section == 1 {

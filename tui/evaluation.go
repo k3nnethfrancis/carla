@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -51,25 +52,28 @@ func (m *model) evaluator(id string) evaluator {
 	return evaluator{}
 }
 func (m *model) openPolicy() tea.Cmd {
+	if m.section == 4 {
+		return m.openEvaluationPolicies()
+	}
 	m.dialog = &dialog{kind: "policy", title: "Policy", rows: []row{
 		{id: "monitor", label: "Monitoring", preview: "Monitor document continuations and character replies; warn or explicitly stop. Shared across Branches and Simulator."},
 		{id: "selection", label: "Selection", preview: selectionTriggerHelp},
-		{id: "evaluators", label: "Evals", preview: evaluationJudgesHelp},
+		{id: "evaluators", label: "Evaluation policies", preview: "Configure reusable behaviors and models to assess saved documents and conversations."},
 	}}
 	return nil
 }
 func (m *model) openEvaluators() tea.Cmd {
-	d := &dialog{kind: "eval-definitions", title: "Evaluation judges"}
+	d := &dialog{kind: "eval-definitions", title: "Behaviors"}
 	for _, e := range m.data.Evaluators {
 		d.rows = append(d.rows, row{id: e.ID, label: e.Name + " · " + judgeLabel(e.Kind), preview: e.Spec})
 	}
-	d.rows = append(d.rows, row{id: "new", label: "+ New judge", preview: "Define criteria and a model, then add this judge to a named evaluation in Evaluate > Configure."})
+	d.rows = append(d.rows, row{id: "new", label: "+ New behavior", preview: "Describe what to assess and choose its model. Add behaviors to policies to run them together."})
 	m.dialog = d
 	return nil
 }
 func (m *model) openEvaluator(id string) tea.Cmd {
 	e := m.evaluator(id)
-	rows := []row{{id: "name", label: e.Name, preview: "Rename judge"}, {id: "kind", label: "Judge · " + judgeLabel(e.Kind)}, {id: "model", label: "Model · " + e.Model}, {id: "spec", label: "Criteria", preview: e.Spec}}
+	rows := []row{{id: "name", label: e.Name, preview: "Name this reusable behavior."}, {id: "kind", label: "Type · " + judgeLabel(e.Kind), preview: "Choose the model family used to assess this behavior."}, {id: "model", label: "Model · " + m.evaluatorModelName(e), preview: "Model that assesses this behavior. Classifiers return probabilities; LLMs return a structured judgment."}, {id: "spec", label: "Behavior spec", preview: e.Spec}}
 
 	if e.Kind == "llm" {
 		rows = append(rows, row{id: "prompt", label: "Judge prompt", preview: e.Prompt})
@@ -146,39 +150,30 @@ func (m *model) openEval(input string) tea.Cmd {
 		return nil
 	}
 	if name == "" {
-		name = m.data.ActiveEvaluation
-		if m.section == 4 && m.evalCollection != "" {
-			name = m.evalCollection
-		}
+		name = m.data.ActiveEvaluationPolicy
 	}
-	var group *evaluationCollection
-	for i := range m.data.EvaluationSets {
-		c := &m.data.EvaluationSets[i]
-		if c.ID == name || c.Name == name {
-			group = c
-			break
-		}
-	}
-	if group == nil {
-		m.status = "Choose an active evaluation in Evaluate, or use /eval name"
+	policy := m.findEvaluationPolicy(name)
+	if policy == nil {
+		m.status = "Choose a policy in Evaluate → Policies, or use /eval policy-name"
 		return nil
 	}
-	args := map[string]any{"collection": group.ID, "train_on_pass": auto}
+	args := map[string]any{"policy": policy.ID, "train_on_pass": auto}
 	if m.section == 4 {
+		if m.currentEvaluation() == nil {
+			m.status = "Open Data and select a collection to evaluate"
+			return nil
+		}
+		args["collection"] = m.evalCollection
 		ids := m.evaluationIDs()
 		if len(ids) == 0 {
 			for _, item := range m.collectionItems() {
-				if item.Status != "complete" {
+				if item.Status != "complete" || policy.ID != m.data.ActiveEvaluationPolicy {
 					ids = append(ids, item.ID)
 				}
 			}
 		}
 		if len(ids) == 0 {
-			m.status = "Select items or add material to this evaluation first"
-			return nil
-		}
-		if m.evalCollection != group.ID {
-			m.status = "Open that evaluation and add the items first"
+			m.status = "Select data or add items to this collection first"
 			return nil
 		}
 		args["items"] = ids
@@ -190,11 +185,13 @@ func (m *model) openEval(input string) tea.Cmd {
 		}
 		args["targets"] = targets
 	}
+
 	cmd := m.send("evaluation.collection.run", args)
 	if cmd != nil {
 		m.dialog = nil
 		m.section = 4
-		m.enterCollection(group.ID)
+		m.evalArea = "runs"
+		m.enterCollection("")
 	}
 	return cmd
 }
@@ -214,12 +211,16 @@ func evaluationStatus(e evaluationSummary) string {
 	return "FAIL"
 }
 func (m *model) evaluationRows() []row { return m.collectionRows() }
-func (m *model) evaluationView(width int) string {
+func (m *model) evaluationView(width int) (text string) {
+	defer func() { text = ansi.Wrap(safe(text), width, "") }()
+	if m.evalArea == "runs" {
+		return m.evaluationRunView(width)
+	}
 	if m.evaluation == nil || m.evaluation.ID != m.targetRow().id {
 		if c := m.currentEvaluation(); c != nil {
-			return c.Name + "\n\nAdd saved documents, conversations or existing judgments. Adding does not run inference.\n\nRun selected or pending items with /eval. Configure this evaluation with /config.\nSPACE selects · ENTER opens · /keep marks for training"
+			return c.Name + "\n\nAdd saved documents, conversations or existing judgments. Adding does not run inference.\n\nRun selected or pending items with /eval. /policy chooses the assessment policy. /config edits the collection.\nSPACE selects · ENTER opens · /keep marks for training"
 		}
-		return "Evaluations\n\nOpen a named collection to see its items and judgments, or create one.\nThe active evaluation is used by /eval from documents and conversations."
+		return "Evaluate\n\nData · saved documents and conversation traces.\nPolicies · behaviors and models used to assess them.\nRuns · results, preserving the exact inputs and policy.\n\nActive policy · " + m.activePolicyName()
 	}
 	return m.collectionItemView(m.evaluation, width)
 }
@@ -271,7 +272,10 @@ func (m *model) evalAction(id string) tea.Cmd {
 
 // All forms reuse Carla's existing parent/back stack and correlated saves.
 func (m *model) submitEvaluation(d *dialog) tea.Cmd {
-	if strings.HasPrefix(d.kind, "eval-collection") || d.kind == "eval-judges" || d.kind == "eval-add-items" {
+	if strings.HasPrefix(d.kind, "eval-policy") {
+		return m.submitEvaluationPolicy(d)
+	}
+	if strings.HasPrefix(d.kind, "eval-collection") || d.kind == "eval-add-items" {
 		return m.submitCollection(d)
 	}
 	if len(d.fields) > 0 {
@@ -322,7 +326,7 @@ func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 		case "selection":
 			return parent(m.openSelectionConfig())
 		default:
-			return parent(m.openEvaluators())
+			return parent(m.openEvaluationPolicies())
 		}
 	case "eval-definitions":
 		if r.id == "new" {
@@ -331,7 +335,7 @@ func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 		}
 		return parent(m.openEvaluator(r.id))
 	case "eval-new-kind":
-		n := &dialog{kind: "eval-new", title: "New judge", parent: d.parent, args: map[string]any{"kind": r.id}}
+		n := &dialog{kind: "eval-new", title: "New behavior", parent: d.parent, args: map[string]any{"kind": r.id}}
 		n.add("Name", "")
 		m.dialog = n
 		return n.fields[0].input.Focus()

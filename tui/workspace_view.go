@@ -12,6 +12,7 @@ import (
 // Location is UI-only workspace state. Never restore editing, checked targets,
 // dialogs or command input: reopening a view must not authorize an operation.
 type workspaceView struct {
+	EvalArea   string `json:"eval_area,omitempty"`
 	Collection string `json:"collection,omitempty"`
 	Section    int    `json:"section"`
 	Row        string `json:"row"`
@@ -22,7 +23,7 @@ func (m *model) workspaceView() workspaceView {
 	if m.notesOpen {
 		row = m.currentID()
 	}
-	return workspaceView{Section: m.section, Row: row, Collection: m.evalCollection}
+	return workspaceView{Section: m.section, Row: row, Collection: m.evalCollection, EvalArea: m.evalArea}
 }
 
 func (m *model) saveWorkspaceView() {
@@ -54,6 +55,13 @@ func (m *model) restoreWorkspaceView() tea.Cmd {
 	}
 	m.section, m.selected = saved.Section, 0
 	m.evalCollection = saved.Collection
+	m.evalArea = saved.EvalArea
+	if m.evalCollection != "" {
+		m.evalArea = "data"
+	}
+	if m.evalArea != "data" && m.evalArea != "policies" && m.evalArea != "runs" {
+		m.evalArea = ""
+	}
 	for _, source := range m.sources {
 		if strings.HasPrefix(saved.Row, source.Key+":") {
 			m.expanded[source.Key] = true

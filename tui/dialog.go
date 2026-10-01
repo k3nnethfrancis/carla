@@ -288,7 +288,7 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 	if d.kind == "config-number" {
 		return m.numberKey(msg)
 	}
-	if (d.kind == "sim-documents" || d.kind == "eval-judges" || d.kind == "eval-add-items") && (msg.Code == tea.KeySpace || msg.Code == tea.KeyEnter) {
+	if (d.kind == "sim-documents" || d.kind == "eval-policy-behaviors" || d.kind == "eval-add-items") && (msg.Code == tea.KeySpace || msg.Code == tea.KeyEnter) {
 		if len(d.rows) == 0 {
 			return nil
 		}

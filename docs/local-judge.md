@@ -59,9 +59,10 @@ workspace until explicitly enabled.
 The same policy covers document continuations and Character replies; Visitor
 replies are not monitored separately.
 
-**Whole-item evaluations:** `/policy` → Judge configurations → New judge →
-**DiffusionGemma (local)**. Add criteria and choose the pass threshold. Add that judge to a named evaluation in Evaluate, then run
-`/eval` on selected material or `/loom … --eval "evaluation name"`. Each result
+**Whole-item evaluations:** open Evaluate → Policies and configure a behavior
+using **DiffusionGemma (local)**, its spec and pass threshold. Include it in a
+policy, then run `/eval "policy name"` on selected data or
+`/loom … --eval "policy name"`. Each result
 freezes its judge configuration, including automatic or explicit endpoint mode, alongside the exact
 request, response, provider and elapsed time. Later policy changes do not rewrite it.
 

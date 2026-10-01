@@ -19,7 +19,7 @@ text, never executed as shell code.
 | `/branch` | Copy a selected document, conversation or set without inference, retaining ancestry. |
 | `/continue` | Advance the existing selected item or set. Prior versions remain saved. |
 | `/loom [N]` | Continue the selected target with N=1 (default); N≥2 forks alternatives. Anthology starts Simulator. |
-| `/eval [name]` | Run the active or named evaluation on selected saved content. |
+| `/eval [name]` | Run the active or named policy on selected saved content. |
 | `/export` | Export selected saved items, or the current collection when none are selected. |
 
 The palette shows relevant actions. Compatibility names are searchable without
@@ -82,7 +82,7 @@ and raw completion templates.
 | `--visitor-model alias` | Simulator Continue/Loom | Simulated visitor model for this operation |
 | `--visitor "text"` | Simulator Continue/Loom | Supply the next visitor message before generation |
 | `--turns N` | Simulator Continue/Loom | Number of additional character replies |
-| `--eval "name"` | Continue, Loom | Judge completed outputs with a named evaluation |
+| `--eval "name"` | Continue, Loom | Assess completed outputs with a named policy |
 | `--selection on\|off` | Loom; Off also accepted by Continue | Override selection for this run. On requires 2+ alternatives and an explicit `--loops N`. |
 | `--monitoring on\|off` | Continue, Loom | Override monitoring for this run using the configured provider and behavior rules. |
 | `--loops N` | Continue, Loom | Repeat generation; with selection enabled, judge each batch and continue from the winner. |
@@ -132,8 +132,9 @@ only explicitly configured Stop actions terminate flagged work.
 
 ## Evaluation
 
-`/policy` configures judges; `/config` in Evaluate manages the collection. Configure
-criteria, add saved documents/conversations to a named evaluation, then run it.
+Evaluate has Data, Policies and Runs. `/policy` opens its policies; `/config`
+configures the current data collection or policy. Choose behaviors in a policy,
+add saved documents/conversations to Data, then run the policy on those items.
 Adding existing evidence does not run another judge.
 
 ```text
@@ -143,8 +144,8 @@ Adding existing evidence does not run another judge.
 /loom 3 --tokens 512 --eval "Voice"
 ```
 
-`/eval` on selected Branches/Anthology/Simulator material runs the active definition
-or the given name. In Evaluate, select collection items to judge. If configuration
+`/eval` on selected Branches/Anthology/Simulator material runs the active policy
+or the named policy. In Evaluate, select collection items to judge. If configuration
 is missing, Carla explains what to set up. `--train-on-pass true` marks an item only
 when every judge completes and passes. It defaults to false. Manual training marks
 and notes remain metadata; changing live content never transfers its old judgment.

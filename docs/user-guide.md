@@ -25,8 +25,9 @@ See the [README](../README.md#quick-start) for installation and model setup.
 6. Use `/clear`, then `/loom 3 --turns 2 --tokens 512` for three fresh conversations.
    Each adds two Character replies, with Visitor messages between them. Open a
    conversation to inspect its text, prompts, settings and policy evidence.
-7. In **Evaluate**, create a named evaluation and configure its judges. Add the
-   saved conversations, then run them. Review evidence, mark desired training
+7. In **Evaluate → Data**, add saved conversations to a collection. In
+   **Policies**, configure behaviors and choose the active policy. Run `/eval`
+   on the data and inspect **Runs**. Review evidence, mark desired training
    items with the collection controls and use `/export` to save the selected items or collection. The [evaluation guide](evaluations.md)
    covers reuse, reruns, pass rules and metadata.
 
@@ -119,7 +120,7 @@ Use `carla --version` with bug reports.
 | Out of memory / very slow batches | Lower configured context/output budgets or choose a smaller model. `Max` can reserve all remaining context and serialize work. Carla does not silently shrink budgets. |
 | Multi-loop Loom cannot start | Configure the separate instruct policy model and selection spec. A one-loop Loom does not need a selector. |
 | Wrong conversation is continued | Inspect the checked target; `/clear` starts fresh. Hover is not selection. |
-| Evaluation opens but cannot run | Create/select a collection, assign judges, add nonempty items and use Run or `/eval`. Local judges currently use the configured policy model. |
+| Evaluation opens but cannot run | Add nonempty Data, configure and activate a Policy, then use `/eval`. Local judges currently use the configured policy model. |
 | Local judge unavailable | Complete the one-time cache setup with `scripts/local-judge.sh`, then select DiffusionGemma under `/policy`. Carla manages the local server automatically. See [local judge setup](local-judge.md). |
 | Jev authentication/provider error | Check saved credential versus launching environment, provider access and quota. Saving a key does not validate it. |
 | Workspace already open | Close the owning Carla process; each workspace permits one writer. Do not edit its JSON while running. |

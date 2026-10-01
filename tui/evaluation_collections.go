@@ -35,7 +35,7 @@ func (m *model) collectionRows() []row {
 		if filter == "" {
 			filter = "all"
 		}
-		rows := []row{{id: "back", kind: "eval-back", label: "← Evaluations"}, {id: "config", kind: "eval-config", label: "Configure · " + c.Name}, {id: "add", kind: "eval-add", label: "+ Add items / existing judgments"}, {id: "run", kind: "eval-execute", label: "Run selected / pending items"}, {id: "filter", kind: "eval-filter", label: "Show · " + filter}}
+		rows := []row{{id: "back", kind: "eval-back", label: "← Data"}, {id: "config", kind: "eval-config", label: "Configure · " + c.Name}, {id: "add", kind: "eval-add", label: "+ Add items / existing judgments"}, {id: "run", kind: "eval-execute", label: "Run · " + m.activePolicyName(), preview: "Assess selected or pending data using this policy. /policy changes the active policy."}, {id: "filter", kind: "eval-filter", label: "Show · " + filter}}
 		for i := len(c.Items) - 1; i >= 0; i-- {
 			e := c.Items[i]
 			status := evaluationStatus(e)
@@ -54,7 +54,10 @@ func (m *model) collectionRows() []row {
 		}
 		return rows
 	}
-	rows := []row{{id: "new", kind: "eval-create", label: "+ New evaluation"}}
+	if m.evalArea != "data" {
+		return m.evaluationAreaRows()
+	}
+	rows := []row{{id: "back", kind: "eval-back", label: "← Evaluate"}, {id: "new", kind: "eval-create", label: "+ New collection", preview: "Collect saved documents and conversation traces. Adding data does not run a model."}}
 	for _, c := range m.data.EvaluationSets {
 		pass, fail := 0, 0
 		for _, i := range c.Items {
@@ -77,14 +80,14 @@ func (m *model) collectionRows() []row {
 func (m *model) openCollectionConfig() tea.Cmd {
 	c := m.currentEvaluation()
 	if c == nil {
-		m.status = "Open an evaluation first"
+		m.status = "Open a data collection first"
 		return nil
 	}
 	active := "Make active"
 	if c.ID == m.data.ActiveEvaluation {
-		active = "Active evaluation"
+		active = "Active collection"
 	}
-	m.dialog = &dialog{kind: "eval-collection-config", title: c.Name, rows: []row{{id: "name", label: "Name · " + c.Name}, {id: "judges", label: fmt.Sprintf("Judges · %d selected", len(c.Judges))}, {id: "definitions", label: "Manage evaluation judges"}, {id: "active", label: active}}}
+	m.dialog = &dialog{kind: "eval-collection-config", title: c.Name, rows: []row{{id: "name", label: "Name · " + c.Name, preview: "Rename this collection of data."}, {id: "active", label: active, preview: "Use this collection for data added by /eval from documents and conversations."}}}
 	return nil
 }
 func (m *model) enterCollection(id string) {
@@ -101,10 +104,23 @@ func (m *model) evaluationCollectionAction(kind, id string) tea.Cmd {
 	switch kind {
 	case "eval-collection":
 		m.enterCollection(id)
+	case "eval-area":
+		m.evalArea = id
+		m.enterCollection("")
+	case "eval-policy":
+		return m.openEvaluationPolicy(id)
+	case "eval-policy-new":
+		return m.newEvaluationPolicy(nil)
+	case "eval-run":
+		m.focus = 1
+		return m.send("evaluation.run.open", map[string]any{"id": id})
 	case "eval-back":
+		if m.evalCollection == "" {
+			m.evalArea = ""
+		}
 		m.enterCollection("")
 	case "eval-create":
-		m.dialog = &dialog{kind: "eval-collection-new", title: "New evaluation"}
+		m.dialog = &dialog{kind: "eval-collection-new", title: "New collection"}
 		m.dialog.add("Name", "")
 		return m.dialog.fields[0].input.Focus()
 	case "eval-config":
@@ -148,11 +164,12 @@ func (m *model) submitCollection(d *dialog) tea.Cmd {
 	if d.kind == "eval-collection-new" {
 		name := strings.TrimSpace(d.fields[0].input.Value())
 		if name == "" {
-			m.status = "Name the evaluation"
+			m.status = "Name the collection"
 			return nil
 		}
-		cmd := m.send("evaluation.collection.save", map[string]any{"name": name, "judges": []string{}})
+		cmd := m.send("evaluation.collection.save", map[string]any{"name": name})
 		if cmd != nil {
+			m.status = "Collection created"
 			m.evalCreating = true
 			m.dialog = nil
 		}
@@ -163,18 +180,9 @@ func (m *model) submitCollection(d *dialog) tea.Cmd {
 	}
 	switch d.kind {
 	case "eval-collection-name":
-		return m.saveDialog(d, "evaluation.collection.save", map[string]any{"id": c.ID, "name": d.fields[0].input.Value(), "judges": c.Judges})
-	case "eval-judges", "eval-add-items":
+		return m.saveDialog(d, "evaluation.collection.save", map[string]any{"id": c.ID, "name": d.fields[0].input.Value()})
+	case "eval-add-items":
 		selected := d.args["selected"].(map[string]bool)
-		if d.kind == "eval-judges" {
-			ids := []string{}
-			for _, j := range m.data.Evaluators {
-				if selected[j.ID] {
-					ids = append(ids, j.ID)
-				}
-			}
-			return m.saveDialog(d, "evaluation.collection.save", map[string]any{"id": c.ID, "name": c.Name, "judges": ids})
-		}
 		targets := []map[string]any{}
 		all := d.args["targets"].(map[string]map[string]any)
 		for _, r := range append(append([]row{}, d.rows...), d.allRows...) {
@@ -200,33 +208,12 @@ func (m *model) submitCollection(d *dialog) tea.Cmd {
 			}
 			return cmd
 		case "name":
-			m.dialog = &dialog{kind: "eval-collection-name", title: "Evaluation name", parent: d}
+			m.dialog = &dialog{kind: "eval-collection-name", title: "Collection name", parent: d}
 			m.dialog.add("Name", c.Name)
 			return m.dialog.fields[0].input.Focus()
 		case "active":
 			return m.send("evaluation.collection.active", map[string]any{"collection": c.ID})
-		case "definitions":
-			m.openEvaluators()
-			m.dialog.parent = d
-		case "judges":
-			if len(m.data.Evaluators) == 0 {
-				m.openEvaluators()
-				m.dialog.parent = d
-				return nil
-			}
-			selected := map[string]bool{}
-			for _, id := range c.Judges {
-				selected[id] = true
-			}
-			next := &dialog{kind: "eval-judges", title: "Judges · SPACE select · CTRL+S save", parent: d, args: map[string]any{"selected": selected}}
-			for _, j := range m.data.Evaluators {
-				label := j.Name
-				if selected[j.ID] {
-					label = "✓ " + label
-				}
-				next.rows = append(next.rows, row{id: j.ID, label: label, preview: j.Spec})
-			}
-			m.dialog = next
+
 		}
 	}
 	return nil

@@ -60,30 +60,25 @@ The generator unloads before local selection judging. Exact candidate context,
 criteria, prompt and response are retained. Preserve the JSON contract if editing
 the classifier prompt; malformed responses remain errors.
 
-## Create and run an evaluation
+## Data, Policies and Runs
 
-**Evaluation judges** are reusable criteria, models and judge prompts. Creating
-one does not run it or enable Monitoring or Selection. Choose judges for a named
-evaluation, then run `/eval` or attach it to generation with `--eval`.
+Evaluate has three views:
 
-1. Open **Evaluate** → **New evaluation** and name it, for example `Voice`.
-2. Open **Configure** (`/config`). Choose reusable judges. If none exist, create
-   one under **Manage evaluation judges** or `/policy` → **Evals**.
-   A local judge has criteria and an editable system prompt. A DiffusionGemma or Jev judge uses a
-   spec and pass-probability threshold. Instruct judges currently use the configured
-   instruct policy-model alias, not an arbitrary independent model per judge.
-3. Set **Active evaluation** to choose the default used by `/eval` outside this tab.
-4. **Add items / existing judgments** selects saved document versions, conversations
-   or completed judgment records. Adding captures text/provenance and available
-   evidence; it does not invoke a model.
-5. **Run selected / pending items** or `/eval` executes judges. Checked items take
-   priority, otherwise a highlighted item is rerun; from an action row, pending
-   items run. Enter opens an item and its judgment history. **Show** filters results.
+- **Data** contains saved document versions and conversation traces. Collections
+  organize those inputs; adding data does not call a model.
+- **Policies** contains named groups of behaviors, each with its specification,
+  model and passing rule. A policy is independent of the data it assesses.
+- **Runs** contains the results of applying a policy to data. Each run preserves
+  the input revisions and behavior configurations actually used.
 
-From Branches/Anthology, `/eval` targets checked versions or the highlighted one.
-From Simulator it uses an explicitly selected individual conversation, not a
-hovered row or an entire batch. `/eval "Voice"` chooses a named collection.
-Inside an open evaluation, bare `/eval` uses that collection.
+Create or open a data collection and add saved documents, conversations or
+existing judgments. In Policies, create a policy and choose its behaviors. A
+behavior uses a local LLM prompt or a DiffusionGemma/Jev classifier spec and
+probability threshold. Set the active policy to choose what bare `/eval` runs.
+Monitoring and Selection remain separately enabled operational policies; creating
+an evaluation policy does not turn either on.
+
+Select data and run `/eval`, or choose a policy explicitly:
 
 ```text
 /eval "Voice"
@@ -92,34 +87,40 @@ Inside an open evaluation, bare `/eval` uses that collection.
 /loom 3 --turns 2 --tokens 512 --eval "Voice" --loops 4
 ```
 
-`--eval` freezes the chosen judge configuration when the run starts and judges
-completed outputs after generation. It does not alter model prompts or replace
-selection. Cancellation does not start a new evaluation phase. Generation and
-judging share the session operation lock; judges currently run sequentially.
+The name now identifies a **policy**, not a data collection. All behaviors in
+that policy assess the targeted items, currently sequentially. Generation `--eval`
+freezes the chosen configuration before generation and evaluates completed outputs
+without altering generation prompts. Cancellation does not start an evaluation
+phase. Generation and evaluation share the session operation lock.
 
 ## Interpret and preserve results
 
-Each item stores frozen text, source lineage and generation-model provenance.
-Each judgment preserves its judge revision, request/response, reason and evidence.
-A collection-level pass requires every currently configured judge revision to
-complete and pass. Errors/interruption are incomplete, not failed criteria.
-Classifier probabilities use your cutoff; they are not validated confidence estimates.
+Open Runs to inspect an execution and its judgments. Every assessment retains
+its input text, source lineage, generation-model provenance, behavior revision,
+request/response and result. A passing item requires every assigned behavior to
+complete and pass. Errors and interruptions are incomplete assessments, not
+failed criteria. Classifier probabilities are estimates, not calibrated certainty;
+LLM boolean judgments do not invent probabilities.
 
-Editing a judge creates a new revision. Old results remain readable but do not
-count as passes under the revised criteria. Rerunning appends judgment history.
-Editing source text requires adding the new version; it never rewrites an old item.
+Changing a policy or behavior affects future runs. Historical runs retain their
+original configuration and results. Rerunning appends results. If you replace a local LLM behind the same configured alias, explicitly select
+the data and rerun: pending-item coverage currently tracks behavior revisions,
+not changes to the file behind an alias. Execution traces retain the actual model
+configuration. Editing source text
+requires capturing the new version; it never rewrites a previously evaluated item.
 Whole-item judging includes inherited document text or the saved conversation,
 without silent truncation. Inputs exceeding model context fail visibly.
 
-You can attach previously completed judgments without rerunning them. Attached
-monitoring observations retain their partial/turn scope; selection evidence retains
-its candidate-set context. Neither is relabeled as a whole-item grade. Historical
-flat results migrate additively into collections on workspace open.
+Existing named evaluations migrate into data collections and policies. Their
+saved judgments remain intact and available in run history. Attaching existing
+monitoring observations preserves their partial/turn scope; selection evidence
+preserves its candidate-set context. Neither becomes a whole-item grade merely
+because it was added to Data.
 
-These collections support evaluations of prompt, sampling or model changes as
-well as future training changes. Generate each variant separately and record what
-changed. Carla preserves evidence; it does not yet run a controlled benchmark
-matrix, calibrate your judges or establish causal claims automatically.
+Use the same data and policy to assess prompt, sampling or model changes as well
+as training changes. Generate variants separately and record what changed. Carla
+preserves evidence; it does not yet orchestrate a controlled benchmark matrix,
+calibrate judges or establish causal claims automatically.
 
 ## Build and export a training set
 

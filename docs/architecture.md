@@ -173,31 +173,41 @@ only, with redirects/proxy inheritance disabled, no credentials and no remote
 fallback. The pinned launcher disables OpenJev routing and loads cached weights
 offline after setup. See [local judge setup](local-judge.md).
 
-## Evaluation records
+## Evaluation data, policies and runs
 
-`evaluation.py` owns versioned judge definitions and execution. Instruct judging
-reuses `Runtime.judge`; DiffusionGemma/Jev evaluation and monitoring share `monitor.classify`,
-retaining exact requests and provider results. Evaluation prompts never enter
-generation context. Monitoring and selection retain their operational owners.
+`evaluation.py` owns versioned behavior definitions and assessment execution.
+Local LLM assessment reuses `Runtime.judge`; DiffusionGemma/Jev assessment shares
+`monitor.classify`, retaining exact requests and provider results. Assessment
+prompts never enter generation context. Monitoring and selection retain their
+operational owners and context-specific actions.
 
-`evaluation_sets.py` owns named collections, frozen item membership, evidence
-references and training metadata. Workspace `evaluators` holds current judge
-definitions; `evaluations` holds immutable completed judgment records;
-`evaluation_sets` holds collections and `active_evaluation` selects the default.
-A one-time additive migration references historical results without rewriting them.
-Adding snapshots or attaching completed judgments requires no model call. Policy
-evidence retains turn/candidate scope rather than becoming a whole-item grade.
+`evaluation_sets.py` owns data collections, frozen item membership, evidence
+references and training metadata. `evaluation_policies.py` owns reusable policy
+groups and run envelopes. The workspace stores:
 
-`/eval` captures targets before a cancellable session job. `/loom --eval name`
-freezes judge configuration at dispatch and chains evaluation after generation
-under the same operation lock. Re-evaluation appends results. Item notes and
-training membership have metadata histories. Normal state events carry collection
-summaries; opening an item requests its full text/evidence separately. Export
-writes training-marked items to a new workspace-local JSONL; it does not train.
+- `evaluators`: versioned behavior/model/spec definitions (the existing storage key).
+- `evaluation_sets`: data collections and frozen items.
+- `evaluation_policies`: independently selected groups of behavior definitions.
+- `evaluations`: individual assessment records with frozen inputs and definitions.
+- `evaluation_runs`: execution envelopes referencing those records and preserving
+  the policy used. Historical run status comes from its records, not current policy.
 
-`tui/evaluation_collections.go` owns collection navigation, membership/configuration
-dialogs and item rendering. `tui/evaluation.go` owns judge dialogs and command
-execution. Both reuse the app's focus, editor and parent/back mechanisms.
+The additive migration creates policies from legacy collection configurations
+and run envelopes from historical result batches. It does not rewrite original
+judgments. Adding snapshots or attaching completed judgments invokes no model.
+Policy evidence retains turn/candidate scope rather than becoming a whole-item grade.
+
+`/eval [policy]` captures targets before a cancellable session job. Generation
+`--eval` freezes the chosen policy and behavior definitions at dispatch and chains
+assessment after generation under the same operation lock. Reruns append results.
+Item notes and training membership have metadata histories. Snapshot events carry
+data, policy and run summaries; opening an item or run requests full results.
+Exports preserve frozen data, judgment history, notes and training marks in a
+workspace-local structured manifest plus text copies; they do not train a model.
+
+The Evaluate TUI uses the existing focus, editor, selection and Escape mechanisms
+for Data, Policies and Runs. Data collection membership and policy selection are
+independent; no additional named evaluation container is required.
 
 The frontend saves the last tab and document/trace row in each workspace's
 `view-state.json`, separately from project data. Startup restores that location

@@ -144,8 +144,8 @@ or downloaded automatically. A missing model does not prevent source browsing.
   character replies each. A visitor replies between character turns. Selecting
   an existing conversation resumes its frozen document context and history.
   Use `/clear` to start fresh; hovering over a conversation or batch does not select it. Multi-output runs stream into a selectable grid.
-- **Evaluate:** create a named collection, choose judges, add frozen documents or
-  conversations, and run judgments. Review evidence, add notes and mark items for
+- **Evaluate:** add documents or conversations in Data, configure behaviors in
+  Policies, and inspect results in Runs. Review evidence, add notes and mark items for
   training. Existing judgments can be attached without another model call.
   `/export` saves selected evaluation items or the collection, including evidence and training marks.
 
@@ -174,11 +174,12 @@ classifier automatically on an available local port.
 Hosted classification sends the assessed text to an external service and can
 incur charges. Local generation itself uses llama.cpp.
 
-In **Evaluate**, `/config` sets the collection's name, judges and active status.
-Adding items does not run judges. `/eval` runs the active evaluation on selected
-material; `/eval "Voice"` chooses a particular collection. An item passes when
-all its currently configured judge revisions pass. You can mark training items
-manually or use `/eval --train-on-pass true` to mark successful passes.
+**Evaluate** separates **Data**, **Policies** and **Runs**. Data is the saved
+documents and conversation traces. Policies configure the behaviors and models
+that assess them. Runs preserve the results. `/eval` uses the active policy;
+`/eval "Voice"` chooses a named policy, independently of the data collection.
+Adding data does not invoke a model. You can mark training items manually or use
+`/eval --train-on-pass true` to mark items that pass every behavior in that run.
 
 Changing a prompt, model or setting can be evaluated with the same collection
 and criteria; evaluation is not limited to training decisions. Saved source
@@ -199,7 +200,7 @@ Configuration exposes these authoring surfaces:
 | Fixed or generated opening | Simulator → `/config` → Opening; generated mode has its own prompt, model and sampling. |
 | Selection criteria and routing prompt | `/policy` → Selection |
 | Monitoring behavior specs | `/policy` → Monitoring → Behaviors |
-| Evaluation criteria and local judge prompt | `/policy` → Judge configurations |
+| Evaluation criteria and local judge prompt | Evaluate → Policies |
 
 Document Loom has no separate system-message wrapper. Conversation templates are
 explicit raw-completion prompts with anthology/history placeholders; there are
