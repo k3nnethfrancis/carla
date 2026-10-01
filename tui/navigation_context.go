@@ -112,12 +112,22 @@ func (m *model) refreshConfig() {
 		m.openEvaluationPolicies()
 	case "eval-policy-config":
 		m.openEvaluationPolicy(d.args["id"].(string))
+	case "eval-policy-judges":
+		m.openPolicyJudges(d.args["id"].(string))
+	case "eval-policy-judge":
+		m.openPolicyJudge(d.args["id"].(string), d.args["judge"].(int))
+	case "eval-policy-behaviors":
+		m.openPolicyBehaviors(d.args["id"].(string), d.args["judge"].(int))
+	case "eval-policy-behavior":
+		m.openPolicyBehavior(d.args["id"].(string), d.args["judge"].(int), d.args["behavior"].(int))
 	case "eval-collection-config":
 		m.openConfig()
 	case "eval-definitions":
 		m.openEvaluators()
-	case "eval-definition":
-		m.openEvaluator(d.args["id"].(string))
+	case "loom-policy-judges":
+		m.openMonitorJudges()
+	case "loom-policy-judge":
+		m.openMonitorJudge()
 	case "loom-policy-behaviors":
 		m.openBehaviors()
 	case "loom-policy":
@@ -133,9 +143,18 @@ func (m *model) refreshConfig() {
 	case "sim-speakers":
 		m.speakerPicker()
 	case "grow-config":
-		if d.title == "Selection policy" {
+		switch d.title {
+		case "Selection judges":
+			m.openSelectionJudges()
+		case "Selection judge":
+			m.openSelectionJudge()
+		case "Selection behaviors":
+			m.openSelectionBehaviors()
+		case "Selection criteria":
+			m.openSelectionBehavior()
+		case "Selection policy":
 			m.openSelectionConfig()
-		} else {
+		default:
 			m.openGrowConfig()
 		}
 	case "sim-sampling":
@@ -339,7 +358,8 @@ func (m *model) closeDialog() tea.Cmd {
 	}
 	if d != nil && d.parent != nil {
 		m.dialog = d.parent
-		if d.kind == "loom-policy-timing" || d.kind == "loom-policy-dimension" {
+		// Judge edits change counts and settings displayed by their parent.
+		if strings.HasPrefix(d.kind, "eval-policy-") || d.kind == "loom-policy-timing" || d.kind == "loom-policy-dimension" {
 			m.refreshConfig()
 		}
 		return nil

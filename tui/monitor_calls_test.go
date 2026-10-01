@@ -7,7 +7,7 @@ import (
 )
 
 func selectCalls(m *model) {
-	m.openLoomPolicy()
+	m.openMonitorJudge()
 	for i, r := range m.dialog.rows {
 		if r.id == "monitor_call_mode" {
 			m.dialog.index = i
@@ -58,11 +58,11 @@ func TestMonitorCallWarningAllPaths(t *testing.T) {
 			t.Fatal("picker not on saved value")
 		}
 		m.submitDialog()
-		if m.dialog.kind != "loom-policy" || m.pending {
+		if m.dialog.kind != "loom-policy-judge" || m.pending {
 			t.Fatal("unchanged bundled asked again")
 		}
 		req = captureCommand(t, m, func() tea.Cmd { return m.cycleDialogChoice(1) })
-		if string(req.Args["monitor_call_mode"]) != `"separate"` || m.dialog.kind != "loom-policy" {
+		if string(req.Args["monitor_call_mode"]) != `"separate"` || m.dialog.kind != "loom-policy-judge" {
 			t.Fatal("separate required warning", req)
 		}
 	}

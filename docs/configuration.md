@@ -290,10 +290,12 @@ not a locally calibrated guarantee. A Stop affects only the flagged conversation
 ## Policy and evaluation configuration
 
 Use `/policy` for monitoring and selection; in Evaluate it opens Policies.
-Evaluation policies group behaviors, each with a model, spec and passing rule.
+Evaluation policies group judges, and each judge contains behaviors. The judge
+owns the model, prompt and Call mode. Behaviors own specs, enabled states and
+passing rules; they inherit their judge’s model.
 Models can be the configured local LLM, local DiffusionGemma or hosted Jev.
-Classifiers use probability thresholds; local LLM behaviors expose the full system
-prompt and return a boolean judgment with evidence. DiffusionGemma uses the
+Classifiers use probability thresholds; local LLM judges expose the full system
+prompt and return a boolean judgment with evidence for each behavior. DiffusionGemma uses the
 managed local OpenJev worker after [one-time setup](local-judge.md).
 
 Data collections and policies are independent. Choose an active policy for bare

@@ -104,6 +104,22 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 		}
 	case "grow-config":
 		switch r.id {
+		case "judges":
+			m.openSelectionJudges()
+			m.dialog.parent = d
+			return nil
+		case "judge":
+			m.openSelectionJudge()
+			m.dialog.parent = d
+			return nil
+		case "behaviors":
+			m.openSelectionBehaviors()
+			m.dialog.parent = d
+			return nil
+		case "behavior":
+			m.openSelectionBehavior()
+			m.dialog.parent = d
+			return nil
 		case "selection_enabled":
 			return m.send("policy.configure", map[string]any{"selection_enabled": !m.data.SelectionEnabled})
 		case "models":
@@ -247,9 +263,6 @@ func (m *model) numberKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if key == "threshold" {
 		lower = 0
-		if d.args["scope"] == "evaluation" {
-			lower = 1
-		}
 	}
 	if key == "n_predict" {
 		unit = 128
@@ -285,11 +298,7 @@ func (m *model) saveNumber(d *dialog) tea.Cmd {
 	}
 	command := "simulator.configure"
 	args := map[string]any{key: setting}
-	if d.args["scope"] == "evaluation" {
-		command = "evaluation.configure"
-		args = m.evaluator(group).args()
-		args[key] = setting
-	} else if d.args["scope"] == "loom-policy" {
+	if d.args["scope"] == "loom-policy" {
 		command = "loom-policy.update"
 		args = map[string]any{"id": group, key: setting}
 	} else if d.args["scope"] == "grow" {

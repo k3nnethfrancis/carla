@@ -329,7 +329,9 @@ async def test_collections_add_run_attach_and_preserve_original_evidence(lab):
     assert s.events[-1][1]["evidence"] == []
     assert len(s.events[-1][1]["judgments"]) == 1
     define(s, id=definition["id"], spec="New criteria")
-    assert sets.item_summary(s.project, group, item)["status"] == "evidence"
+    assert (
+        sets.item_summary(s.project, group, item)["status"] == "complete"
+    )  # policy owns its copied behavior
     assert s.project.data["evaluations"] == original
 
 

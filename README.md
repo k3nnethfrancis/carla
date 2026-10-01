@@ -175,8 +175,8 @@ Hosted classification sends the assessed text to an external service and can
 incur charges. Local generation itself uses llama.cpp.
 
 **Evaluate** separates **Data**, **Policies** and **Runs**. Data is the saved
-documents and conversation traces. Policies configure the behaviors and models
-that assess them. Runs preserve the results. `/eval` uses the active policy;
+documents and conversation traces. Policies contain judges (model and call settings), each with the behaviors
+it assesses. Runs preserve the results. `/eval` uses the active policy;
 `/eval "Voice"` chooses a named policy, independently of the data collection.
 Adding data does not invoke a model. You can mark training items manually or use
 `/eval --train-on-pass true` to mark items that pass every behavior in that run.
@@ -199,8 +199,9 @@ Configuration exposes these authoring surfaces:
 | Visitor brief | Simulator → `/config` → Visitor brief |
 | Fixed or generated opening | Simulator → `/config` → Opening; generated mode has its own prompt, model and sampling. |
 | Selection criteria and routing prompt | `/policy` → Selection |
-| Monitoring behavior specs | `/policy` → Monitoring → Behaviors |
-| Evaluation criteria and local judge prompt | Evaluate → Policies |
+| Monitoring behavior specs | `/policy` → Monitoring → Judges → Behaviors |
+| Evaluation criteria | Evaluate → Policies → Judges → Behaviors |
+| Evaluation judge prompt and Call mode | Evaluate → Policies → Judges → a judge |
 
 Document Loom has no separate system-message wrapper. Conversation templates are
 explicit raw-completion prompts with anthology/history placeholders; there are

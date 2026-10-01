@@ -67,7 +67,15 @@ async def test_legacy_split_preserves_records_and_missing_behavior_references(la
     del lab.project.data["evaluation_runs"]
     data.migrate(lab.project)
     assert lab.project.data["evaluations"] == records
-    assert policies.active(lab.project)["judges"] == [definition["id"], "deleted"]
+    assert [j["id"] for j in policies.active(lab.project)["judges"]] == [
+        definition["id"],
+        "deleted",
+    ]
+    assert (
+        policies.active(lab.project)["judges"][0]["behaviors"][0]["spec"]
+        == definition["spec"]
+    )
+    assert policies.active(lab.project)["judges"][1]["missing"]
     assert len(data.collections(lab.project)) == 2
     assert data.collections(lab.project)[1]["items"][0]["text"] == "Old trace"
     assert policies.run_summaries(lab.project)[0]["passed"] is True

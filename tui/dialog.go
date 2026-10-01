@@ -285,10 +285,13 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.helpKey(msg)
 	}
 	d := m.dialog
+	if d.kind == "eval-policy-behavior" && len(d.rows) > 0 && d.rows[d.index].id == "enabled" && (msg.Code == tea.KeySpace || msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight) {
+		return m.submitPolicyJudge(d)
+	}
 	if d.kind == "config-number" {
 		return m.numberKey(msg)
 	}
-	if (d.kind == "sim-documents" || d.kind == "eval-policy-behaviors" || d.kind == "eval-add-items") && (msg.Code == tea.KeySpace || msg.Code == tea.KeyEnter) {
+	if (d.kind == "sim-documents" || d.kind == "eval-add-items") && (msg.Code == tea.KeySpace || msg.Code == tea.KeyEnter) {
 		if len(d.rows) == 0 {
 			return nil
 		}

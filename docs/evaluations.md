@@ -23,7 +23,7 @@ If no provider has been configured, choose one in `/policy` first. DiffusionGemm
 environment OpenRouter key before other settings appear. [Credential storage
 and external data flow](configuration.md#optional-monitoring) apply here.
 
-In **Behaviors**, each condition has a name, spec, enabled status, detection rule
+Open **Judges → a judge → Behaviors**. Each condition has a name, spec, enabled status, detection rule
 and action. Most likely means estimated probability above 50%; Threshold uses
 your chosen cutoff. Warn annotates the trace and highlights detection; Stop ends
 the flagged generation/conversation. Disabled conditions retain their settings.
@@ -37,8 +37,8 @@ and fail open. Scores are model estimates, not calibrated guarantees.
 
 ## Selection
 
-Open `/policy` → Selection to configure the local instruct evaluator, criteria
-and classifier/routing prompt. The generator's raw prompt never receives these
+Open `/policy` → Selection → Judges to configure the local instruct evaluator
+and its prompt. Open the judge’s Behaviors to edit selection criteria. The generator's raw prompt never receives these
 instructions. The selector receives candidate text and criteria separately.
 
 Selection triggers only when it is **On**, the Loom has **2 or more alternatives**,
@@ -66,18 +66,33 @@ Evaluate has three views:
 
 - **Data** contains saved document versions and conversation traces. Collections
   organize those inputs; adding data does not call a model.
-- **Policies** contains named groups of behaviors, each with its specification,
-  model and passing rule. A policy is independent of the data it assesses.
+- **Policies** contains judges. Each judge owns a model and call settings, and
+  contains the behaviors it assesses. A policy is independent of its input data.
 - **Runs** contains the results of applying a policy to data. Each run preserves
   the input revisions and behavior configurations actually used.
 
 Create or open a data collection and use **Add data** to add saved documents,
 conversations or existing judgments. **Collection settings** lets you rename the
-collection or make it the default destination for data assessed from other tabs. In Policies, create a policy and choose its behaviors. A
-behavior uses a local LLM prompt or a DiffusionGemma/Jev classifier spec and
-probability threshold. Set the active policy to choose what bare `/eval` runs.
-Monitoring and Selection remain separately enabled operational policies; creating
-an evaluation policy does not turn either on.
+collection or make it the default destination for data assessed from other tabs.
+
+Configure assessment in **Policies → a policy → Judges → a judge → Behaviors**:
+
+- **Judge:** choose the model, call mode and, for an LLM, the assessment prompt.
+- **Behavior:** give it a name and spec, enable or disable it, and configure its
+  passing threshold for classifier output. The model is inherited from its judge.
+
+**Separate** calls assess one enabled behavior per request. **Bundled** calls
+assess that judge's enabled behaviors together. Bundling reduces request count,
+but can change the judgments; the UI asks you to confirm the tradeoff. Each
+classifier behavior still has its own probability; scores are not normalized
+against other behaviors. LLM judgments retain a boolean result, reason and evidence.
+
+Set the active policy to choose what bare `/eval` runs. Monitoring and Selection
+remain separately enabled operational policies. Their editors also follow
+Judges → Behaviors around the currently supported single operational judge.
+Monitoring retains heartbeat and warn/stop actions. Selection retains its
+candidate-set review and choice contract; it does not expose a bundled/separate
+switch for a different algorithm.
 
 Select data and run `/eval`, or choose a policy explicitly:
 
@@ -88,8 +103,9 @@ Select data and run `/eval`, or choose a policy explicitly:
 /loom 3 --turns 2 --tokens 512 --eval "Voice" --loops 4
 ```
 
-The name now identifies a **policy**, not a data collection. All behaviors in
-that policy assess the targeted items, currently sequentially. Generation `--eval`
+The name now identifies a **policy**, not a data collection. All enabled behaviors under its judges
+assess the targeted items. Judges run sequentially; Call mode determines whether
+each judge assesses its behaviors separately or together. Generation `--eval`
 freezes the chosen configuration before generation and evaluates completed outputs
 without altering generation prompts. Cancellation does not start an evaluation
 phase. Generation and evaluation share the session operation lock.
@@ -105,7 +121,7 @@ LLM boolean judgments do not invent probabilities.
 
 Changing a policy or behavior affects future runs. Historical runs retain their
 original configuration and results. Rerunning appends results. If you replace a local LLM behind the same configured alias, explicitly select
-the data and rerun: pending-item coverage currently tracks behavior revisions,
+the data and rerun: pending-item coverage tracks saved judge and behavior configuration,
 not changes to the file behind an alias. Execution traces retain the actual model
 configuration. Editing source text
 requires capturing the new version; it never rewrites a previously evaluated item.

@@ -22,7 +22,10 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 	m.width, m.height = 120, 36
 	m.perform("loom-policy")
 	root := m.dialog
-	root.index = 4
+	root.index = 2
+	m.submitDialog()
+	m.submitDialog()
+	m.dialog.index = 2
 	m.submitDialog()
 	if m.dialog.kind != "loom-policy-behaviors" {
 		t.Fatal("missing behaviors page")
@@ -61,14 +64,14 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 	if !found {
 		t.Fatal("custom deletion missing")
 	}
-	m.openLoomPolicy()
-	m.dialog.index = 1
+	m.openMonitorJudge()
+	m.dialog.index = 0
 	m.submitDialog()
-	if !m.dialog.fields[0].input.Focused() {
-		t.Fatal("model field not focused")
+	if m.dialog.kind != "loom-policy-pick" {
+		t.Fatal("model picker did not open")
 	}
 	m.closeDialog()
-	m.dialog.index = 4
+	m.dialog.index = 2
 	m.submitDialog()
 	m.dialog.index = len(m.dialog.rows) - 1
 	m.submitDialog()
@@ -144,7 +147,7 @@ func TestMonitorTimingNavigationAndSavedInterval(t *testing.T) {
 	m.data.SimulatorConfig["monitor_interval_tokens"] = float64(768)
 	m.openLoomPolicy()
 	root := m.dialog
-	root.index = 3
+	root.index = 1
 	m.submitDialog()
 	timing := m.dialog
 	if timing.kind != "loom-policy-timing" || timing.parent != root || len(timing.rows) != 3 {
@@ -191,7 +194,7 @@ func TestMonitoringSetupGatesSettingsAndMasksKey(t *testing.T) {
 		t.Fatal("Off exposed monitoring configuration")
 	}
 	m.submitDialog() // choose a provider
-	m.dialog.index = 2
+	m.dialog.index = 1
 	m.submitDialog() // Jev needs a key first
 	if m.dialog.kind != "loom-policy-key" || m.simString("monitor_mode") != "off" {
 		t.Fatal("enabled before key setup")
@@ -211,7 +214,7 @@ func TestMonitoringSetupGatesSettingsAndMasksKey(t *testing.T) {
 	}
 	m.data.MonitorKeySource = "environment"
 	m.openLoomPolicy()
-	if len(m.dialog.rows) < 4 || m.dialog.rows[2].id != "monitor_call_mode" {
+	if len(m.dialog.rows) != 3 || m.dialog.rows[2].id != "judges" {
 		t.Fatal("environment key did not unlock settings")
 	}
 }
@@ -229,21 +232,21 @@ func TestLocalMonitorHasNoKeyGateAndRetainsNavigation(t *testing.T) {
 			t.Fatal("local mode requested infrastructure configuration")
 		}
 	}
-	if !strings.Contains(root.rows[0].label, "DiffusionGemma") {
+	if !strings.Contains(root.rows[0].label, "On") {
 		t.Fatal(root.rows)
 	}
-	root.index = 1 // local API model
+	root.index = 2
 	m.submitDialog()
-	if len(m.dialog.fields) != 1 || m.dialog.parent != root {
-		t.Fatal(m.dialog)
+	judges := m.dialog
+	m.submitDialog()
+	if m.dialog.kind != "loom-policy-judge" || m.dialog.parent != judges {
+		t.Fatal("judge did not retain hierarchy")
 	}
-	m.dialog.fields[0].input.SetValue("openjev-latest")
-	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
-	if req.Command != "simulator.configure" || string(req.Args["monitor_local_model"]) != `"openjev-latest"` {
-		t.Fatal(req)
+	m.closeDialog()
+	m.closeDialog()
+	if m.dialog != root {
+		t.Fatal("Escape did not return to policy")
 	}
-	m.pending = false
-	m.dialog = root
 	m.openMonitorTiming()
 	if strings.Contains(m.dialog.title, "off") {
 		t.Fatal("local heartbeat labeled off")
@@ -287,15 +290,16 @@ func TestMonitoringLayoutAndBehaviorCounts(t *testing.T) {
 		{Enabled: true, Action: "stop"}, {Enabled: false, Action: "stop"},
 	}
 	m.openLoomPolicy()
-	for i, id := range []string{"mode", "monitor_local_model", "monitor_call_mode", "timing", "behaviors"} {
+	for i, id := range []string{"mode", "timing", "judges"} {
 		if m.dialog.rows[i].id != id {
-			t.Fatalf("row%d: %s", i, m.dialog.rows[i].id)
+			t.Fatal(m.dialog.rows)
 		}
 	}
-	if m.dialog.rows[4].label != "Behaviors · 2 warn · 1 stop · 1 off" {
-		t.Fatal(m.dialog.rows[4].label)
+	m.openMonitorJudge()
+	if m.dialog.rows[2].label != "Behaviors · 2 warn · 1 stop · 1 off" {
+		t.Fatal(m.dialog.rows[2].label)
 	}
-	if !strings.Contains(m.dialog.rows[1].label, "Model alias") || !strings.Contains(m.dialog.rows[1].preview, "not a second model") {
-		t.Fatal("missing alias explanation")
+	if !strings.Contains(m.dialog.rows[0].label, "DiffusionGemma (classifier)") {
+		t.Fatal("missing model name and type")
 	}
 }

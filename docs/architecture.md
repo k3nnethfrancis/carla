@@ -175,7 +175,8 @@ offline after setup. See [local judge setup](local-judge.md).
 
 ## Evaluation data, policies and runs
 
-`evaluation.py` owns versioned behavior definitions and assessment execution.
+`evaluation_judges.py` owns the Policy → Judges → Behaviors schema, validation
+and legacy definition conversion. `evaluation.py` owns assessment execution.
 Local LLM assessment reuses `Runtime.judge`; DiffusionGemma/Jev assessment shares
 `monitor.classify`, retaining exact requests and provider results. Assessment
 prompts never enter generation context. Monitoring and selection retain their
@@ -185,9 +186,10 @@ operational owners and context-specific actions.
 references and training metadata. `evaluation_policies.py` owns reusable policy
 groups and run envelopes. The workspace stores:
 
-- `evaluators`: versioned behavior/model/spec definitions (the existing storage key).
+- `evaluators`: retained legacy definitions for compatibility and migration.
 - `evaluation_sets`: data collections and frozen items.
-- `evaluation_policies`: independently selected groups of behavior definitions.
+- `evaluation_policies`: policy-owned judges (model, prompt, call mode) containing
+  versioned behavior specs, enabled states and detection thresholds.
 - `evaluations`: individual assessment records with frozen inputs and definitions.
 - `evaluation_runs`: execution envelopes referencing those records and preserving
   the policy used. Historical run status comes from its records, not current policy.
@@ -198,7 +200,7 @@ judgments. Adding snapshots or attaching completed judgments invokes no model.
 Policy evidence retains turn/candidate scope rather than becoming a whole-item grade.
 
 `/eval [policy]` captures targets before a cancellable session job. Generation
-`--eval` freezes the chosen policy and behavior definitions at dispatch and chains
+`--eval` freezes the chosen policy, judges and behaviors at dispatch and chains
 assessment after generation under the same operation lock. Reruns append results.
 Item notes and training membership have metadata histories. Snapshot events carry
 data, policy and run summaries; opening an item or run requests full results.

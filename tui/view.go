@@ -358,7 +358,7 @@ func (m *model) renderDialog() string {
 		if d.kind == "loom-policy-bundle-confirm" {
 			footer = "↑↓ choose · ENTER select · ESC back"
 		}
-		if d.kind == "sim-documents" || d.kind == "eval-policy-behaviors" || d.kind == "eval-add-items" {
+		if d.kind == "sim-documents" || d.kind == "eval-add-items" {
 			footer = "SPACE select · CTRL+S save · ESC cancel"
 		}
 		if d.query != "" {
@@ -423,7 +423,7 @@ func (m *model) renderDialog() string {
 		if d.choicePicker() {
 			footer = "←→ choose · SPACE / ENTER apply · ESC back"
 		}
-		if d.kind == "sim-documents" || d.kind == "eval-policy-behaviors" || d.kind == "eval-add-items" {
+		if d.kind == "sim-documents" || d.kind == "eval-add-items" {
 			footer = "No anthology documents. Keep a branch first. ESC close"
 		}
 		body = append(body, line(footer, r.w-4))
@@ -488,6 +488,15 @@ func (m *model) View() tea.View {
 				body = m.document.View()
 			}
 			if m.editing != "" {
+				if strings.HasPrefix(m.editing, "policy-") && m.editReturn != nil {
+					title = m.editReturn.title + " · Spec"
+					if m.editing == "policy-judge-prompt" {
+						title = m.editReturn.title + " · Prompt"
+					}
+					if m.editing == "policy-behavior-new" && len(m.editReturn.fields) > 0 {
+						title = m.editReturn.fields[0].input.Value() + " · Spec"
+					}
+				}
 				title += fmt.Sprintf(" · line %d/%d", m.editor.Line()+1, m.editor.LineCount())
 				body = m.editor.View()
 			}

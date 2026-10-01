@@ -17,7 +17,7 @@ func evalFixture() *model {
 	m.data.SelectorModels = []localModel{{Name: "Judge", Alias: "judge"}}
 	m.data.EvaluationSets = []evaluationCollection{{ID: "set", Name: "Coherence", Judges: []string{"rubric"}}}
 	m.data.ActiveEvaluation = "set"
-	m.data.EvaluationPolicies = []evaluationPolicy{{ID: "policy", Name: "Coherence", Judges: []string{"rubric"}, Revision: 1}}
+	m.data.EvaluationPolicies = []evaluationPolicy{{ID: "policy", Name: "Coherence", Judges: []evaluationJudge{{ID: "judge", Name: "LLM", Kind: "llm", Behaviors: []evaluationBehavior{{ID: "rubric", Name: "Coherence", Enabled: true}}}}, Revision: 1}}
 	m.data.ActiveEvaluationPolicy = "policy"
 	m.data.EvaluationPrompt = "Judge criteria, return passed, reason and evidence."
 	return m
@@ -216,18 +216,23 @@ func TestCollectionConfigAndAddingDoNotRunJudges(t *testing.T) {
 	}
 }
 
-func TestDiffusionEvaluatorEndpointSurvivesEditing(t *testing.T) {
-	m := fixture()
-	e := evaluator{ID: "local", Name: "Voice", Kind: "diffusion", Model: "openjev-latest", Endpoint: "http://127.0.0.1:8080", Spec: "Coherent", Threshold: .8}
-	m.data.Evaluators = []evaluator{e}
-	m.openEvaluator(e.ID)
+func TestDiffusionJudgeEndpointSurvivesEditing(t *testing.T) {
+	m := evalFixture()
+	j := evaluationJudge{ID: "local", Name: "Voice", Kind: "diffusion", Model: "openjev-latest", Endpoint: "http://127.0.0.1:8080", Behaviors: []evaluationBehavior{}}
+	m.data.EvaluationPolicies[0].Judges = []evaluationJudge{j}
+	m.openPolicyJudge("policy", 0)
 	for _, r := range m.dialog.rows {
 		if r.id == "endpoint" {
-			t.Fatal("managed server leaked into normal configuration")
+			t.Fatal("managed server leaked into configuration")
 		}
 	}
-	if e.args()["endpoint"] != e.Endpoint {
-		t.Fatal("endpoint lost on judge edits")
+	m.submitDialog()
+	m.dialog.fields[0].input.SetValue("Renamed")
+	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
+	var judges []evaluationJudge
+	json.Unmarshal(req.Args["judges"], &judges)
+	if judges[0].Endpoint != j.Endpoint {
+		t.Fatal("endpoint lost on rename")
 	}
 }
 
@@ -258,22 +263,39 @@ func TestEvaluateDataPoliciesRunsNavigation(t *testing.T) {
 	}
 }
 
-func TestPolicyBehaviorMembershipSaveIsIndependentOfData(t *testing.T) {
+func TestPolicyJudgeBehaviorHierarchy(t *testing.T) {
 	m := evalFixture()
 	m.section = 4
 	m.openEvaluationPolicy("policy")
 	m.dialog.index = 1
 	m.submitDialog()
+	if m.dialog.kind != "eval-policy-judges" {
+		t.Fatal(m.dialog)
+	}
+	m.submitDialog()
+	if m.dialog.kind != "eval-policy-judge" {
+		t.Fatal(m.dialog)
+	}
+	m.dialog.index = 3
+	m.submitDialog()
 	if m.dialog.kind != "eval-policy-behaviors" {
 		t.Fatal(m.dialog)
 	}
-	m.dialogKey(tea.KeyPressMsg{Code: tea.KeySpace})
+	m.submitDialog()
+	if m.dialog.kind != "eval-policy-behavior" {
+		t.Fatal(m.dialog)
+	}
 	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
-	if req.Command != "evaluation.policy.save" || string(req.Args["id"]) != `"policy"` || string(req.Args["judges"]) != "[]" {
+	if req.Command != "evaluation.policy.save" {
 		t.Fatal(req)
 	}
+	var judges []evaluationJudge
+	json.Unmarshal(req.Args["judges"], &judges)
+	if len(judges) != 1 || judges[0].Behaviors[0].Enabled {
+		t.Fatal(judges)
+	}
 	if _, ok := req.Args["collection"]; ok {
-		t.Fatal("policy save touched collection")
+		t.Fatal("policy touched data")
 	}
 }
 

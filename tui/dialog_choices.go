@@ -22,6 +22,9 @@ func (m *model) dialogChoice() (dialogChoice, bool) {
 		c.toggle = id == "selection_enabled"
 		return c, c.toggle
 	case "loom-policy":
+		c.toggle = id == "mode"
+		return c, c.toggle
+	case "loom-policy-judge":
 		if id == "monitor_call_mode" {
 			c.field, c.current, c.values = id, m.monitorCallMode(), []string{"separate", "bundled"}
 			break
@@ -30,6 +33,9 @@ func (m *model) dialogChoice() (dialogChoice, bool) {
 			return c, false
 		}
 		c.field, c.current, c.values = "monitor_mode", m.simString("monitor_mode"), []string{"off", "diffusion", "jev"}
+		if d.kind == "loom-policy-judge" {
+			c.values = []string{"diffusion", "jev"}
+		}
 	case "loom-policy-timing":
 		c.toggle = id == "monitor_after_reply" || id == "monitor_during_reply"
 		return c, c.toggle

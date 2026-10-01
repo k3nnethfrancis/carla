@@ -36,9 +36,12 @@ func (m *model) dimension(id string) loomDimension {
 }
 func (m *model) openLoomPolicy() tea.Cmd {
 	provider := m.simString("monitor_mode")
-	mode := monitorLabel(provider)
+	mode := "Off"
+	if provider == "diffusion" || provider == "jev" {
+		mode = "On"
+	}
 	d := &dialog{kind: "loom-policy", title: "Monitoring policy", rows: []row{
-		{id: "mode", label: "Monitoring · " + mode, preview: "Off by default. DiffusionGemma runs locally via OpenJev. Jev sends text to OpenRouter (paid API)."},
+		{id: "mode", label: "Monitoring · " + mode, preview: "Enable or disable monitoring. The judge and its behaviors stay saved when Off. First-time setup asks you to choose a model."},
 	}}
 	m.dialog = d
 	if mode == "Off" {
@@ -48,24 +51,38 @@ func (m *model) openLoomPolicy() tea.Cmd {
 		d.rows = append(d.rows, row{id: "key", label: "Set up OpenRouter API key", preview: "Complete API key setup to reveal monitoring settings."})
 		return nil
 	}
-	if provider == "diffusion" {
-		d.rows = append(d.rows,
-			row{id: "monitor_local_model", label: "Model alias · " + m.simString("monitor_local_model"), preview: "The request name sent to OpenJev, not a second model. Carla’s managed local server loads DiffusionGemma 26B-A4B (4-bit); openjev-latest routes requests to it."},
-		)
-	} else {
-		d.rows = append(d.rows, row{id: "model", label: "Model · " + m.simString("monitor_model"), preview: "The OpenRouter model used to classify the enabled behaviors."})
-	}
 	d.rows = append(d.rows,
-		row{id: "monitor_call_mode", label: "Call mode · " + strings.Title(m.monitorCallMode()), preview: "Separate sends one request per behavior. Bundled checks all enabled behaviors in one request."},
-		row{id: "timing", label: "Heartbeat · " + m.monitorTimingSummary(), preview: "Choose whether to check streaming output, completed replies, or both. Also applies to document continuations; Visitor messages are not checked."},
-		row{id: "behaviors", label: "Behaviors · " + m.behaviorCounts(), preview: "Enabled behaviors Warn or Stop on detection. Off behaviors are skipped but their settings remain saved."},
+		row{id: "timing", label: "Heartbeat · " + m.monitorTimingSummary(), preview: "When this policy runs: during streaming output, after completed replies, or both."},
+		row{id: "judges", label: "Judges · 1", preview: "Open the monitoring model, its call mode and behaviors. Monitoring currently uses one classifier judge."},
 	)
-	if provider == "jev" {
-		d.rows = append(d.rows, row{id: "key", label: "API key · " + m.data.MonitorKeySource, preview: "Replace the saved key. Keys stay outside workspaces and exported traces."})
+	return nil
+}
+
+func (m *model) monitorJudgeName() string {
+	if m.simString("monitor_mode") == "diffusion" {
+		return "DiffusionGemma (classifier)"
+	}
+	return "Jev (classifier)"
+}
+func (m *model) openMonitorJudges() tea.Cmd {
+	m.dialog = &dialog{kind: "loom-policy-judges", title: "Monitoring judges", rows: []row{
+		{id: "judge", label: m.monitorJudgeName(), preview: "Assesses enabled behaviors and applies their Warn or Stop actions."},
+	}}
+	return nil
+}
+func (m *model) openMonitorJudge() tea.Cmd {
+	d := &dialog{kind: "loom-policy-judge", title: m.monitorJudgeName(), rows: []row{
+		{id: "mode", label: "Model · " + m.monitorJudgeName(), preview: "Choose the classifier. DiffusionGemma runs locally; Jev uses OpenRouter and requires an API key."},
+		{id: "monitor_call_mode", label: "Call mode · " + strings.Title(m.monitorCallMode()), preview: "Separate sends one request per behavior. Bundled checks all enabled behaviors in one request."},
+		{id: "behaviors", label: "Behaviors · " + m.behaviorCounts(), preview: "Each behavior defines its spec, detection rule and Warn or Stop action. Off behaviors remain saved."},
+	}}
+	if m.simString("monitor_mode") == "jev" {
+		d.rows = append(d.rows, row{id: "key", label: "API key · " + m.data.MonitorKeySource, preview: "Replace the saved OpenRouter key. Keys stay outside workspaces and exported traces."})
 	}
 	m.dialog = d
 	return nil
 }
+
 func (m *model) openDimension(id string) tea.Cmd {
 	item := m.dimension(id)
 	decision := "Most likely"
@@ -193,8 +210,14 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 		m.dialog.parent = d
 		return nil
 	}
-	if d.kind == "loom-policy" {
+	if d.kind == "loom-policy" || d.kind == "loom-policy-judges" || d.kind == "loom-policy-judge" {
 		switch r.id {
+		case "judges":
+			m.openMonitorJudges()
+			m.dialog.parent = d
+		case "judge":
+			m.openMonitorJudge()
+			m.dialog.parent = d
 		case "key":
 			return m.openMonitorKey(d)
 		case "behaviors":
@@ -204,7 +227,10 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 			m.openMonitorTiming()
 			m.dialog.parent = d
 		case "mode":
-			m.policyPicker(d, "", "monitor_mode", []string{"off", "diffusion", "jev"})
+			if d.kind == "loom-policy" {
+				return m.toggleMonitoring(d)
+			}
+			m.policyPicker(d, "", "monitor_mode", []string{"diffusion", "jev"})
 		case "monitor_call_mode":
 			m.policyPicker(d, "", r.id, []string{"separate", "bundled"})
 			if m.monitorCallMode() == "bundled" {
@@ -278,8 +304,12 @@ func (m *model) policyPicker(parent *dialog, id, field string, values []string) 
 		label := strings.Title(strings.ReplaceAll(v, "_", " "))
 		preview := ""
 		if field == "monitor_mode" {
-			d.title = "Monitoring"
-			label = monitorLabel(v)
+			d.title = "Monitoring model"
+			label = map[string]string{"diffusion": "DiffusionGemma (classifier)", "jev": "Jev (classifier)", "off": "Off"}[v]
+			preview = "Local classifier; Carla manages its inference server."
+			if v == "jev" {
+				preview = "Hosted classifier via OpenRouter. Requires an API key and incurs API costs."
+			}
 		}
 		if field == "monitor_call_mode" {
 			d.title = "Call mode"
@@ -397,4 +427,20 @@ func (m *model) behaviorCounts() string {
 		}
 	}
 	return fmt.Sprintf("%d warn · %d stop · %d off", warn, stop, off)
+}
+
+// Enabled is policy-level; changing the classifier belongs to its judge.
+func (m *model) toggleMonitoring(parent *dialog) tea.Cmd {
+	if provider := m.simString("monitor_mode"); provider == "diffusion" || provider == "jev" {
+		return m.send("simulator.configure", map[string]any{"monitor_mode": "off"})
+	}
+	provider := m.simString("monitor_provider")
+	if provider != "diffusion" && provider != "jev" {
+		m.policyPicker(parent, "", "monitor_mode", []string{"diffusion", "jev"})
+		return nil
+	}
+	if provider == "jev" && m.data.MonitorKeySource == "" {
+		return m.openMonitorKey(parent)
+	}
+	return m.send("simulator.configure", map[string]any{"monitor_mode": provider})
 }

@@ -35,9 +35,7 @@ func (m *model) openSelectionConfig() tea.Cmd {
 	}
 	m.dialog = &dialog{kind: "grow-config", title: "Selection policy", rows: []row{
 		{id: "selection_enabled", label: label, preview: selectionTriggerHelp},
-		{id: "selector", label: "Selection model", preview: "Local instruct model that judges the alternatives.\nCurrent: " + m.data.PolicyModel},
-		{id: "spec", label: "Selection criteria", preview: "What makes a candidate worth continuing.\n" + m.data.PolicySpec},
-		{id: "prompt", label: "Selection prompt", preview: "Instructions and required response format for the selector.\n" + m.data.PolicyPrompt},
+		{id: "judges", label: "Judges · 1", preview: "The selection model and the behavior it uses to judge alternatives. Selection currently uses one LLM judge."},
 	}}
 	return nil
 }
@@ -45,3 +43,30 @@ func (m *model) openSelectionConfig() tea.Cmd {
 // Keep the trigger first so compact dialogs show it before any clipped detail.
 const selectionTriggerHelp = "On + 2+ alternatives + explicit --loops.\n/loom 4 --selection on --loops 1\nOne loop selects; more split from the winner.\nNone qualify: stop. Other outputs stay saved."
 const evaluationJudgesHelp = "Criteria + model used by named evaluations.\nChoose judges in Evaluate > Configure.\nRun: /eval or /loom --eval \"name\"\nCreating a judge does not run it."
+
+func (m *model) openSelectionJudges() tea.Cmd {
+	m.dialog = &dialog{kind: "grow-config", title: "Selection judges", rows: []row{
+		{id: "judge", label: m.data.PolicyModel + " (LLM)", preview: "Compares candidates together and selects which qualifying candidate continues."},
+	}}
+	return nil
+}
+func (m *model) openSelectionJudge() tea.Cmd {
+	m.dialog = &dialog{kind: "grow-config", title: "Selection judge", rows: []row{
+		{id: "selector", label: "Model · " + m.data.PolicyModel + " (LLM)", preview: "The local instruction-following model used to assess alternatives."},
+		{id: "prompt", label: "Prompt", preview: "Judges candidates together in one request. The prompt defines the required JSON selection response; separate behavior calls are not used."},
+		{id: "behaviors", label: "Behaviors · 1", preview: "Selection criteria define which candidates qualify and are worth continuing."},
+	}}
+	return nil
+}
+func (m *model) openSelectionBehaviors() tea.Cmd {
+	m.dialog = &dialog{kind: "grow-config", title: "Selection behaviors", rows: []row{
+		{id: "behavior", label: "Selection criteria", preview: "Defines which alternatives qualify to continue. " + m.data.PolicySpec},
+	}}
+	return nil
+}
+func (m *model) openSelectionBehavior() tea.Cmd {
+	m.dialog = &dialog{kind: "grow-config", title: "Selection criteria", rows: []row{
+		{id: "spec", label: "Behavior spec", preview: "Defines which candidate should continue. " + m.data.PolicySpec},
+	}}
+	return nil
+}

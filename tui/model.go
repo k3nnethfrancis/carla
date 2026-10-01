@@ -513,29 +513,11 @@ func (m *model) saveEditor() tea.Cmd {
 		}
 		return m.submitEditor("loom-policy.update", args)
 	}
-	if kind == "evaluation-new-spec" {
-		if strings.TrimSpace(text) == "" {
-			m.status = "Enter criteria before saving"
-			return nil
-		}
-		d := m.editReturn
-		args := map[string]any{"name": d.fields[0].input.Value(), "spec": text, "kind": d.args["kind"], "prompt": m.data.EvaluationPrompt, "threshold": 0.8, "model": m.simString("monitor_model")}
-		if args["kind"] == "diffusion" {
-			args["model"] = m.simString("monitor_local_model")
-			args["endpoint"] = "auto"
-		}
-		if args["kind"] == "llm" {
-			args["model"] = m.data.SelectorModels[0].Alias
-		}
-		return m.submitEditor("evaluation.configure", args)
+	if strings.HasPrefix(kind, "policy-") {
+		return m.savePolicyEditor(text)
 	}
-	if strings.HasPrefix(kind, "evaluation-") {
-		if kind == "evaluation-note" {
-			return m.submitEditor("evaluation.item.annotate", map[string]any{"collection": m.evalCollection, "ids": []string{m.evalEditingID}, "note": text})
-		}
-		args := m.evaluator(m.evalEditingID).args()
-		args[strings.TrimPrefix(kind, "evaluation-")] = text
-		return m.submitEditor("evaluation.configure", args)
+	if kind == "evaluation-note" {
+		return m.submitEditor("evaluation.item.annotate", map[string]any{"collection": m.evalCollection, "ids": []string{m.evalEditingID}, "note": text})
 	}
 	if kind == "conversation" && strings.TrimSpace(text) == "" {
 		m.status = "Write a message before saving"
@@ -826,9 +808,6 @@ func (m *model) apply(e event) tea.Cmd {
 		}
 		if m.editRequest != "" {
 			if e.ID == m.editRequest {
-				if m.editing == "evaluation-new-spec" && m.editReturn != nil {
-					m.editReturn = m.editReturn.parent
-				}
 				m.enterLoom = m.editing == "document"
 				m.editRequest, m.editing = "", ""
 				m.dialog, m.editReturn = m.editReturn, nil

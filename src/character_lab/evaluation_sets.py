@@ -10,7 +10,7 @@ import hashlib
 import json
 import uuid
 
-from . import evaluation, evaluation_policies
+from . import evaluation, evaluation_judges, evaluation_policies
 from .domain import now
 from .exploration import require_selector
 
@@ -92,17 +92,17 @@ def records_for(project, item):
 
 def item_summary(project, group, item):
     records = records_for(project, item)
-    # Aggregate the latest result of every currently configured judge revision.
-    latest = {}
-    for record in records:
-        definition = record["definition"]
-        latest[(definition["id"], definition["revision"])] = record
-    definitions = {d["id"]: d for d in evaluation.definitions(project)}
+    # Match the full effective configuration: copied judges may share IDs and
+    # revision counters but diverge in another policy.
     policy = evaluation_policies.active(project)
-    judge_ids = policy["judges"] if policy else group.get("judges", [])
+    definitions = (
+        evaluation_judges.flatten(policy)
+        if policy and not any(j.get("missing") for j in policy["judges"])
+        else []
+    )
     relevant = [
-        latest.get((key, definitions[key]["revision"])) if key in definitions else None
-        for key in judge_ids
+        next((r for r in reversed(records) if r["definition"] == definition), None)
+        for definition in definitions
     ]
     status, passed = "unjudged", None
     if relevant and all(r and r["status"] == "complete" for r in relevant):
@@ -149,10 +149,7 @@ def plan(session, name=None, collection=None):
     policy = evaluation_policies.resolve(session.project, name)
     definitions = evaluation_policies.Definitions(
         policy,
-        [
-            copy.deepcopy(evaluation.find(evaluation.definitions(session.project), key))
-            for key in policy["judges"]
-        ],
+        evaluation_judges.flatten(policy),
     )
     if not definitions:
         raise ValueError("Add at least one behavior to this policy first")

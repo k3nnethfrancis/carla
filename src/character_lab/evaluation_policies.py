@@ -1,13 +1,13 @@
 """Reusable assessment policies and frozen run envelopes.
 
-Data membership lives in evaluation_sets. Policies reference behavior definitions;
-run envelopes freeze those definitions and reference immutable assessment records.
+Data membership lives in evaluation_sets. Policies own judges and their behaviors;
+run envelopes freeze that configuration and reference immutable assessment records.
 """
 
 import copy
 import uuid
 
-from . import evaluation
+from . import evaluation, evaluation_judges
 from .domain import now
 
 
@@ -42,7 +42,6 @@ class Definitions(list):
     def __init__(self, policy, definitions):
         super().__init__(definitions)
         self.policy = copy.deepcopy(policy)
-        self.policy["judges"] = copy.deepcopy(definitions)
 
 
 def save(project, args):
@@ -54,11 +53,17 @@ def save(project, args):
     if any(p["name"] == name and p is not old for p in policies):
         raise ValueError("A policy already has that name")
     judges = args.get("judges", [])
-    if not isinstance(judges, list) or any(not isinstance(k, str) for k in judges):
-        raise ValueError("Choose behavior definitions for the policy")
-    judges = list(dict.fromkeys(judges))
-    for key in judges:
-        evaluation.find(evaluation.definitions(project), key)
+    # Old clients sent evaluator IDs. Convert immediately to policy-owned objects.
+    if isinstance(judges, list):
+        judges = [
+            evaluation_judges.legacy(
+                evaluation.find(evaluation.definitions(project), j)
+            )
+            if isinstance(j, str)
+            else j
+            for j in judges
+        ]
+    judges = evaluation_judges.normalize(judges, old["judges"] if old else [])
     if old:
         old.update(name=name, judges=judges, revision=old["revision"] + 1)
     else:
@@ -89,6 +94,23 @@ def migrate(project):
                 "evaluation_policies"
             ][0]["id"]
         changed = True
+    definitions = {d["id"]: d for d in evaluation.definitions(project)}
+    for policy in project.data["evaluation_policies"]:
+        if any(isinstance(j, str) for j in policy["judges"]):
+            policy["judges"] = [
+                evaluation_judges.legacy(definitions[j])
+                if isinstance(j, str) and j in definitions
+                else {
+                    "id": j,
+                    "name": "Missing legacy judge",
+                    "missing": True,
+                    "behaviors": [],
+                }
+                if isinstance(j, str)
+                else j
+                for j in policy["judges"]
+            ]
+            changed = True
     if "evaluation_runs" not in project.data:
         project.data["evaluation_runs"] = []
         # Legacy standalone judgments may never have belonged to a collection.
