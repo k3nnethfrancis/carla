@@ -290,8 +290,8 @@ not a locally calibrated guarantee. A Stop affects only the flagged conversation
 ## Policy and evaluation configuration
 
 `/policy` always opens Monitoring, Selection and Evals, from every tab.
-Choose a named policy within a category to edit it or make it active.
-Editing an inactive policy does not enable or activate it. Evaluate → Policies
+Choose a named policy within a category to edit it. Monitoring and Selection
+use On/Off; editing an Off policy does not enable it. Evaluate → Policies
 opens the same Evals policy list; there is no separate evaluation configuration.
 Policies own behaviors separately from their judge settings. The judge owns the
 model, prompt and Call mode. Behaviors own specs, enabled states and passing
@@ -309,11 +309,13 @@ local to the policy. Saved runs
 retain the configurations used at execution. Adding data never invokes a model.
 See [evaluations](evaluations.md) for the Data / Policies / Runs workflow.
 
-Named Monitoring and Selection policy rows show **On/Off** separately from the
-**active** marker (the policy chosen for future runs). Space or Left/Right toggles
-the focused policy directly from the list; Enter opens its configuration. Toggling
-an inactive policy changes only its saved enabled state. Enabling monitoring uses
-its remembered judge, with model/key setup when needed.
+Named Monitoring and Selection policy rows show only **On/Off**. Space or
+Left/Right toggles the focused policy; Enter opens its configuration. Turning
+one On switches the previous policy in that category Off and uses the newly
+enabled policy for future runs. All policies can be Off. New policies start
+Off; their judge and behavior settings remain saved when disabled. Enabling
+monitoring uses its remembered judge, with model/key setup when needed.
+Cancelling setup leaves the previously enabled policy unchanged.
 
 Choice rows in policy configuration support Space to cycle forward and Left/Right
 to cycle backward/forward, without opening a picker. Enter still opens the full

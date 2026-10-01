@@ -104,12 +104,9 @@ func (m *model) openOperationalPolicies(purpose string) tea.Cmd {
 			state = "On"
 		}
 		label := p.Name + " · " + state
-		if m.data.ActiveOperationalPolicies[purpose] == p.ID {
-			label += " · active"
-		}
-		d.rows = append(d.rows, row{id: p.ID, label: label, preview: "Enter configures behaviors and the judge. Space or Left/Right toggles On/Off; this does not change which policy is active."})
+		d.rows = append(d.rows, row{id: p.ID, label: label, preview: "Enter configures behaviors and the judge. Space or Left/Right toggles On/Off. Turning this on turns the other policies in this category off."})
 	}
-	d.rows = append(d.rows, row{id: "new", label: "+ New policy", preview: "Create a named policy from the current settings. Activate it explicitly when ready."})
+	d.rows = append(d.rows, row{id: "new", label: "+ New policy", preview: "Create a named policy with monitoring or selection Off. Configure it, then turn it On when ready."})
 	m.dialog = d
 	return nil
 }
@@ -136,9 +133,7 @@ func (m *model) appendOperationalControls(d *dialog) {
 	p := m.operationalPolicy(purpose, id)
 	d.title += " · " + p.Name
 	d.rows = append(d.rows, row{id: "rename-policy", label: "Name · " + p.Name, preview: "Rename this policy without changing its behavior."})
-	if m.data.ActiveOperationalPolicies[purpose] != id {
-		d.rows = append(d.rows, row{id: "activate-policy", label: "Make active", preview: "Use this policy for future generation runs. Editing alone does not activate it."}, row{id: "delete-policy", label: "Delete policy", preview: "Remove this inactive policy. Existing run results remain saved."})
-	}
+	d.rows = append(d.rows, row{id: "delete-policy", label: "Delete policy", preview: "Remove this policy. If On, turn it off. Existing run results remain saved."})
 }
 func (m *model) submitOperationalPolicy(d *dialog) tea.Cmd {
 	purpose, _ := d.args["purpose"].(string)
@@ -201,11 +196,9 @@ func (m *model) operationalControl(d *dialog, id string) (tea.Cmd, bool) {
 	purpose, pid := m.operationalContext()
 	switch id {
 	case "delete-policy":
-		m.dialog = &dialog{kind: "operational-policy-delete", title: "Delete policy?", parent: d, rows: []row{{id: "cancel", label: "Cancel", preview: "Keep this policy."}, {id: "confirm", label: "Delete", preview: "Remove this inactive policy. Existing results remain saved."}}}
+		m.dialog = &dialog{kind: "operational-policy-delete", title: "Delete policy?", parent: d, rows: []row{{id: "cancel", label: "Cancel", preview: "Keep this policy."}, {id: "confirm", label: "Delete", preview: "Remove this policy and turn it off if needed. Existing run results remain saved."}}}
 		return nil, true
 
-	case "activate-policy":
-		return m.send("operational.policy.activate", map[string]any{"purpose": purpose, "id": pid}), true
 	case "rename-policy":
 		m.dialog = &dialog{kind: "operational-policy-name", title: "Policy name", parent: d, args: map[string]any{"purpose": purpose, "id": pid}}
 		m.dialog.add("Name", m.operationalPolicy(purpose, pid).Name)
@@ -214,8 +207,8 @@ func (m *model) operationalControl(d *dialog, id string) (tea.Cmd, bool) {
 	return nil, false
 }
 
-// Route editor mutations to the named policy being edited. Active runtime state
-// is projected only by the backend when that policy is active.
+// Route editor mutations to the named policy being edited. Runtime selection
+// is updated by the backend only when this policy is enabled.
 func (m *model) routeOperationalMutation(command string, args map[string]any) (string, map[string]any) {
 	purpose, id := m.operationalContext()
 	if id == "" {
@@ -363,7 +356,7 @@ func orderOperationalRows(d *dialog) {
 	if d.args["operational_id"] == nil {
 		return
 	}
-	order := map[string]int{"rename-policy": 0, "mode": 1, "selection_enabled": 1, "key": 2, "behaviors": 2, "judge": 3, "timing": 4, "activate-policy": 5, "delete-policy": 6}
+	order := map[string]int{"rename-policy": 0, "mode": 1, "selection_enabled": 1, "key": 2, "behaviors": 2, "judge": 3, "timing": 4, "delete-policy": 6}
 	sort.SliceStable(d.rows, func(i, j int) bool { return order[d.rows[i].id] < order[d.rows[j].id] })
 }
 

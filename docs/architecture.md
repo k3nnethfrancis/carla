@@ -183,9 +183,11 @@ prompts never enter generation context. Monitoring and selection retain their
 operational owners and context-specific actions.
 
 `operational_policies.py` stores named Monitoring and Selection configurations,
-active choices, and the workspace behavior-spec library. It adapts a selected
-policy to the existing generation runtime settings. Editing an inactive policy
-does not activate it; legacy configuration commands update the active policy.
+exclusive On/Off routing, and the workspace behavior-spec library. Enabling a
+policy projects its settings into the generation runtime and switches the
+previous policy Off. Disabled policies retain their settings without affecting
+runtime; all policies may be Off. Legacy configuration commands update the
+remembered policy through the same routing contract.
 The UI uses one `/policy` hub in every tab. Evaluate Policies is another entry
 to the same Evals catalog. Library imports copy the spec and its revision;
 changing a library entry does not mutate existing uses or historical runs.
@@ -197,8 +199,10 @@ groups and run envelopes. The workspace stores:
 - `evaluators`: retained legacy definitions for compatibility and migration.
 - `evaluation_sets`: data collections and frozen items.
 - `behavior_library`: reusable, revisioned names and specs.
-- `operational_policies` and `active_operational_policies`: named Monitoring and
-  Selection configuration and explicit activation per category.
+- `operational_policies`: named Monitoring and Selection configurations, with
+  at most one On policy per category. `active_operational_policies` is the legacy
+  internal routing reference, retained to remember settings while all are Off;
+  it is not a separate user-visible activation state.
 - `evaluation_policies`: sibling actions, judges (model, prompt, call mode) and
   versioned behaviors (spec, enabled state, threshold). Execution expands each
   judge against every enabled behavior, retaining both identities in the result.

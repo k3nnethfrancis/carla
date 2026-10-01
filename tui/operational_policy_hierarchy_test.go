@@ -60,13 +60,13 @@ func TestOperationalPolicyDescriptionsAndCompactRender(t *testing.T) {
 func namedOperationalFixture() *model {
 	m := policyFixture()
 	m.data.OperationalPolicies = map[string][]operationalPolicy{
-		"monitoring": {{ID: "active", Name: "Live", Config: map[string]any{"monitor_mode": "off"}}, {ID: "draft", Name: "Draft", Config: map[string]any{"monitor_mode": "diffusion", "monitor_call_mode": "separate", "monitor_dimensions": []map[string]any{{"id": "looping", "name": "Looping", "spec": "Repetition", "enabled": true, "action": "warn", "color": "amber", "decision": "most_likely", "threshold": .8}}}}},
+		"monitoring": {{ID: "active", Name: "Live", Config: map[string]any{"monitor_mode": "jev"}}, {ID: "draft", Name: "Draft", Config: map[string]any{"monitor_mode": "off", "monitor_provider": "diffusion", "monitor_call_mode": "separate", "monitor_dimensions": []map[string]any{{"id": "looping", "name": "Looping", "spec": "Repetition", "enabled": true, "action": "warn", "color": "amber", "decision": "most_likely", "threshold": .8}}}}},
 		"selection":  {{ID: "selection-draft", Name: "Select coherent", Config: map[string]any{"selection_enabled": false, "model_alias": "policy-model", "policy_spec": "Original spec", "selection_behaviors": []map[string]any{{"id": "coherence", "name": "Coherence", "spec": "Original spec", "enabled": true}}}}},
 	}
 	m.data.ActiveOperationalPolicies = map[string]string{"monitoring": "active"}
 	return m
 }
-func TestInactiveOperationalActionEditsNamedPolicyOnly(t *testing.T) {
+func TestOffOperationalActionEditsDoNotEnablePolicy(t *testing.T) {
 	m := namedOperationalFixture()
 	m.openOperationalPolicies("monitoring")
 	m.dialog.index = 1

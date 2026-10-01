@@ -55,12 +55,13 @@ async def test_named_selection_roundtrip_and_legacy_sync(lab):
         lab.project.data["policy_spec"]
         == initial["selection"][0]["config"]["policy_spec"]
     )
-    with pytest.raises(ValueError, match="another active"):
-        await lab.execute(
-            "operational.policy.delete",
-            dict(purpose="selection", id=initial["selection"][0]["id"]),
-            "delete",
-        )
+    await lab.execute(
+        "operational.policy.delete",
+        dict(purpose="selection", id=initial["selection"][0]["id"]),
+        "delete",
+    )
+    assert lab.project.data["selection_enabled"] is False
+    assert lab.project.data["active_operational_policies"]["selection"] == saved["id"]
 
 
 @pytest.mark.asyncio
@@ -387,3 +388,210 @@ def test_library_migration_seeds_flat_policy_behaviors_once(lab):
     library = copy.deepcopy(data["behavior_library"])
     ops.migrate(lab.project, lab.runtime.model["alias"], lab.policy_model)
     assert data["behavior_library"] == library
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("purpose", ["monitoring", "selection"])
+async def test_on_selects_runtime_exclusively_new_policy_off_and_all_off(lab, purpose):
+    items = lab.project.data["operational_policies"][purpose]
+    first = items[0]
+    on = (
+        {"monitor_mode": "diffusion"}
+        if purpose == "monitoring"
+        else {"selection_enabled": True}
+    )
+    off = (
+        {"monitor_mode": "off"}
+        if purpose == "monitoring"
+        else {"selection_enabled": False}
+    )
+
+    async def save(item, config, name=None):
+        await lab.execute(
+            "operational.policy.save",
+            dict(
+                purpose=purpose, id=item["id"], name=name or item["name"], config=config
+            ),
+            "save",
+        )
+
+    await save(first, on)
+    assert ops.enabled(
+        purpose,
+        ops.current(lab.project, purpose, lab.runtime.model["alias"], lab.policy_model),
+    )
+    await lab.execute(
+        "operational.policy.save",
+        dict(purpose=purpose, name="Second", config=on),
+        "new",
+    )
+    second = items[-1]
+    assert not ops.enabled(purpose, second["config"])
+    assert ops.enabled(purpose, first["config"])
+    await save(second, on)
+    assert lab.project.data["active_operational_policies"][purpose] == second["id"]
+    assert not ops.enabled(purpose, first["config"])
+    assert ops.enabled(purpose, second["config"])
+    if purpose == "monitoring":
+        assert first["config"]["monitor_provider"] == "diffusion"
+    await save(second, {}, "Renamed")
+    assert ops.enabled(purpose, second["config"])
+    await save(second, off)
+    assert not any(ops.enabled(purpose, p["config"]) for p in items)
+    assert not ops.enabled(
+        purpose,
+        ops.current(lab.project, purpose, lab.runtime.model["alias"], lab.policy_model),
+    )
+    await save(first, {}, "Still off")
+    assert lab.project.data["active_operational_policies"][purpose] == second["id"]
+    await lab.execute(
+        "operational.policy.delete", dict(purpose=purpose, id=second["id"]), "delete"
+    )
+    assert lab.project.data["active_operational_policies"][purpose] == first["id"]
+    await lab.execute(
+        "operational.policy.delete",
+        dict(purpose=purpose, id=first["id"]),
+        "delete-last",
+    )
+    assert not items and not ops.enabled(
+        purpose,
+        ops.current(lab.project, purpose, lab.runtime.model["alias"], lab.policy_model),
+    )
+
+
+@pytest.mark.asyncio
+async def test_failed_monitor_enable_keeps_previous_on(lab, monkeypatch):
+    first = lab.project.data["operational_policies"]["monitoring"][0]
+    await lab.execute(
+        "operational.policy.save",
+        dict(
+            purpose="monitoring",
+            id=first["id"],
+            name=first["name"],
+            config={"monitor_mode": "diffusion"},
+        ),
+        "local",
+    )
+    await lab.execute(
+        "operational.policy.save",
+        dict(purpose="monitoring", name="Remote", config={"monitor_mode": "jev"}),
+        "new",
+    )
+    second = lab.project.data["operational_policies"]["monitoring"][-1]
+    monkeypatch.setattr(ops.credentials, "openrouter_key", lambda: (None, "missing"))
+    before = copy.deepcopy(lab.project.data)
+    with pytest.raises(ValueError, match="API key"):
+        await lab.execute(
+            "operational.policy.save",
+            dict(
+                purpose="monitoring",
+                id=second["id"],
+                name=second["name"],
+                config={"monitor_mode": "jev"},
+            ),
+            "enable",
+        )
+    assert lab.project.data == before
+
+
+@pytest.mark.asyncio
+async def test_migrate_nonselected_on_off_and_legacy_sync_single_on(lab):
+    first = lab.project.data["operational_policies"]["monitoring"][0]
+    second = copy.deepcopy(first)
+    second.update(id="old-inactive", name="Old inactive")
+    second["config"].update(monitor_mode="diffusion", monitor_provider="diffusion")
+    lab.project.data["operational_policies"]["monitoring"].append(second)
+    ops.migrate(lab.project, lab.runtime.model["alias"], lab.policy_model)
+    assert second["config"]["monitor_mode"] == "off"
+    assert second["config"]["monitor_provider"] == "diffusion"
+    before = copy.deepcopy(lab.project.data)
+    ops.migrate(lab.project, lab.runtime.model["alias"], lab.policy_model)
+    assert lab.project.data == before
+    second["config"]["monitor_mode"] = "diffusion"
+    await lab.execute("simulator.configure", {"monitor_mode": "diffusion"}, "legacy")
+    assert first["config"]["monitor_mode"] == "diffusion"
+    assert second["config"]["monitor_mode"] == "off"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("purpose", ["monitoring", "selection"])
+async def test_delete_last_create_first_then_legacy_toggle_has_named_owner(
+    lab, purpose
+):
+    first = lab.project.data["operational_policies"][purpose][0]
+    await lab.execute(
+        "operational.policy.delete", dict(purpose=purpose, id=first["id"]), "delete"
+    )
+    await lab.execute(
+        "operational.policy.save", dict(purpose=purpose, name="Replacement"), "create"
+    )
+    replacement = lab.project.data["operational_policies"][purpose][0]
+    assert lab.project.data["active_operational_policies"][purpose] == replacement["id"]
+    command, args = (
+        ("simulator.configure", {"monitor_mode": "diffusion"})
+        if purpose == "monitoring"
+        else ("policy.configure", {"selection_enabled": True})
+    )
+    await lab.execute(command, args, "legacy-enable")
+    assert ops.enabled(purpose, replacement["config"])
+    assert ops.enabled(
+        purpose,
+        ops.current(lab.project, purpose, lab.runtime.model["alias"], lab.policy_model),
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("preserve", [False, True])
+async def test_key_completion_switches_on_only_when_requested(
+    lab, monkeypatch, preserve
+):
+    first = lab.project.data["operational_policies"]["monitoring"][0]
+    await lab.execute(
+        "operational.policy.save",
+        dict(
+            purpose="monitoring",
+            id=first["id"],
+            name=first["name"],
+            config={"monitor_mode": "diffusion"},
+        ),
+        "local",
+    )
+    await lab.execute(
+        "operational.policy.save", dict(purpose="monitoring", name="Remote"), "new"
+    )
+    remote = lab.project.data["operational_policies"]["monitoring"][-1]
+    saved_keys = []
+    monkeypatch.setattr(ops.credentials, "save_openrouter_key", saved_keys.append)
+    monkeypatch.setattr(
+        ops.credentials,
+        "openrouter_key",
+        lambda: ("test-key", "saved") if saved_keys else (None, "missing"),
+    )
+    await lab.execute(
+        "loom-policy.key",
+        dict(
+            key="test-key",
+            activate=False,
+            policy_id=remote["id"],
+            preserve_disabled=preserve,
+        ),
+        "key",
+    )
+    assert ops.enabled("monitoring", remote["config"]) is (not preserve)
+    assert ops.enabled("monitoring", first["config"]) is preserve
+    assert remote["config"]["monitor_provider"] == "jev"
+    assert lab.project.data["simulator_config"]["monitor_mode"] == (
+        "diffusion" if preserve else "jev"
+    )
+
+
+@pytest.mark.asyncio
+async def test_missing_legacy_route_cannot_leave_unrepresented_monitor_on(lab):
+    first = lab.project.data["operational_policies"]["monitoring"][0]
+    first["config"]["monitor_mode"] = "diffusion"
+    lab.project.data["simulator_config"] = {"monitor_mode": "diffusion"}
+    lab.project.data["active_operational_policies"]["monitoring"] = "deleted"
+    ops.migrate(lab.project, lab.runtime.model["alias"], lab.policy_model)
+    assert first["config"]["monitor_mode"] == "off"
+    assert lab.project.data["simulator_config"]["monitor_mode"] == "off"
+    assert lab.project.data["active_operational_policies"]["monitoring"] == first["id"]

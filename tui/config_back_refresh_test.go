@@ -22,6 +22,8 @@ func applyOperationalTestSave(t *testing.T, m *model, req capturedRequest, purpo
 func TestMonitoringBackRefreshesCountsAndEnabledList(t *testing.T) {
 	m := namedOperationalFixture()
 	p := &m.data.OperationalPolicies["monitoring"][1]
+	p.Config["monitor_mode"] = "diffusion"
+	m.data.OperationalPolicies["monitoring"][0].Config["monitor_mode"] = "off"
 	dims := p.Config["monitor_dimensions"].([]map[string]any)
 	for _, id := range []string{"spiraling", "harmful_language"} {
 		dims = append(dims, map[string]any{"id": id, "name": id, "spec": "Spec", "enabled": true, "action": "warn", "color": "amber", "decision": "most_likely", "threshold": .8})

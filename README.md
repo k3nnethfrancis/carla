@@ -175,8 +175,10 @@ Hosted classification sends the assessed text to an external service and can
 incur charges. Local generation itself uses llama.cpp.
 
 `/policy` always opens Monitoring, Selection and Evals. Each category holds named
-policies with behaviors, judge settings and actions. `/behaviors` is a reusable
-workspace library of specs; adding a spec to a policy keeps its settings local.
+policies with behaviors, judge settings and actions. Monitoring and Selection
+use On/Off: enabling one switches the previous policy in that category Off.
+`/behaviors` is a reusable workspace library of specs; adding a spec to a policy
+keeps its settings local.
 
 **Evaluate** separates **Data**, **Policies** and **Runs**. Data is the saved
 documents and conversation traces. Policies contain behaviors and judge settings

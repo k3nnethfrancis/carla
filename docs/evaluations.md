@@ -22,9 +22,10 @@ siblings: behaviors define what to assess, the judge defines how to assess it,
 and actions determine what Carla does with the result.
 
 On the Monitoring or Selection policy list, **Space** or **Left/Right** toggles
-the focused policy’s **On/Off** setting. **Enter** opens it. The separate **active**
-marker identifies which policy future runs use; toggling an inactive policy
-changes only its saved setting.
+the focused policy’s **On/Off** setting. **Enter** opens it. Turning a policy On
+uses it for future runs and switches the previous policy in that category Off.
+All policies can be Off. New policies start Off; editing their settings leaves
+them Off until enabled.
 
 Evaluate → Policies is the same collection as `/policy` → Evals. Changes made
 through either route affect the same policy. Data collections remain independent.

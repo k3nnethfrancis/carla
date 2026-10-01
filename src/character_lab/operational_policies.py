@@ -1,7 +1,7 @@
 """Named operational policies project onto the existing generation configuration.
 
-Saved alternatives never affect inference until activated. Legacy editors update
-only the active policy; histories and frozen run configurations are untouched.
+Turning a policy On selects it for inference and turns its peers Off. The internal
+routing pointer remembers the last configuration when all policies are Off.
 """
 
 import copy
@@ -11,6 +11,41 @@ from . import credentials, monitor, policy_overrides, simulator
 from .policy import DEFAULT_PROMPT, DEFAULT_SPEC
 
 PURPOSES = {"monitoring", "selection"}
+
+
+def enabled(purpose, config):
+    return (
+        config.get("monitor_mode", "off") != "off"
+        if purpose == "monitoring"
+        else config.get("selection_enabled", False)
+    )
+
+
+def disabled(purpose, config):
+    value = copy.deepcopy(config)
+    if purpose == "monitoring":
+        if value.get("monitor_mode") in {"jev", "diffusion"}:
+            value["monitor_provider"] = value["monitor_mode"]
+        value["monitor_mode"] = "off"
+    else:
+        value["selection_enabled"] = False
+    return value
+
+
+def turn_off_peers(project, purpose, keep=None):
+    for item in project.data["operational_policies"][purpose]:
+        if item["id"] != keep and enabled(purpose, item["config"]):
+            store(item, disabled(purpose, expanded(item)))
+
+
+def apply(session, purpose, item, config):
+    """Only an On edit changes routing; Off edits cannot select an unused policy."""
+    routes = session.project.data["active_operational_policies"]
+    if enabled(purpose, config):
+        turn_off_peers(session.project, purpose, item["id"])
+        routes[purpose] = item["id"]
+    if routes.get(purpose) == item["id"]:
+        project_config(session, purpose, config)
 
 
 def model_key(model):
@@ -105,6 +140,18 @@ def migrate(project, alias, policy_model):
             store(item, item["config"])
             catalog[purpose] = [item]
             active[purpose] = item["id"]
+    for purpose in PURPOSES:
+        if not any(item["id"] == active.get(purpose) for item in catalog[purpose]):
+            turn_off_peers(project, purpose)
+            fallback = catalog[purpose][0] if catalog[purpose] else None
+            active[purpose] = fallback["id"] if fallback else ""
+            config = (
+                expanded(fallback)
+                if fallback
+                else current(project, purpose, alias, policy_model)
+            )
+            project_values(project, purpose, disabled(purpose, config))
+        turn_off_peers(project, purpose, active.get(purpose))
     reconcile_model(project, policy_model)
     if "behavior_library" not in project.data:
         project.data["behavior_library"] = []
@@ -141,12 +188,22 @@ def sync(session, purpose):
     item = next(
         (x for x in p.data["operational_policies"][purpose] if x["id"] == key), None
     )
+    if item is None:
+        item = dict(id=uuid.uuid4().hex[:12], name="Default")
+        p.data["operational_policies"][purpose].append(item)
+        p.data["active_operational_policies"][purpose] = item["id"]
+        store(
+            item,
+            current(p, purpose, session.runtime.model["alias"], session.policy_model),
+        )
     if item:
         config = current(
             p, purpose, session.runtime.model["alias"], session.policy_model
         )
         if expanded(item) != config:
             store(item, config)
+        if enabled(purpose, config):
+            turn_off_peers(p, purpose, item["id"])
 
 
 def validate(session, purpose, config, *, activating=False):
@@ -170,7 +227,7 @@ def validate(session, purpose, config, *, activating=False):
             and not credentials.openrouter_key()[0]
         ):
             raise ValueError(
-                "Configure an OpenRouter API key before activating Jev monitoring"
+                "Configure an OpenRouter API key before turning on Jev monitoring"
             )
         return {
             k: v
@@ -211,20 +268,20 @@ def validate(session, purpose, config, *, activating=False):
         for k in ("policy_spec", "policy_prompt")
     ):
         raise ValueError("Selection instructions cannot be empty")
-    if config["model_alias"] != session.policy_model.get(
-        "alias", session.policy_model["name"]
-    ):
+    if config["model_alias"] != model_key(session.policy_model):
         raise ValueError("Choose the configured selection model")
     return copy.deepcopy(config)
 
 
 def project_config(session, purpose, config):
+    project_values(session.project, purpose, config)
+
+
+def project_values(project, purpose, config):
     if purpose == "monitoring":
-        session.project.data.setdefault("simulator_config", {}).update(
-            copy.deepcopy(config)
-        )
+        project.data.setdefault("simulator_config", {}).update(copy.deepcopy(config))
     else:
-        session.project.data.update(
+        project.data.update(
             {k: copy.deepcopy(v) for k, v in config.items() if k != "model_alias"}
         )
 
@@ -286,8 +343,11 @@ async def dispatch(session, command, args, request_id):
                 ),
                 **updates,
             }
-            is_active = old is not None and active.get(purpose) == old["id"]
-            config = validate(session, purpose, config, activating=is_active)
+            if old is None:
+                config = disabled(purpose, config)
+            config = validate(
+                session, purpose, config, activating=enabled(purpose, config)
+            )
             if old:
                 old.update(name=name.strip())
                 store(old, config)
@@ -295,22 +355,42 @@ async def dispatch(session, command, args, request_id):
                 old = dict(id=uuid.uuid4().hex[:12], name=name.strip(), config=config)
                 store(old, config)
                 items.append(old)
-            if is_active:
-                project_config(session, purpose, config)
+                if not any(item["id"] == active.get(purpose) for item in items):
+                    active[purpose] = old["id"]
+            apply(session, purpose, old, config)
         elif command == "operational.policy.activate":
             if old is None:
                 raise ValueError("Choose a policy")
-            config = validate(session, purpose, expanded(old), activating=True)
-            active[purpose] = old["id"]
-            project_config(session, purpose, config)
+            config = expanded(old)
+            if purpose == "monitoring":
+                config["monitor_mode"] = (
+                    config.get("monitor_provider", "off")
+                    if config.get("monitor_mode") == "off"
+                    else config["monitor_mode"]
+                )
+                if config["monitor_mode"] == "off":
+                    raise ValueError(
+                        "Choose a monitoring model before turning this policy On"
+                    )
+            else:
+                config["selection_enabled"] = True
+            config = validate(session, purpose, config, activating=True)
+            store(old, config)
+            apply(session, purpose, old, config)
         elif command == "operational.policy.delete":
             if old is None:
                 raise ValueError("Choose a policy")
-            if active.get(purpose) == old["id"]:
-                raise ValueError(
-                    "Choose another active policy before deleting this one"
-                )
+            routed = active.get(purpose) == old["id"]
             items.remove(old)
+            if routed:
+                fallback = items[0] if items else None
+                config = disabled(purpose, expanded(fallback or old))
+                if fallback:
+                    store(fallback, config)
+                active[purpose] = fallback["id"] if fallback else ""
+                project_config(session, purpose, config)
+                if purpose == "selection":
+                    reconcile_model(p, session.policy_model)
         else:
             raise ValueError("Unknown policy command")
     p.save()
