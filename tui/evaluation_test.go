@@ -16,7 +16,7 @@ func evalFixture() *model {
 	m.data.SelectorModels = []localModel{{Name: "Judge", Alias: "judge"}}
 	m.data.EvaluationSets = []evaluationCollection{{ID: "set", Name: "Coherence", Judges: []string{"rubric"}}}
 	m.data.ActiveEvaluation = "set"
-	m.data.EvaluationPolicies = []evaluationPolicy{{ID: "policy", Name: "Coherence", Judges: []evaluationJudge{{ID: "judge", Name: "LLM", Kind: "llm", Behaviors: []evaluationBehavior{{ID: "rubric", Name: "Coherence", Enabled: true}}}}, Revision: 1}}
+	m.data.EvaluationPolicies = []evaluationPolicy{{ID: "policy", Name: "Coherence", Judges: []evaluationJudge{{ID: "judge", Name: "LLM", Kind: "llm", Model: "judge"}}, Behaviors: []evaluationBehavior{{ID: "rubric", Name: "Coherence", Spec: "Coherent writing", Threshold: .8, Enabled: true}}, Revision: 1}}
 	m.data.ActiveEvaluationPolicy = "policy"
 	m.data.EvaluationPrompt = "Judge criteria, return passed, reason and evidence."
 	return m
@@ -217,7 +217,7 @@ func TestCollectionConfigAndAddingDoNotRunJudges(t *testing.T) {
 
 func TestDiffusionJudgeEndpointSurvivesEditing(t *testing.T) {
 	m := evalFixture()
-	j := evaluationJudge{ID: "local", Name: "Voice", Kind: "diffusion", Model: "openjev-latest", Endpoint: "http://127.0.0.1:8080", Behaviors: []evaluationBehavior{}}
+	j := evaluationJudge{ID: "local", Name: "Voice", Kind: "diffusion", Model: "openjev-latest", Endpoint: "http://127.0.0.1:8080"}
 	m.data.EvaluationPolicies[0].Judges = []evaluationJudge{j}
 	m.openPolicyJudge("policy", 0)
 	for _, r := range m.dialog.rows {
@@ -267,20 +267,12 @@ func TestEvaluateDataPoliciesRunsNavigation(t *testing.T) {
 	}
 }
 
-func TestPolicyJudgeBehaviorHierarchy(t *testing.T) {
+func TestPolicyBehaviorsAndJudgeAreSiblings(t *testing.T) {
 	m := evalFixture()
 	m.section = 4
 	m.openEvaluationPolicy("policy")
+	root := m.dialog
 	m.dialog.index = 1
-	m.submitDialog()
-	if m.dialog.kind != "eval-policy-judges" {
-		t.Fatal(m.dialog)
-	}
-	m.submitDialog()
-	if m.dialog.kind != "eval-policy-judge" {
-		t.Fatal(m.dialog)
-	}
-	m.dialog.index = 3
 	m.submitDialog()
 	if m.dialog.kind != "eval-policy-behaviors" {
 		t.Fatal(m.dialog)
@@ -290,16 +282,24 @@ func TestPolicyJudgeBehaviorHierarchy(t *testing.T) {
 		t.Fatal(m.dialog)
 	}
 	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
-	if req.Command != "evaluation.policy.save" {
+	var behaviors []evaluationBehavior
+	json.Unmarshal(req.Args["behaviors"], &behaviors)
+	if req.Command != "evaluation.policy.save" || len(behaviors) != 1 || behaviors[0].Enabled {
 		t.Fatal(req)
 	}
-	var judges []evaluationJudge
-	json.Unmarshal(req.Args["judges"], &judges)
-	if len(judges) != 1 || judges[0].Behaviors[0].Enabled {
-		t.Fatal(judges)
+	m.dialog = root
+	m.dialog.index = 2
+	m.submitDialog()
+	if m.dialog.kind != "eval-policy-judge" {
+		t.Fatal("single judge should open directly")
+	}
+	for _, r := range m.dialog.rows {
+		if r.id == "behaviors" {
+			t.Fatal("judge must not own behaviors")
+		}
 	}
 	if _, ok := req.Args["collection"]; ok {
-		t.Fatal("policy touched data")
+		t.Fatal("policy changed data")
 	}
 }
 

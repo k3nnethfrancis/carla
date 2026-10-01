@@ -16,15 +16,21 @@ a selected branch is not automatically an anthology or training member.
 ## Policy configuration
 
 `/policy` has the same entry point in every tab: **Monitoring**, **Selection**,
-and **Evals**. Each category holds named policies. A policy contains **Judges**
-and **Actions**; monitoring also has a **Heartbeat**. Each judge owns its model,
-call settings and behaviors. Actions determine what Carla does with those judgments.
+and **Evals**. Each category holds named policies. A policy owns **Behaviors**,
+**Judge** settings and **Actions**; monitoring also has a **Heartbeat**. These are
+siblings: behaviors define what to assess, the judge defines how to assess it,
+and actions determine what Carla does with the result.
+
+On the Monitoring or Selection policy list, **Space** or **Left/Right** toggles
+the focused policy’s **On/Off** setting. **Enter** opens it. The separate **active**
+marker identifies which policy future runs use; toggling an inactive policy
+changes only its saved setting.
 
 Evaluate → Policies is the same collection as `/policy` → Evals. Changes made
 through either route affect the same policy. Data collections remain independent.
 
 `/behaviors` manages reusable workspace specs (name and description). Import a
-spec into a judge to copy its current revision, then configure the enabled state
+spec into a policy to copy its current revision, then configure the enabled state
 and detection or passing rules for that use. Editing a library spec does not
 silently change policies already using a copy, or any historical results.
 
@@ -38,9 +44,10 @@ If no provider has been configured, choose one in `/policy` first. DiffusionGemm
 environment OpenRouter key before other settings appear. [Credential storage
 and external data flow](configuration.md#optional-monitoring) apply here.
 
-Open **Judges → a judge → Behaviors**. Each condition has a name, spec, enabled status, detection rule
+Open **Behaviors** directly inside the policy. Each condition has a name, spec, enabled status, detection rule
 and action. Most likely means estimated probability above 50%; Threshold uses
-your chosen cutoff. The policy’s Actions map those detections to Warn or Stop. Warn annotates the trace and highlights detection; Stop ends
+your chosen cutoff. Configure **Action** and warning color in that same behavior
+panel. Warn annotates the trace and highlights detection; Stop ends
 the flagged generation/conversation. Disabled conditions retain their settings.
 Custom behaviors can be deleted; built-in ones can be disabled.
 
@@ -52,8 +59,8 @@ and fail open. Scores are model estimates, not calibrated guarantees.
 
 ## Selection
 
-Open `/policy` → Selection → a policy → Judges to configure the local instruct evaluator
-and its prompt. Open the judge’s Behaviors to create or import criteria and enable
+Open `/policy` → Selection → a policy → **Judge** to configure the local instruct
+evaluator and its prompt. Open **Behaviors** beside Judge to create or import criteria and enable
 the ones to use. Enabled specs are combined in one candidate-set judgment.
 Selection still uses one configured local LLM, with one candidate-set call rather
 than monitoring’s separate/bundled call switch. The generator's raw prompt never receives these
@@ -84,8 +91,9 @@ Evaluate has three views:
 
 - **Data** contains saved document versions and conversation traces. Collections
   organize those inputs; adding data does not call a model.
-- **Policies** contains judges. Each judge owns a model and call settings, and
-  contains the behaviors it assesses. A policy is independent of its input data.
+- **Policies** contains assessment definitions: a shared set of behaviors, judge
+  settings and actions. Each judge owns its model and call settings and assesses
+  the same enabled policy behaviors. A policy is independent of its input data.
 - **Runs** contains the results of applying a policy to data. Each run preserves
   the input revisions and behavior configurations actually used.
 
@@ -93,21 +101,22 @@ Create or open a data collection and use **Add data** to add saved documents,
 conversations or existing judgments. **Collection settings** lets you rename the
 collection or make it the default destination for data assessed from other tabs.
 
-Configure assessment in **Policies → a policy → Judges → a judge → Behaviors**:
+Open **Policies → a policy** to configure assessment:
 
 - **Judge:** choose the model, call mode and, for an LLM, the assessment prompt.
 - **Behavior:** give it a name and spec, enable or disable it, and configure its
-  passing threshold for classifier output. The model is inherited from its judge.
+  passing threshold for classifier output. All configured judges assess it.
 
 **Separate** calls assess one enabled behavior per request. **Bundled** calls
-assess that judge's enabled behaviors together. Bundling reduces request count,
+assess the policy’s enabled behaviors together for each judge. Bundling reduces request count,
 but can change the judgments; the UI asks you to confirm the tradeoff. Each
 classifier behavior still has its own probability; scores are not normalized
 against other behaviors. LLM judgments retain a boolean result, reason and evidence.
 
 Set the active policy to choose what bare `/eval` runs. Monitoring and Selection
-remain separately enabled operational policies. Their editors also follow
-Judges → Behaviors around the currently supported single operational judge.
+remain separately enabled operational policies. They each use one supported
+operational judge, configured directly in **Judge** beside **Behaviors**. Evals
+opens one judge directly; with multiple judges, **Judges** lists their settings.
 Monitoring retains heartbeat and warn/stop actions. Selection retains its
 candidate-set review and choice contract; it does not expose a bundled/separate
 switch for a different algorithm.
@@ -121,9 +130,10 @@ Select data and run `/eval`, or choose a policy explicitly:
 /loom 3 --turns 2 --tokens 512 --eval "Voice" --loops 4
 ```
 
-The name now identifies a **policy**, not a data collection. All enabled behaviors under its judges
-assess the targeted items. Judges run sequentially; Call mode determines whether
-each judge assesses its behaviors separately or together. Generation `--eval`
+The name identifies a **policy**, not a data collection. Each judge assesses all
+enabled policy behaviors on the targeted items. Judges run sequentially; Call
+mode determines whether each judge assesses the behaviors separately or together.
+Generation `--eval`
 freezes the chosen configuration before generation and evaluates completed outputs
 without altering generation prompts. Cancellation does not start an evaluation
 phase. Generation and evaluation share the session operation lock.
@@ -147,7 +157,11 @@ Whole-item judging includes inherited document text or the saved conversation,
 without silent truncation. Inputs exceeding model context fail visibly.
 
 Existing named evaluations migrate into data collections and policies. Their
-saved judgments remain intact and available in run history. Attaching existing
+saved judgments remain intact and available in run history. Older policies with
+behaviors nested under judges are migrated to a shared behavior set. Identical
+shared entries merge; conflicting versions are retained as separate entries.
+Future runs apply the shared set to every judge. Frozen historical runs keep
+their original assignments and results. Attaching existing
 monitoring observations preserves their partial/turn scope; selection evidence
 preserves its candidate-set context. Neither becomes a whole-item grade merely
 because it was added to Data.

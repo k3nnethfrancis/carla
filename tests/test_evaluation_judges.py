@@ -79,8 +79,8 @@ async def test_llm_grouping_and_judge_isolation(lab, mode, expected):
     assert len({r["definition"]["id"] for r in records}) == 4
     assert all(r["status"] == "complete" for r in records)
     run = lab.project.data["evaluation_runs"][0]
-    assert len(run["policy"]["judges"][0]["behaviors"]) == 2
-    assert "model" not in run["policy"]["judges"][0]["behaviors"][0]
+    assert len(run["policy"]["behaviors"]) == 2
+    assert "model" not in run["policy"]["behaviors"][0]
     frozen = copy.deepcopy(run)
     policy = policies.active(lab.project)
     changed = copy.deepcopy(policy)
@@ -234,16 +234,19 @@ async def test_mixed_judges_two_items_never_bundle_across_inputs(lab, monkeypatc
 
 def test_revision_stability_and_private_policy_copies(lab):
     first = policies.save(lab.project, dict(name="First", judges=[config()]))
-    second = policies.save(lab.project, dict(name="Second", judges=first["judges"]))
+    second = policies.save(
+        lab.project,
+        dict(name="Second", judges=first["judges"], behaviors=first["behaviors"]),
+    )
     before = copy.deepcopy(second)
     unchanged = copy.deepcopy(first["judges"])
     policies.save(lab.project, copy.deepcopy(first))
     assert first["judges"] == unchanged
     changed = copy.deepcopy(first)
-    changed["judges"][0]["behaviors"][0]["spec"] = "New criteria"
+    changed["behaviors"][0]["spec"] = "New criteria"
     policies.save(lab.project, changed)
-    assert first["judges"][0]["revision"] == 2
-    assert first["judges"][0]["behaviors"][0]["revision"] == 2
+    assert first["judges"][0]["revision"] == 1
+    assert first["behaviors"][0]["revision"] == 2
     assert second == before
 
 
@@ -254,7 +257,7 @@ async def test_copied_policy_same_ids_and_revisions_do_not_reuse_different_specs
     fork = copy.deepcopy(first)
     fork.pop("id")
     fork["name"] = "Different requirements"
-    fork["judges"][0]["behaviors"][0]["spec"] = "Different criterion"
+    fork["behaviors"][0]["spec"] = "Different criterion"
     second = policies.save(lab.project, fork)
     assert policies.active(lab.project)["id"] == first["id"]
     lab.project.data["active_evaluation_policy"] = second["id"]
@@ -263,3 +266,185 @@ async def test_copied_policy_same_ids_and_revisions_do_not_reuse_different_specs
     assert (
         data.item_summary(lab.project, group, group["items"][0])["status"] == "evidence"
     )
+
+
+@pytest.mark.asyncio
+async def test_flat_migration_preserves_variants_revisions_and_frozen_runs(lab):
+    await execute(lab, [config()])
+    records = copy.deepcopy(lab.project.data["evaluations"])
+    nested = config()
+    nested["revision"] = 5
+    nested["behaviors"][0].update(revision=7, source_id="library", source_revision=3)
+    nested["behaviors"][1]["revision"] = 2
+    identical = copy.deepcopy(nested)
+    identical.update(id="second", name="Second")
+    conflicting = copy.deepcopy(nested)
+    conflicting.update(id="third", name="Third")
+    conflicting["behaviors"][0]["spec"] = "A different requirement"
+    policy = policies.active(lab.project)
+    policy.pop("behaviors")
+    policy["judges"] = [nested, identical, conflicting]
+    # A historical envelope keeps exactly its old nested representation.
+    lab.project.data["evaluation_runs"][0]["policy"] = copy.deepcopy(policy)
+    history = copy.deepcopy(lab.project.data["evaluation_runs"])
+    policies.migrate(lab.project)
+    assert lab.project.data["evaluations"] == records
+    assert lab.project.data["evaluation_runs"] == history
+    assert all("behaviors" not in j for j in policy["judges"])
+    assert len(policy["behaviors"]) == 3
+    original, second, variant = policy["behaviors"]
+    assert original["id"] == "b0" and original["revision"] == 7
+    assert original["source_revision"] == 3
+    assert variant["id"] != "b0" and "Third" in variant["name"]
+    assert variant["spec"] == "A different requirement"
+    assert variant["revision"] == 7
+    from character_lab import evaluation_judges
+
+    assert (
+        evaluation_judges.normalize_behaviors(policy["behaviors"], policy["behaviors"])
+        == policy["behaviors"]
+    )
+    assert second["revision"] == 2
+    frozen = copy.deepcopy(lab.project.data)
+    policies.migrate(lab.project)
+    assert lab.project.data == frozen
+
+
+@pytest.mark.asyncio
+async def test_flat_policy_behavior_edit_reaches_every_judge_next_run(lab, monkeypatch):
+    from character_lab import evaluation_judges
+
+    calls = []
+
+    async def classify(request, trace, **kwargs):
+        calls.append(request)
+        trace.update(status="complete", scores={k: 0.9 for k in request["questions"]})
+
+    monkeypatch.setattr(evaluation, "classify", classify)
+    first = config("bundled", "jev")
+    behaviors = first.pop("behaviors")
+    second = copy.deepcopy(first)
+    second.update(id="other", name="Other")
+    policy = policies.save(
+        lab.project, dict(name="Shared", judges=[first, second], behaviors=behaviors)
+    )
+    old = copy.deepcopy(policy)
+    node = lab.project.add("Source text")
+    await lab.execute(
+        "evaluation.collection.run", dict(targets=[{"node": node["id"]}]), "first"
+    )
+    await lab.job
+    changed = copy.deepcopy(policy)
+    changed["behaviors"][0]["spec"] = "New shared criteria"
+    policies.save(lab.project, changed)
+    await lab.execute(
+        "evaluation.collection.run", dict(targets=[{"node": node["id"]}]), "second"
+    )
+    await lab.job
+    assert len(calls) == 4
+    assert all(
+        "New shared criteria" in next(iter(c["questions"].values()))["instructions"]
+        for c in calls[2:]
+    )
+    assert lab.project.data["evaluation_runs"][0]["policy"] == old
+    assert {d["id"] for d in evaluation_judges.flatten(policy)} == {
+        "Reader:b0",
+        "Reader:b1",
+        "other:b0",
+        "other:b1",
+    }
+
+
+def test_migration_keeps_distinct_behavior_ids_with_identical_content():
+    from character_lab import evaluation_judges
+
+    first = config()
+    first["revision"] = 1
+    first["behaviors"] = [
+        dict(
+            id="first-spec",
+            name="Voice",
+            spec="Consistent voice",
+            enabled=True,
+            threshold=0.8,
+            revision=4,
+        )
+    ]
+    second = copy.deepcopy(first)
+    second.update(id="second-judge", name="Second")
+    second["behaviors"][0]["id"] = "second-spec"
+    policy = dict(judges=[first, second])
+    evaluation_judges.lift_behaviors(policy)
+    assert [b["id"] for b in policy["behaviors"]] == ["first-spec", "second-spec"]
+    assert all(b["revision"] == 4 for b in policy["behaviors"])
+    assert {d["id"] for d in evaluation_judges.flatten(policy)} == {
+        "Reader:first-spec",
+        "Reader:second-spec",
+        "second-judge:first-spec",
+        "second-judge:second-spec",
+    }
+    unchanged = evaluation_judges.normalize_behaviors(
+        policy["behaviors"], policy["behaviors"]
+    )
+    assert unchanged == policy["behaviors"]
+
+
+def test_migration_deduplicates_repeated_conflicting_original_variant():
+    from character_lab import evaluation_judges
+
+    first = config()
+    first["revision"] = 1
+    first["behaviors"] = [
+        dict(
+            id="same",
+            name="Behavior",
+            spec="A",
+            enabled=True,
+            threshold=0.8,
+            revision=3,
+            source_id="source",
+            source_revision=2,
+        )
+    ]
+    second = copy.deepcopy(first)
+    second.update(id="second", name="Second")
+    second["behaviors"][0]["spec"] = "B"
+    third = copy.deepcopy(second)
+    third.update(id="third", name="Third")
+    policy = dict(judges=[first, second, third])
+    evaluation_judges.lift_behaviors(policy)
+    assert len(policy["behaviors"]) == 2
+    assert [b["spec"] for b in policy["behaviors"]] == ["A", "B"]
+    assert len(evaluation_judges.flatten(policy)) == 6
+    before = copy.deepcopy(policy)
+    assert evaluation_judges.lift_behaviors(policy) is False
+    assert policy == before
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [("revision", 4), ("source_revision", 3), ("threshold", 0.9), ("enabled", False)],
+)
+def test_conflicting_variants_compare_all_original_fields(field, value):
+    from character_lab import evaluation_judges
+
+    first = config()
+    first["behaviors"] = [
+        dict(
+            id="same",
+            name="Behavior",
+            spec="A",
+            enabled=True,
+            threshold=0.8,
+            revision=3,
+            source_id="source",
+            source_revision=2,
+        )
+    ]
+    second = copy.deepcopy(first)
+    second.update(id="second", name="Second")
+    second["behaviors"][0][field] = value
+    policy = dict(judges=[first, second])
+    evaluation_judges.lift_behaviors(policy)
+    assert len(policy["behaviors"]) == 2
+    assert policy["behaviors"][1][field] == value

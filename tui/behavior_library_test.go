@@ -24,16 +24,16 @@ func TestPolicyHubConsistentAcrossTabs(t *testing.T) {
 func TestImportBehaviorLibraryKeepsLocalSettings(t *testing.T) {
 	m := evalFixture()
 	m.data.BehaviorLibrary = []libraryBehavior{{ID: "lib", Name: "Voice", Spec: "Stable voice", Revision: 3}}
-	m.openPolicyBehaviors("policy", 0)
+	m.openPolicyBehaviors("policy")
 	m.dialog.index = len(m.dialog.rows) - 2
 	m.submitDialog()
 	if m.dialog.kind != "eval-policy-behavior-library" {
 		t.Fatal(m.dialog)
 	}
 	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
-	var judges []evaluationJudge
-	json.Unmarshal(req.Args["judges"], &judges)
-	b := judges[0].Behaviors[len(judges[0].Behaviors)-1]
+	var behaviors []evaluationBehavior
+	json.Unmarshal(req.Args["behaviors"], &behaviors)
+	b := behaviors[len(behaviors)-1]
 	if b.SourceID != "lib" || b.SourceRevision != 3 || b.Spec != "Stable voice" || !b.Enabled || b.Threshold != .8 {
 		t.Fatal(b)
 	}

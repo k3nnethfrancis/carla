@@ -135,7 +135,7 @@ only explicitly configured Stop actions terminate flagged work.
 
 Evaluate has Data, Policies and Runs. Its Policies view and `/policy` → Evals
 use the same named policies. `/policy` always shows all three policy categories;
-`/config` configures the current view. Add judges and their behaviors to a policy,
+`/config` configures the current view. Add behaviors and judge settings to a policy,
 add saved documents/conversations to Data, then run the policy on those items.
 Adding existing evidence does not run another judge.
 

@@ -38,7 +38,8 @@ func (m *model) openSelectionConfig() tea.Cmd {
 	}
 	d := &dialog{kind: "grow-config", title: "Selection policy", rows: []row{
 		{id: "selection_enabled", label: label, preview: selectionTriggerHelp},
-		{id: "judges", label: "Judges · 1", preview: "The selection model and the behaviors it uses to judge alternatives. Selection currently uses one LLM judge."},
+		{id: "behaviors", label: fmt.Sprintf("Behaviors · %d", len(m.selectionBehaviors())), preview: "Define criteria used to qualify alternatives and choose what continues."},
+		{id: "judge", label: "Judge · " + m.selectionModelName() + " (LLM)", preview: "Choose the model and prompt used to compare candidates against these behaviors."},
 	}}
 	defer orderOperationalRows(d)
 	m.appendOperationalControls(d)
@@ -50,17 +51,10 @@ func (m *model) openSelectionConfig() tea.Cmd {
 const selectionTriggerHelp = "On + 2+ alternatives + explicit --loops.\n/loom 4 --selection on --loops 1\nOne loop selects; more split from the winner.\nNone qualify: stop. Other outputs stay saved."
 const evaluationJudgesHelp = "Criteria + model used by named evaluations.\nChoose judges in Evaluate > Configure.\nRun: /eval or /loom --eval \"name\"\nCreating a judge does not run it."
 
-func (m *model) openSelectionJudges() tea.Cmd {
-	m.dialog = &dialog{kind: "grow-config", title: "Selection judges", rows: []row{
-		{id: "judge", label: m.selectionModelName() + " (LLM)", preview: "Compares candidates together and selects which qualifying candidate continues."},
-	}}
-	return nil
-}
 func (m *model) openSelectionJudge() tea.Cmd {
 	m.dialog = &dialog{kind: "grow-config", title: "Selection judge", rows: []row{
 		{id: "selector", label: "Model · " + m.selectionModelName() + " (LLM)", preview: "The local instruction-following model used to assess alternatives."},
 		{id: "prompt", label: "Prompt", preview: "Judges candidates together in one request. The prompt defines the required JSON selection response; separate behavior calls are not used."},
-		{id: "behaviors", label: fmt.Sprintf("Behaviors · %d", len(m.selectionBehaviors())), preview: "Selection criteria define which candidates qualify and are worth continuing."},
 	}}
 	return nil
 }
@@ -72,7 +66,7 @@ func (m *model) openSelectionBehaviors() tea.Cmd {
 		spec, _ := b["spec"].(string)
 		d.rows = append(d.rows, row{id: id, label: name, preview: "Criteria applied to candidates. " + spec})
 	}
-	d.rows = append(d.rows, row{id: "new-behavior", label: "+ New behavior", preview: "Add another named criterion for this judge."}, row{id: "library-behavior", label: "From library", preview: "Copy a saved behavior definition into this judge."})
+	d.rows = append(d.rows, row{id: "new-behavior", label: "+ New behavior", preview: "Add another named criterion to this policy."}, row{id: "library-behavior", label: "From library", preview: "Copy a saved behavior definition into this policy."})
 	m.dialog = d
 	return nil
 }

@@ -113,8 +113,7 @@ def migrate(project, alias, policy_model):
         behaviors += [
             b
             for p in project.data.get("evaluation_policies", [])
-            for j in p["judges"]
-            for b in j.get("behaviors", [])
+            for b in p.get("behaviors", [])
         ]
         behaviors.append(
             dict(

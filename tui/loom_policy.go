@@ -58,7 +58,8 @@ func (m *model) openLoomPolicy() tea.Cmd {
 	}
 	d.rows = append(d.rows,
 		row{id: "timing", label: "Heartbeat · " + m.monitorTimingSummary(), preview: "When this policy runs: during streaming output, after completed replies, or both."},
-		row{id: "judges", label: "Judges · 1", preview: "Open the monitoring model, its call mode and behaviors. Monitoring currently uses one classifier judge."},
+		row{id: "behaviors", label: "Behaviors · " + m.behaviorCounts(), preview: "Define what to detect and its Warn or Stop action, detection rule and warning color."},
+		row{id: "judge", label: "Judge · " + m.monitorJudgeName(), preview: "Choose the model and call mode used to assess this policy’s behaviors."},
 	)
 	return nil
 }
@@ -73,17 +74,10 @@ func (m *model) monitorJudgeName() string {
 	}
 	return "Jev (classifier)"
 }
-func (m *model) openMonitorJudges() tea.Cmd {
-	m.dialog = &dialog{kind: "loom-policy-judges", title: "Monitoring judges", rows: []row{
-		{id: "judge", label: m.monitorJudgeName(), preview: "Assesses enabled behaviors and applies their Warn or Stop actions."},
-	}}
-	return nil
-}
 func (m *model) openMonitorJudge() tea.Cmd {
 	d := &dialog{kind: "loom-policy-judge", title: m.monitorJudgeName(), rows: []row{
 		{id: "mode", label: "Model · " + m.monitorJudgeName(), preview: "Choose the classifier. DiffusionGemma runs locally; Jev uses OpenRouter and requires an API key."},
 		{id: "monitor_call_mode", label: "Call mode · " + strings.Title(m.monitorCallMode()), preview: "Separate sends one request per behavior. Bundled checks all enabled behaviors in one request."},
-		{id: "behaviors", label: "Behaviors · " + m.behaviorCounts(), preview: "Specs and detection rules for this judge. Warn/Stop and colors live in the policy’s Actions."},
 	}}
 	if m.monitorJudgeName() == "Jev (classifier)" {
 		d.rows = append(d.rows, row{id: "key", label: "API key · " + m.data.MonitorKeySource, preview: "Replace the saved OpenRouter key. Keys stay outside workspaces and exported traces."})
@@ -107,6 +101,10 @@ func (m *model) openDimension(id string) tea.Cmd {
 		d.rows = append(d.rows, row{id: "threshold", label: fmt.Sprintf("Threshold · %.0f%%", item.Threshold*100), preview: "Minimum estimated probability that triggers this behavior’s action."})
 	}
 
+	d.rows = append(d.rows, row{id: "action", label: "Action · " + item.Action, preview: "Warn highlights this detection; Stop interrupts generation. This action applies within this policy."})
+	if item.Action == "warn" {
+		d.rows = append(d.rows, row{id: "color", label: "Warning color · " + item.Color, preview: "Highlight color for this behavior in this policy."})
+	}
 	if id == "draft" {
 		d.title = "New behavior"
 		d.rows = append(d.rows, row{id: "create", label: "Create behavior", preview: "Save the name, full spec and all settings shown here."})
@@ -232,14 +230,11 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 		m.dialog.parent = d
 		return nil
 	}
-	if d.kind == "loom-policy" || d.kind == "loom-policy-judges" || d.kind == "loom-policy-judge" {
+	if d.kind == "loom-policy" || d.kind == "loom-policy-judge" {
 		if cmd, ok := m.operationalControl(d, r.id); ok {
 			return cmd
 		}
 		switch r.id {
-		case "judges":
-			m.openMonitorJudges()
-			m.dialog.parent = d
 		case "judge":
 			m.openMonitorJudge()
 			m.dialog.parent = d

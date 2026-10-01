@@ -1,6 +1,6 @@
 """Reusable assessment policies and frozen run envelopes.
 
-Data membership lives in evaluation_sets. Policies own judges and their behaviors;
+Data membership lives in evaluation_sets. Policies own judge configurations and a shared set of behaviors;
 run envelopes freeze that configuration and reference immutable assessment records.
 """
 
@@ -63,7 +63,16 @@ def save(project, args):
             else j
             for j in judges
         ]
-    judges = evaluation_judges.normalize(judges, old["judges"] if old else [])
+    proposed = {"judges": copy.deepcopy(judges)}
+    if "behaviors" in args:
+        proposed["behaviors"] = copy.deepcopy(args["behaviors"])
+    evaluation_judges.lift_behaviors(proposed)
+    judges = evaluation_judges.normalize(
+        proposed["judges"], old["judges"] if old else []
+    )
+    behaviors = evaluation_judges.normalize_behaviors(
+        proposed["behaviors"], old.get("behaviors", []) if old else []
+    )
     actions = args.get(
         "actions",
         old.get("actions", {"train_on_pass": False})
@@ -80,6 +89,7 @@ def save(project, args):
         old.update(
             name=name,
             judges=judges,
+            behaviors=behaviors,
             actions=copy.deepcopy(actions),
             revision=old["revision"] + 1,
         )
@@ -88,6 +98,7 @@ def save(project, args):
             id=uid(),
             name=name,
             judges=judges,
+            behaviors=behaviors,
             actions=copy.deepcopy(actions),
             revision=1,
         )
@@ -134,6 +145,7 @@ def migrate(project):
                 for j in policy["judges"]
             ]
             changed = True
+        changed = evaluation_judges.lift_behaviors(policy) or changed
     if "evaluation_runs" not in project.data:
         project.data["evaluation_runs"] = []
         # Legacy standalone judgments may never have belonged to a collection.

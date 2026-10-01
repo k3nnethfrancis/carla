@@ -42,7 +42,7 @@ func (m *model) dialogChoice() (dialogChoice, bool) {
 	case "loom-policy-timing":
 		c.toggle = id == "monitor_after_reply" || id == "monitor_during_reply"
 		return c, c.toggle
-	case "loom-policy-dimension", "loom-policy-action":
+	case "loom-policy-dimension":
 		item := m.dimension(d.args["id"].(string))
 		switch id {
 		case "enabled":

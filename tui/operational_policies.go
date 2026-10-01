@@ -107,7 +107,7 @@ func (m *model) openOperationalPolicies(purpose string) tea.Cmd {
 		if m.data.ActiveOperationalPolicies[purpose] == p.ID {
 			label += " · active"
 		}
-		d.rows = append(d.rows, row{id: p.ID, label: label, preview: "Enter configures judges, behaviors and actions. Space or Left/Right toggles On/Off; this does not change which policy is active."})
+		d.rows = append(d.rows, row{id: p.ID, label: label, preview: "Enter configures behaviors and the judge. Space or Left/Right toggles On/Off; this does not change which policy is active."})
 	}
 	d.rows = append(d.rows, row{id: "new", label: "+ New policy", preview: "Create a named policy from the current settings. Activate it explicitly when ready."})
 	m.dialog = d
@@ -135,9 +135,6 @@ func (m *model) appendOperationalControls(d *dialog) {
 	d.args = map[string]any{"operational_purpose": purpose, "operational_id": id}
 	p := m.operationalPolicy(purpose, id)
 	d.title += " · " + p.Name
-	if purpose != "monitoring" || m.monitorString("monitor_mode") == "diffusion" || m.monitorString("monitor_mode") == "jev" || m.monitorString("monitor_provider") == "diffusion" || m.monitorString("monitor_provider") == "jev" {
-		d.rows = append(d.rows, row{id: "actions", label: "Actions", preview: "What this policy does with detected behaviors or selected candidates."})
-	}
 	d.rows = append(d.rows, row{id: "rename-policy", label: "Name · " + p.Name, preview: "Rename this policy without changing its behavior."})
 	if m.data.ActiveOperationalPolicies[purpose] != id {
 		d.rows = append(d.rows, row{id: "activate-policy", label: "Make active", preview: "Use this policy for future generation runs. Editing alone does not activate it."}, row{id: "delete-policy", label: "Delete policy", preview: "Remove this inactive policy. Existing run results remain saved."})
@@ -182,14 +179,6 @@ func (m *model) submitOperationalPolicy(d *dialog) tea.Cmd {
 		return m.send("operational.policy.delete", map[string]any{"purpose": purpose, "id": id})
 	}
 
-	if d.kind == "operational-policy-actions" {
-		if r.id == "selection" {
-			return nil
-		}
-		m.openOperationalAction(r.id)
-		m.dialog.parent = d
-		return nil
-	}
 	if d.kind == "operational-policy-library-monitor" || d.kind == "operational-policy-library-selection" {
 		b := m.libraryBehavior(r.id)
 		m.dialog = d.parent
@@ -215,10 +204,6 @@ func (m *model) operationalControl(d *dialog, id string) (tea.Cmd, bool) {
 		m.dialog = &dialog{kind: "operational-policy-delete", title: "Delete policy?", parent: d, rows: []row{{id: "cancel", label: "Cancel", preview: "Keep this policy."}, {id: "confirm", label: "Delete", preview: "Remove this inactive policy. Existing results remain saved."}}}
 		return nil, true
 
-	case "actions":
-		m.openOperationalActions()
-		m.dialog.parent = d
-		return nil, true
 	case "activate-policy":
 		return m.send("operational.policy.activate", map[string]any{"purpose": purpose, "id": pid}), true
 	case "rename-policy":
@@ -227,28 +212,6 @@ func (m *model) operationalControl(d *dialog, id string) (tea.Cmd, bool) {
 		return m.dialog.fields[0].input.Focus(), true
 	}
 	return nil, false
-}
-func (m *model) openOperationalActions() tea.Cmd {
-	purpose, _ := m.operationalContext()
-	d := &dialog{kind: "operational-policy-actions", title: "Actions"}
-	if purpose == "selection" {
-		d.rows = []row{{id: "selection", label: "Advance selected candidate", preview: "The judge compares alternatives together. Continue the winner in the next loop; if none qualify, end the loop. Other outputs stay saved."}}
-	} else {
-		for _, b := range m.dimensions() {
-			d.rows = append(d.rows, row{id: b.ID, label: b.Name + " · " + b.Action, preview: "When this behavior is detected, apply its policy action. Disabled behaviors never trigger actions."})
-		}
-	}
-	m.dialog = d
-	return nil
-}
-func (m *model) openOperationalAction(id string) tea.Cmd {
-	b := m.dimension(id)
-	d := &dialog{kind: "loom-policy-action", title: b.Name + " · action", args: map[string]any{"id": id}, rows: []row{{id: "action", label: "Action · " + b.Action, preview: "Warn highlights detection. Stop interrupts this generation."}}}
-	if b.Action == "warn" {
-		d.rows = append(d.rows, row{id: "color", label: "Warning color · " + b.Color, preview: "Highlight color used when this policy detects the behavior."})
-	}
-	m.dialog = d
-	return nil
 }
 
 // Route editor mutations to the named policy being edited. Active runtime state
@@ -400,7 +363,7 @@ func orderOperationalRows(d *dialog) {
 	if d.args["operational_id"] == nil {
 		return
 	}
-	order := map[string]int{"rename-policy": 0, "mode": 1, "selection_enabled": 1, "key": 2, "judges": 2, "actions": 3, "timing": 4, "activate-policy": 5, "delete-policy": 6}
+	order := map[string]int{"rename-policy": 0, "mode": 1, "selection_enabled": 1, "key": 2, "behaviors": 2, "judge": 3, "timing": 4, "activate-policy": 5, "delete-policy": 6}
 	sort.SliceStable(d.rows, func(i, j int) bool { return order[d.rows[i].id] < order[d.rows[j].id] })
 }
 

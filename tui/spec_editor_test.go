@@ -45,7 +45,7 @@ func TestLongSpecScrollResizeAndSave(t *testing.T) {
 func TestNewEvaluationUsesMultilineSpecEditor(t *testing.T) {
 	m := evalFixture()
 	m.width, m.height = 100, 30
-	m.openPolicyBehaviors("policy", 0)
+	m.openPolicyBehaviors("policy")
 	m.dialog.index = len(m.dialog.rows) - 1
 	m.submitDialog()
 	m.dialog.fields[0].input.SetValue("Long criteria")
@@ -56,9 +56,9 @@ func TestNewEvaluationUsesMultilineSpecEditor(t *testing.T) {
 	spec := strings.Repeat("Criterion\n", 80)
 	m.editor.SetValue(spec)
 	req := captureCommand(t, m, m.saveEditor)
-	var judges []evaluationJudge
-	json.Unmarshal(req.Args["judges"], &judges)
-	if req.Command != "evaluation.policy.save" || judges[0].Behaviors[len(judges[0].Behaviors)-1].Spec != spec {
+	var behaviors []evaluationBehavior
+	json.Unmarshal(req.Args["behaviors"], &behaviors)
+	if req.Command != "evaluation.policy.save" || behaviors[len(behaviors)-1].Spec != spec {
 		t.Fatal("criteria truncated")
 	}
 	data, _ := json.Marshal(m.data)

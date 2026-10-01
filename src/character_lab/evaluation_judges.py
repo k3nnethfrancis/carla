@@ -29,6 +29,44 @@ def legacy(definition):
     }
 
 
+def lift_behaviors(policy):
+    """Migrate editable nested policies only; never touch frozen run snapshots.
+
+    Identical configs sharing an ID collapse. Conflicting IDs keep both variants,
+    identifying the former owning judge in the renamed variant.
+    """
+    if not isinstance(policy.get("judges"), list) or any(
+        not isinstance(j, dict) for j in policy["judges"]
+    ):
+        raise ValueError("Policy judges must be objects")
+    if not isinstance(policy.get("behaviors", []), list):
+        raise ValueError("Policy behaviors must be a list")
+    if "behaviors" in policy and not any("behaviors" in j for j in policy["judges"]):
+        return False
+    behaviors = copy.deepcopy(policy.get("behaviors", []))
+    used = {b["id"]: b for b in behaviors}
+    # Compare original variants before collision renaming changes their identity.
+    originals = copy.deepcopy(behaviors)
+    for judge in policy["judges"]:
+        nested = judge.pop("behaviors", [])
+        if not isinstance(nested, list) or any(not isinstance(b, dict) for b in nested):
+            raise ValueError("Behaviors must be objects")
+        for source in nested:
+            b = copy.deepcopy(source)
+            b["id"] = b.get("id") or uid()
+            existing = used.get(b["id"])
+            if b in originals:
+                continue
+            originals.append(copy.deepcopy(b))
+            if existing is not None:
+                b["id"] = uid()
+                b["name"] += " · " + judge["name"]
+            used[b["id"]] = b
+            behaviors.append(b)
+    policy["behaviors"] = behaviors
+    return True
+
+
 def normalize(judges, previous=()):
     if not isinstance(judges, list):
         raise ValueError("Policy judges must be a list")
@@ -37,7 +75,7 @@ def normalize(judges, previous=()):
     seen = set()
     for source in judges:
         if not isinstance(source, dict):
-            raise ValueError("Choose a judge with behaviors")
+            raise ValueError("Choose a judge configuration")
         j = {
             k: copy.deepcopy(source.get(k))
             for k in ("id", "name", "kind", "model", "prompt", "call_mode")
@@ -60,52 +98,53 @@ def normalize(judges, previous=()):
             raise ValueError("LLM judge needs a prompt")
         if j["kind"] == "diffusion":
             j["endpoint"] = local_url(source.get("endpoint", LOCAL_URL))
-        j["behaviors"] = []
-        behaviors = source.get("behaviors", [])
-        if not isinstance(behaviors, list):
-            raise ValueError("Judge behaviors must be a list")
         prior = old.get(j["id"], {})
-        prior_behaviors = {b["id"]: b for b in prior.get("behaviors", [])}
-        behavior_ids = set()
-        for b in behaviors:
-            if not isinstance(b, dict):
-                raise ValueError("Invalid behavior")
-            value = {k: copy.deepcopy(b.get(k)) for k in ("name", "spec", "threshold")}
-            value.update(id=b.get("id") or uid(), enabled=b.get("enabled", True))
-            if "source_id" in b:
-                if (
-                    not isinstance(b["source_id"], str)
-                    or type(b.get("source_revision")) is not int
-                    or b["source_revision"] < 1
-                ):
-                    raise ValueError("Invalid copied behavior provenance")
-                value.update(
-                    source_id=b["source_id"], source_revision=b["source_revision"]
-                )
-            if value["id"] in behavior_ids:
-                raise ValueError("Behavior identifiers must be unique within a judge")
-            behavior_ids.add(value["id"])
-            if any(
-                not isinstance(value[k], str) or not value[k].strip()
-                for k in ("name", "spec")
-            ):
-                raise ValueError("Behavior needs a name and spec")
-            if type(value["enabled"]) is not bool:
-                raise ValueError("Behavior enabled must be boolean")
-            if (
-                type(value["threshold"]) not in (int, float)
-                or not 0 < value["threshold"] <= 1
-            ):
-                raise ValueError("Pass threshold must be greater than 0 and at most 1")
-            old_b = prior_behaviors.get(value["id"], {})
-            value["revision"] = old_b.get("revision", 0) + (
-                any(old_b.get(k) != v for k, v in value.items())
-            )
-            j["behaviors"].append(value)
         j["revision"] = prior.get("revision", 0) + any(
             prior.get(k) != v for k, v in j.items()
         )
         result.append(j)
+    return result
+
+
+def normalize_behaviors(behaviors, previous=()):
+    if not isinstance(behaviors, list):
+        raise ValueError("Policy behaviors must be a list")
+    prior_behaviors = {b["id"]: b for b in previous}
+    behavior_ids = set()
+    result = []
+    for b in behaviors:
+        if not isinstance(b, dict):
+            raise ValueError("Invalid behavior")
+        value = {k: copy.deepcopy(b.get(k)) for k in ("name", "spec", "threshold")}
+        value.update(id=b.get("id") or uid(), enabled=b.get("enabled", True))
+        if "source_id" in b:
+            if (
+                not isinstance(b["source_id"], str)
+                or type(b.get("source_revision")) is not int
+                or b["source_revision"] < 1
+            ):
+                raise ValueError("Invalid copied behavior provenance")
+            value.update(source_id=b["source_id"], source_revision=b["source_revision"])
+        if value["id"] in behavior_ids:
+            raise ValueError("Behavior identifiers must be unique within a policy")
+        behavior_ids.add(value["id"])
+        if any(
+            not isinstance(value[k], str) or not value[k].strip()
+            for k in ("name", "spec")
+        ):
+            raise ValueError("Behavior needs a name and spec")
+        if type(value["enabled"]) is not bool:
+            raise ValueError("Behavior enabled must be boolean")
+        if (
+            type(value["threshold"]) not in (int, float)
+            or not 0 < value["threshold"] <= 1
+        ):
+            raise ValueError("Pass threshold must be greater than 0 and at most 1")
+        old_b = prior_behaviors.get(value["id"], {})
+        value["revision"] = old_b.get("revision", 0) + (
+            any(old_b.get(k) != v for k, v in value.items())
+        )
+        result.append(value)
     return result
 
 
@@ -116,7 +155,7 @@ def flatten(policy):
             raise ValueError(
                 "A legacy judge is missing; remove or configure it in Policies"
             )
-        for behavior in judge["behaviors"]:
+        for behavior in policy["behaviors"]:
             if behavior.get("enabled", True):
                 definitions.append(
                     {

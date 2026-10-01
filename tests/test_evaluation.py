@@ -458,7 +458,7 @@ async def test_simulator_chain_freezes_conversations_and_runs_all_judges(
     await s.execute("simulator.run", {"count": 2, "eval": group["name"]}, "chain")
     await s.job
     assert len(group["items"]) == 2
-    assert all(len(item["judgments"]) == 2 for item in group["items"])
+    assert all(len(item["judgments"]) == 4 for item in group["items"])
     assert all(
         sets.item_summary(s.project, group, item)["passed"] for item in group["items"]
     )

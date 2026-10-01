@@ -374,3 +374,16 @@ async def test_key_setup_keeps_disabled_named_monitor_off(lab, monkeypatch):
     assert saved["config"]["monitor_mode"] == "off"
     assert saved["config"]["monitor_provider"] == "jev"
     assert lab.project.data["simulator_config"]["monitor_mode"] == "off"
+
+
+def test_library_migration_seeds_flat_policy_behaviors_once(lab):
+    data = lab.project.data
+    data.pop("behavior_library", None)
+    data["evaluation_policies"] = [
+        {"name": "Flat policy", "behaviors": [{"name": "Voice", "spec": "Keep voice"}]}
+    ]
+    ops.migrate(lab.project, lab.runtime.model["alias"], lab.policy_model)
+    assert sum(b["spec"] == "Keep voice" for b in data["behavior_library"]) == 1
+    library = copy.deepcopy(data["behavior_library"])
+    ops.migrate(lab.project, lab.runtime.model["alias"], lab.policy_model)
+    assert data["behavior_library"] == library

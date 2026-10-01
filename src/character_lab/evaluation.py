@@ -363,11 +363,7 @@ async def dispatch(session, command, args, request_id):
     elif command == "evaluation.definition.delete":
         items = p.data.setdefault("evaluators", [])
         if any(
-            any(
-                b["id"] == args["id"]
-                for j in policy["judges"]
-                for b in j.get("behaviors", [])
-            )
+            any(b["id"] == args["id"] for b in policy.get("behaviors", []))
             for policy in p.data.get("evaluation_policies", [])
         ):
             raise ValueError(

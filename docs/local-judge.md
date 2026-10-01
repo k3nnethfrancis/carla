@@ -50,7 +50,7 @@ in each judgment, even when the saved setting is `auto`.
 ## Use in Carla
 
 **Live monitoring:** `/policy` → Monitoring → a policy. Enable monitoring and choose
-**DiffusionGemma (classifier)**. To change it later, open Judges → Model.
+**DiffusionGemma (classifier)**. To change it later, open Judge → Model.
 The local worker starts automatically using `openjev-latest`. No API key is requested.
 Heartbeat, behavior specs, detection thresholds and Warn/Stop actions work exactly
 as for Jev. Call mode defaults to Separate (one request per enabled behavior).
@@ -60,9 +60,9 @@ workspace until explicitly enabled.
 The same policy covers document continuations and Character replies; Visitor
 replies are not monitored separately.
 
-**Whole-item evaluations:** open Evaluate → Policies → a policy → Judges.
-Add a **DiffusionGemma (classifier)** judge, then open its Behaviors to define
-specs and pass thresholds. Choose its Call mode at the judge level, then run `/eval "policy name"` on selected data or
+**Whole-item evaluations:** open Evaluate → Policies → a policy. Add a
+**DiffusionGemma (classifier)** judge and define specs and pass thresholds in the
+sibling **Behaviors** panel. With multiple judges, all assess the same enabled specs. Choose its Call mode at the judge level, then run `/eval "policy name"` on selected data or
 `/loom … --eval "policy name"`. Each result
 freezes its judge configuration, including automatic or explicit endpoint mode, alongside the exact
 request, response, provider and elapsed time. Later policy changes do not rewrite it.

@@ -33,7 +33,7 @@ async def test_policy_runs_independently_of_data_and_freezes_configuration(lab):
     await lab.job
     result = policies.run_summaries(lab.project)[0]
     assert result["status"] == "complete" and result["passed"] is True
-    assert len(result["records"]) == 2
+    assert len(result["records"]) == 4
     assert result["collection"] == group["id"]
     frozen = copy.deepcopy(result)
     define(lab, id=first["id"], spec="A changed spec")
@@ -45,7 +45,7 @@ async def test_policy_runs_independently_of_data_and_freezes_configuration(lab):
     assert policies.run_summaries(lab.project)[0] == frozen
     await lab.execute("evaluation.run.open", {"id": result["id"]}, "open")
     assert lab.events[-1][0] == "evaluation_run"
-    assert len(lab.events[-1][1]["results"]) == 2
+    assert len(lab.events[-1][1]["results"]) == 4
     assert lab.events[-1][1]["policy"]["name"] == "Quality"
     await lab.execute("evaluation.policy.delete", {"id": policy["id"]}, "delete")
     assert policies.run_summaries(lab.project)[0] == frozen
@@ -71,10 +71,7 @@ async def test_legacy_split_preserves_records_and_missing_behavior_references(la
         definition["id"],
         "deleted",
     ]
-    assert (
-        policies.active(lab.project)["judges"][0]["behaviors"][0]["spec"]
-        == definition["spec"]
-    )
+    assert policies.active(lab.project)["behaviors"][0]["spec"] == definition["spec"]
     assert policies.active(lab.project)["judges"][1]["missing"]
     assert len(data.collections(lab.project)) == 2
     assert data.collections(lab.project)[1]["items"][0]["text"] == "Old trace"

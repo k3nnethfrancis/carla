@@ -131,10 +131,6 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 			}
 			return m.saveSelectionBehavior(id, map[string]any{"enabled": !enabled})
 
-		case "judges":
-			m.openSelectionJudges()
-			m.dialog.parent = d
-			return nil
 		case "judge":
 			m.openSelectionJudge()
 			m.dialog.parent = d

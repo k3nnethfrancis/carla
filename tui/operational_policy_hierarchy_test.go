@@ -6,52 +6,41 @@ import (
 	"testing"
 )
 
-// Both operational policies expose judges before behavior-specific controls.
-func TestSelectionJudgeHierarchyAndEditorReturn(t *testing.T) {
+// Policy behaviors and judge settings are siblings, with one-level Escape.
+func TestSelectionShallowEditorAndJudgeReturn(t *testing.T) {
 	m := policyFixture()
 	m.data.PolicyModel = "Local selector"
 	m.data.PolicySpec = "Continue coherent candidates"
 	m.openSelectionConfig()
 	policy := m.dialog
-	policy.index = 1
-	m.submitDialog()
-	judges := m.dialog
-	if judges.title != "Selection judges" || !strings.Contains(judges.rows[0].label, "(LLM)") {
-		t.Fatal(judges)
+	chooseBehaviorRow(t, m, "judge")
+	if m.dialog.title != "Selection judge" || m.dialog.parent != policy {
+		t.Fatal(m.dialog)
 	}
-	m.submitDialog()
-	judge := m.dialog
-	if judge.title != "Selection judge" || judge.parent != judges {
-		t.Fatal(judge)
+	m.closeDialog()
+	if m.dialog != policy {
+		t.Fatal("judge Escape skipped policy")
 	}
-	judge.index = 2
-	m.submitDialog()
+	chooseBehaviorRow(t, m, "behaviors")
 	behaviors := m.dialog
 	m.submitDialog()
 	behavior := m.dialog
-	if behavior.title != "Selection behavior" || behavior.parent != behaviors {
-		t.Fatal(behavior)
-	}
-	m.dialog.index = 1
-	m.submitDialog()
+	chooseBehaviorRow(t, m, "spec")
 	if m.editing != "policy_spec" || m.editReturn != behavior {
-		t.Fatalf("editor lost behavior return: %s", m.editing)
+		t.Fatal("lost editor target")
 	}
 	m.cancelEdit()
-	if m.dialog != behavior {
-		t.Fatal("cancel skipped behavior")
-	}
-	for _, parent := range []*dialog{behaviors, judge, judges, policy} {
+	for _, parent := range []*dialog{behaviors, policy} {
 		m.closeDialog()
 		if m.dialog != parent {
-			t.Fatal("Escape skipped hierarchy")
+			t.Fatal("Escape skipped parent")
 		}
 	}
 }
 
 func TestOperationalPolicyDescriptionsAndCompactRender(t *testing.T) {
 	m := policyFixture()
-	for _, open := range []func(){func() { m.openMonitorJudges() }, func() { m.openMonitorJudge() }, func() { m.openSelectionConfig() }, func() { m.openSelectionJudges() }, func() { m.openSelectionJudge() }, func() { m.openSelectionBehaviors() }, func() { m.openSelectionBehavior() }} {
+	for _, open := range []func(){func() { m.openMonitorJudge() }, func() { m.openSelectionConfig() }, func() { m.openSelectionJudge() }, func() { m.openSelectionBehaviors() }, func() { m.openSelectionBehavior() }} {
 		m.data.PolicySpec = "Coherent alternatives"
 		open()
 		for i, r := range m.dialog.rows {
@@ -85,9 +74,9 @@ func TestInactiveOperationalActionEditsNamedPolicyOnly(t *testing.T) {
 	if !strings.Contains(m.dialog.title, "Draft") {
 		t.Fatal("missing policy name")
 	}
-	chooseBehaviorRow(t, m, "actions")
+	chooseBehaviorRow(t, m, "behaviors")
 	m.submitDialog()
-	if m.dialog.kind != "loom-policy-action" {
+	if m.dialog.kind != "loom-policy-dimension" {
 		t.Fatal(m.dialog)
 	}
 	chooseBehaviorRow(t, m, "action")
@@ -110,8 +99,6 @@ func TestNamedSelectionBehaviorEditorTargetsPolicyAndBehavior(t *testing.T) {
 	m := namedOperationalFixture()
 	m.openOperationalPolicies("selection")
 	m.submitDialog()
-	chooseBehaviorRow(t, m, "judges")
-	m.submitDialog()
 	chooseBehaviorRow(t, m, "behaviors")
 	m.submitDialog()
 	chooseBehaviorRow(t, m, "spec")
@@ -130,18 +117,22 @@ func TestNamedSelectionBehaviorEditorTargetsPolicyAndBehavior(t *testing.T) {
 		t.Fatal(c)
 	}
 }
-func TestNamedMonitoringBehaviorHasNoPolicyActions(t *testing.T) {
+func TestNamedMonitoringBehaviorContainsPolicyActions(t *testing.T) {
 	m := namedOperationalFixture()
 	m.openOperationalPolicies("monitoring")
 	m.dialog.index = 1
 	m.submitDialog()
-	chooseBehaviorRow(t, m, "judges")
-	m.submitDialog()
 	chooseBehaviorRow(t, m, "behaviors")
 	m.submitDialog()
-	for _, r := range m.dialog.rows {
-		if r.id == "action" || r.id == "color" {
-			t.Fatal("policy action leaked into behavior", r)
+	for _, id := range []string{"action", "color"} {
+		found := false
+		for _, r := range m.dialog.rows {
+			if r.id == id {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("missing behavior action", id)
 		}
 	}
 }
@@ -149,8 +140,6 @@ func TestNamedMonitoringBehaviorHasNoPolicyActions(t *testing.T) {
 func TestNamedSelectionNewBehaviorWaitsForFullSpec(t *testing.T) {
 	m := namedOperationalFixture()
 	m.openOperationalPolicies("selection")
-	m.submitDialog()
-	chooseBehaviorRow(t, m, "judges")
 	m.submitDialog()
 	chooseBehaviorRow(t, m, "behaviors")
 	list := m.dialog
@@ -181,8 +170,7 @@ func TestMonitoringOffKeepsConfiguredJudgeEditable(t *testing.T) {
 	m.openOperationalPolicies("monitoring")
 	m.dialog.index = 1
 	m.submitDialog()
-	chooseBehaviorRow(t, m, "judges")
-	m.submitDialog()
+	chooseBehaviorRow(t, m, "judge")
 	if !strings.Contains(m.dialog.title, "DiffusionGemma") {
 		t.Fatal(m.dialog.title)
 	}
@@ -198,8 +186,7 @@ func TestDisabledMonitoringModelChangeStaysDisabled(t *testing.T) {
 	m.openOperationalPolicies("monitoring")
 	m.dialog.index = 1
 	m.submitDialog()
-	chooseBehaviorRow(t, m, "judges")
-	m.submitDialog()
+	chooseBehaviorRow(t, m, "judge")
 	chooseBehaviorRow(t, m, "mode")
 	m.dialog.index = 1
 	req := captureCommand(t, m, m.submitDialog)

@@ -175,7 +175,7 @@ offline after setup. See [local judge setup](local-judge.md).
 
 ## Evaluation data, policies and runs
 
-`evaluation_judges.py` owns the Policy → Judges → Behaviors schema, validation
+`evaluation_judges.py` owns policy-level judge and behavior definitions, validation
 and legacy definition conversion. `evaluation.py` owns assessment execution.
 Local LLM assessment reuses `Runtime.judge`; DiffusionGemma/Jev assessment shares
 `monitor.classify`, retaining exact requests and provider results. Assessment
@@ -199,8 +199,9 @@ groups and run envelopes. The workspace stores:
 - `behavior_library`: reusable, revisioned names and specs.
 - `operational_policies` and `active_operational_policies`: named Monitoring and
   Selection configuration and explicit activation per category.
-- `evaluation_policies`: policy actions and judges (model, prompt, call mode) containing
-  versioned behavior specs, enabled states and detection thresholds.
+- `evaluation_policies`: sibling actions, judges (model, prompt, call mode) and
+  versioned behaviors (spec, enabled state, threshold). Execution expands each
+  judge against every enabled behavior, retaining both identities in the result.
 - `evaluations`: individual assessment records with frozen inputs and definitions.
 - `evaluation_runs`: execution envelopes referencing those records and preserving
   the policy used. Historical run status comes from its records, not current policy.

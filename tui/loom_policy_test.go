@@ -21,12 +21,7 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 	m := policyFixture()
 	m.width, m.height = 120, 36
 	m.openLoomPolicy()
-	root := m.dialog
-	root.index = 2
-	m.submitDialog()
-	m.submitDialog()
-	m.dialog.index = 2
-	m.submitDialog()
+	chooseBehaviorRow(t, m, "behaviors")
 	if m.dialog.kind != "loom-policy-behaviors" {
 		t.Fatal("missing behaviors page")
 	}
@@ -71,8 +66,8 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 		t.Fatal("model picker did not open")
 	}
 	m.closeDialog()
-	m.dialog.index = 2
-	m.submitDialog()
+	m.openLoomPolicy()
+	chooseBehaviorRow(t, m, "behaviors")
 	chooseBehaviorRow(t, m, "new")
 	if m.behaviorDraft == nil || m.dialog.kind != "loom-policy-dimension" {
 		t.Fatal("missing creation form")
@@ -213,7 +208,7 @@ func TestMonitoringSetupGatesSettingsAndMasksKey(t *testing.T) {
 	}
 	m.data.MonitorKeySource = "environment"
 	m.openLoomPolicy()
-	if len(m.dialog.rows) != 3 || m.dialog.rows[2].id != "judges" {
+	if len(m.dialog.rows) != 4 || m.dialog.rows[2].id != "behaviors" {
 		t.Fatal("environment key did not unlock settings")
 	}
 }
@@ -234,17 +229,13 @@ func TestLocalMonitorHasNoKeyGateAndRetainsNavigation(t *testing.T) {
 	if !strings.Contains(root.rows[0].label, "On") {
 		t.Fatal(root.rows)
 	}
-	root.index = 2
-	m.submitDialog()
-	judges := m.dialog
-	m.submitDialog()
-	if m.dialog.kind != "loom-policy-judge" || m.dialog.parent != judges {
-		t.Fatal("judge did not retain hierarchy")
+	chooseBehaviorRow(t, m, "judge")
+	if m.dialog.kind != "loom-policy-judge" || m.dialog.parent != root {
+		t.Fatal("judge lost policy parent")
 	}
 	m.closeDialog()
-	m.closeDialog()
 	if m.dialog != root {
-		t.Fatal("Escape did not return to policy")
+		t.Fatal("Escape skipped policy")
 	}
 	m.openMonitorTiming()
 	if strings.Contains(m.dialog.title, "off") {
@@ -289,15 +280,15 @@ func TestMonitoringLayoutAndBehaviorCounts(t *testing.T) {
 		{Enabled: true, Action: "stop"}, {Enabled: false, Action: "stop"},
 	}
 	m.openLoomPolicy()
-	for i, id := range []string{"mode", "timing", "judges"} {
+	for i, id := range []string{"mode", "timing", "behaviors", "judge"} {
 		if m.dialog.rows[i].id != id {
 			t.Fatal(m.dialog.rows)
 		}
 	}
-	m.openMonitorJudge()
 	if m.dialog.rows[2].label != "Behaviors · 2 warn · 1 stop · 1 off" {
 		t.Fatal(m.dialog.rows[2].label)
 	}
+	m.openMonitorJudge()
 	if !strings.Contains(m.dialog.rows[0].label, "DiffusionGemma (classifier)") {
 		t.Fatal("missing model name and type")
 	}

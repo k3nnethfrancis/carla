@@ -175,12 +175,13 @@ Hosted classification sends the assessed text to an external service and can
 incur charges. Local generation itself uses llama.cpp.
 
 `/policy` always opens Monitoring, Selection and Evals. Each category holds named
-policies with judges and actions. `/behaviors` is a reusable workspace library of
-specs; adding a spec to a judge keeps that use’s detection settings local.
+policies with behaviors, judge settings and actions. `/behaviors` is a reusable
+workspace library of specs; adding a spec to a policy keeps its settings local.
 
 **Evaluate** separates **Data**, **Policies** and **Runs**. Data is the saved
-documents and conversation traces. Policies contain judges (model and call settings), each with the behaviors
-it assesses. The Policies view edits the same policies as `/policy` → Evals.
+documents and conversation traces. Policies contain behaviors and judge settings
+as separate sections. Each configured judge assesses the same enabled behaviors.
+The Policies view edits the same policies as `/policy` → Evals.
 Runs preserve the results. `/eval` uses the active policy;
 `/eval "Voice"` chooses a named policy, independently of the data collection.
 Adding data does not invoke a model. You can mark training items manually or use
@@ -204,9 +205,9 @@ Configuration exposes these authoring surfaces:
 | Visitor brief | Simulator → `/config` → Visitor brief |
 | Fixed or generated opening | Simulator → `/config` → Opening; generated mode has its own prompt, model and sampling. |
 | Selection criteria and routing prompt | `/policy` → Selection |
-| Monitoring behavior specs | `/policy` → Monitoring → a policy → Judges → Behaviors |
-| Evaluation criteria | Evaluate → Policies → Judges → Behaviors |
-| Evaluation judge prompt and Call mode | Evaluate → Policies → Judges → a judge |
+| Monitoring behavior specs | `/policy` → Monitoring → a policy → Behaviors |
+| Evaluation criteria | Evaluate → Policies → a policy → Behaviors |
+| Evaluation judge prompt and Call mode | Evaluate → Policies → a policy → Judge (or Judges) |
 
 Document Loom has no separate system-message wrapper. Conversation templates are
 explicit raw-completion prompts with anthology/history placeholders; there are

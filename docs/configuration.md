@@ -82,7 +82,7 @@ Selection and local evaluation are separate instruct-model judge calls.
 | Fixed opener | Simulator → `/config` → Opening → Fixed → Message | First Visitor message for fresh conversations; `--msg` overrides it for one run. |
 | Generated opener | Simulator → `/config` → Opening → Generated → Generation prompt | Raw completion using its selected model/sampling, once per fresh conversation. |
 | Selection | `/policy` → Selection | Criteria and system prompt for candidate classification; never injected into generator text. |
-| Monitoring | `/policy` → Monitoring → a policy → Judges → Behaviors | Named behavior specs sent to local DiffusionGemma or Jev with context. The provider envelope is managed by Carla. |
+| Monitoring | `/policy` → Monitoring → a policy → Behaviors | Named behavior specs sent to local DiffusionGemma or Jev with context. The provider envelope is managed by Carla. |
 | Evaluation | Evaluate → Policies | Criteria and local judge system prompt, or DiffusionGemma/Jev behavior spec/threshold. |
 
 ### Document continuations
@@ -293,9 +293,9 @@ not a locally calibrated guarantee. A Stop affects only the flagged conversation
 Choose a named policy within a category to edit it or make it active.
 Editing an inactive policy does not enable or activate it. Evaluate → Policies
 opens the same Evals policy list; there is no separate evaluation configuration.
-Evaluation policies group judges, and each judge contains behaviors. The judge
-owns the model, prompt and Call mode. Behaviors own specs, enabled states and
-passing rules; they inherit their judge’s model.
+Policies own behaviors separately from their judge settings. The judge owns the
+model, prompt and Call mode. Behaviors own specs, enabled states and passing
+rules. Every judge in an evaluation policy assesses the same enabled behaviors.
 Models can be the configured local LLM, local DiffusionGemma or hosted Jev.
 Classifiers use probability thresholds; local LLM judges expose the full system
 prompt and return a boolean judgment with evidence for each behavior. DiffusionGemma uses the
@@ -303,7 +303,7 @@ managed local OpenJev worker after [one-time setup](local-judge.md).
 
 Data collections and policies are independent. Choose an active policy for bare
 `/eval`, or use `/eval "policy name"`. `/config` handles the current view's
-settings. `/behaviors` opens the workspace spec library. Importing into a judge copies the
+settings. `/behaviors` opens the workspace spec library. Importing into a policy copies the
 spec with its library revision; enabled states, detection rules and actions remain
 local to the policy. Saved runs
 retain the configurations used at execution. Adding data never invokes a model.
@@ -320,9 +320,11 @@ to cycle backward/forward, without opening a picker. Enter still opens the full
 picker. Heartbeat toggles use the same keys; Interval opens its numeric control.
 Typing filters the list, and the filter is retained after a setting changes.
 
-Monitoring’s judge **Behaviors** panel contains specs, enabled states and detection
-rules. Its policy **Actions** panel maps detected behaviors to Warn or Stop and
-the warning color.
+Open a policy’s **Behaviors** panel to edit specs, enabled states and detection
+rules. Each monitoring behavior also exposes its **Action** (Warn or Stop) and
+warning color. **Judge** is a sibling panel for the model and Call mode;
+**Heartbeat** controls when monitoring runs. Selection has the same direct
+Behaviors / Judge layout, with its candidate-selection prompt in Judge.
 **New behavior** shows the complete configuration before creation; edits stay in
 an unsaved draft until **Create behavior**. Specs use the multiline document
 editor (`/save` or the configured save binding; Escape cancels the text edit).
@@ -330,7 +332,8 @@ Leaving the new-behavior panel discards its unsaved draft.
 
 The **Detection rule** determines whether a behavior is flagged: **Most likely**
 requires estimated probability above 50%; **Threshold** uses your chosen cutoff.
-The policy’s **Actions** determine what follows a detection: warn or stop.
+The behavior’s **Action** determines what follows a detection: warn or stop.
+Actions are stored with the policy, alongside its criteria and judge settings.
 Disabling a behavior skips it while retaining its settings.
 
 Long specs, criteria and prompts use the full document editor. Text wraps and

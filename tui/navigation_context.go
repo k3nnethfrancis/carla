@@ -114,10 +114,6 @@ func (m *model) refreshConfig() {
 		m.openLibraryBehavior(d.args["id"].(string))
 	case "operational-policy-list":
 		m.openOperationalPolicies(d.args["purpose"].(string))
-	case "operational-policy-actions":
-		m.openOperationalActions()
-	case "operational-policy-action":
-		m.openOperationalAction(d.args["id"].(string))
 	case "eval-policy-actions":
 		m.openEvaluationActions(d.args["id"].(string))
 	case "eval-policy-list":
@@ -129,15 +125,13 @@ func (m *model) refreshConfig() {
 	case "eval-policy-judge":
 		m.openPolicyJudge(d.args["id"].(string), d.args["judge"].(int))
 	case "eval-policy-behaviors":
-		m.openPolicyBehaviors(d.args["id"].(string), d.args["judge"].(int))
+		m.openPolicyBehaviors(d.args["id"].(string))
 	case "eval-policy-behavior":
-		m.openPolicyBehavior(d.args["id"].(string), d.args["judge"].(int), d.args["behavior"].(int))
+		m.openPolicyBehavior(d.args["id"].(string), d.args["behavior"].(int))
 	case "eval-collection-config":
 		m.openConfig()
 	case "eval-definitions":
 		m.openEvaluators()
-	case "loom-policy-judges":
-		m.openMonitorJudges()
 	case "loom-policy-judge":
 		m.openMonitorJudge()
 	case "loom-policy-behaviors":
@@ -146,8 +140,6 @@ func (m *model) refreshConfig() {
 		m.openLoomPolicy()
 	case "loom-policy-timing":
 		m.openMonitorTiming()
-	case "loom-policy-action":
-		m.openOperationalAction(d.args["id"].(string))
 	case "loom-policy-dimension":
 		m.openDimension(d.args["id"].(string))
 	case "sim-openings":
@@ -158,8 +150,6 @@ func (m *model) refreshConfig() {
 		m.speakerPicker()
 	case "grow-config":
 		switch d.title {
-		case "Selection judges":
-			m.openSelectionJudges()
 		case "Selection judge":
 			m.openSelectionJudge()
 		case "Selection behaviors":
@@ -383,10 +373,14 @@ func (m *model) closeDialog() tea.Cmd {
 		return m.send("cancel", nil)
 	}
 	if d != nil && d.parent != nil {
-		m.dialog = d.parent
-		// Judge edits change counts and settings displayed by their parent.
-		if strings.HasPrefix(d.kind, "eval-policy-") || d.kind == "loom-policy-timing" || d.kind == "loom-policy-dimension" {
-			m.refreshConfig()
+		parent := d.parent
+		m.dialog = parent
+		// Every supported configuration parent reads authoritative state again.
+		// refreshConfig is a no-op for other dialogs and preserves row/filter.
+		m.refreshConfig()
+		if m.dialog != parent {
+			*parent = *m.dialog
+			m.dialog = parent
 		}
 		return nil
 	}
