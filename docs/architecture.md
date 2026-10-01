@@ -182,13 +182,24 @@ Local LLM assessment reuses `Runtime.judge`; DiffusionGemma/Jev assessment share
 prompts never enter generation context. Monitoring and selection retain their
 operational owners and context-specific actions.
 
+`operational_policies.py` stores named Monitoring and Selection configurations,
+active choices, and the workspace behavior-spec library. It adapts a selected
+policy to the existing generation runtime settings. Editing an inactive policy
+does not activate it; legacy configuration commands update the active policy.
+The UI uses one `/policy` hub in every tab. Evaluate Policies is another entry
+to the same Evals catalog. Library imports copy the spec and its revision;
+changing a library entry does not mutate existing uses or historical runs.
+
 `evaluation_sets.py` owns data collections, frozen item membership, evidence
 references and training metadata. `evaluation_policies.py` owns reusable policy
 groups and run envelopes. The workspace stores:
 
 - `evaluators`: retained legacy definitions for compatibility and migration.
 - `evaluation_sets`: data collections and frozen items.
-- `evaluation_policies`: policy-owned judges (model, prompt, call mode) containing
+- `behavior_library`: reusable, revisioned names and specs.
+- `operational_policies` and `active_operational_policies`: named Monitoring and
+  Selection configuration and explicit activation per category.
+- `evaluation_policies`: policy actions and judges (model, prompt, call mode) containing
   versioned behavior specs, enabled states and detection thresholds.
 - `evaluations`: individual assessment records with frozen inputs and definitions.
 - `evaluation_runs`: execution envelopes referencing those records and preserving

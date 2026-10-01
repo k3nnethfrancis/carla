@@ -23,7 +23,7 @@ func TestBehaviorDraftFullConfigurationAndMultilineSpec(t *testing.T) {
 	m.width, m.height = 120, 36
 	m.openBehaviors()
 	chooseBehaviorRow(t, m, "new")
-	for _, id := range []string{"enabled", "name", "spec", "action", "decision", "color", "create"} {
+	for _, id := range []string{"enabled", "name", "spec", "decision", "create"} {
 		found := false
 		for _, r := range m.dialog.rows {
 			if r.id == id {
@@ -69,8 +69,8 @@ func TestBehaviorDraftFullConfigurationAndMultilineSpec(t *testing.T) {
 func TestBehaviorCancelAndListStatus(t *testing.T) {
 	m := policyFixture()
 	m.openBehaviors()
-	if !strings.Contains(m.dialog.rows[1].label, "Disabled") || !strings.Contains(m.dialog.rows[1].label, "stop") {
-		t.Fatal("list hides enabled/action state")
+	if !strings.Contains(m.dialog.rows[1].label, "Disabled") {
+		t.Fatal("list hides enabled state")
 	}
 	chooseBehaviorRow(t, m, "new")
 	if cmd := chooseBehaviorRow(t, m, "create"); cmd != nil {

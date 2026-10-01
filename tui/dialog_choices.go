@@ -32,14 +32,14 @@ func (m *model) dialogChoice() (dialogChoice, bool) {
 		if id != "mode" {
 			return c, false
 		}
-		c.field, c.current, c.values = "monitor_mode", m.simString("monitor_mode"), []string{"off", "diffusion", "jev"}
+		c.field, c.current, c.values = "monitor_mode", m.monitorString("monitor_mode"), []string{"off", "diffusion", "jev"}
 		if d.kind == "loom-policy-judge" {
 			c.values = []string{"diffusion", "jev"}
 		}
 	case "loom-policy-timing":
 		c.toggle = id == "monitor_after_reply" || id == "monitor_during_reply"
 		return c, c.toggle
-	case "loom-policy-dimension":
+	case "loom-policy-dimension", "loom-policy-action":
 		item := m.dimension(d.args["id"].(string))
 		switch id {
 		case "enabled":
@@ -72,7 +72,7 @@ func (m *model) cycleDialogChoice(step int) tea.Cmd {
 	d := m.dialog
 	if c.toggle {
 		if d.kind == "grow-config" {
-			return m.send("policy.configure", map[string]any{"selection_enabled": !m.data.SelectionEnabled})
+			return m.send("policy.configure", map[string]any{"selection_enabled": !m.selectionEnabled()})
 		}
 		return m.submitLoomPolicy(d)
 	}

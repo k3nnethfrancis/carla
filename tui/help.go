@@ -8,8 +8,9 @@ import (
 
 // Help documents commands independently of availability (busy/edit states).
 var commandDescriptions = map[string]string{
+	"behaviors":   "Create reusable behavior specs. Import a copy into a policy judge; local detection and action settings stay with that policy.",
 	"policy":      "Configure monitoring, selection and reusable evaluation judges. Jev behavior specs or local LLM judging prompts stay separate from generation settings.",
-	"eval":        "Run /eval [policy] on selected document versions or checked conversations. Uses the active policy when no name is given. --train-on-pass true marks passing results for training; default false.",
+	"eval":        "Run /eval [policy] on selected document versions or checked conversations. Uses the active policy when no name is given. --train-on-pass true marks passing results for training; the policy default applies when omitted.",
 	"evaluations": "Browse named evaluation collections, add existing material without judging, run selected/pending items, review evidence and mark items for training. /export saves selected items or the opened collection with metadata.",
 	"import":      "Add a local UTF-8 .txt or .md document to the shared Library. Title defaults to filename; author and source URL are optional.",
 	"visitor":     "Write a visitor message in a new conversation fork. Open a conversation first.",

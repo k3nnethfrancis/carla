@@ -19,6 +19,7 @@ from . import (
     evaluation_policies,
     evaluation_sets,
     exports,
+    operational_policies,
     simulator,
 )
 from .domain import Project, display_title, generation_status, library, now
@@ -84,6 +85,7 @@ class Session:
             project.data["model_alias"] = model["alias"]
             project.data["selected"] = []
             evaluation_sets.migrate(project)
+            operational_policies.migrate(project, model["alias"], self.policy_model)
             project.save()
         except Exception:
             lock.close()
@@ -180,6 +182,9 @@ class Session:
             evaluators=evaluation.definitions(p),
             evaluations=evaluation.summaries(p),
             evaluation_sets=evaluation_sets.summaries(p),
+            operational_policies=operational_policies.summaries(p),
+            active_operational_policies=p.data.get("active_operational_policies", {}),
+            behavior_library=p.data.get("behavior_library", []),
             evaluation_policies=p.data.get("evaluation_policies", []),
             active_evaluation_policy=p.data.get("active_evaluation_policy", ""),
             evaluation_runs=evaluation_policies.run_summaries(p),
@@ -231,6 +236,9 @@ class Session:
             raise ValueError(
                 "Stop the active operation before changing the workspace or document"
             )
+        if command.startswith(("operational.policy.", "behavior.")):
+            await operational_policies.dispatch(self, command, args, request_id)
+            return
         if command.startswith("evaluation."):
             await evaluation.dispatch(self, command, args, request_id)
             return
@@ -466,12 +474,23 @@ class Session:
                     if not args[field].strip():
                         raise ValueError("Policy instructions cannot be empty")
                     p.data[field] = args[field]
+                    if field == "policy_spec":
+                        p.data["selection_behaviors"] = [
+                            dict(
+                                id="criteria",
+                                name="Selection criteria",
+                                spec=args[field],
+                                enabled=True,
+                            )
+                        ]
+            operational_policies.sync(self, "selection")
             p.save()
         elif command == "policy.configure":
             enabled = args.get("selection_enabled")
             if type(enabled) is not bool:
                 raise ValueError("Selection enabled must be true or false")
             p.data["selection_enabled"] = enabled
+            operational_policies.sync(self, "selection")
             p.save()
         elif command == "bindings.save":
             bindings = args["bindings"]

@@ -64,12 +64,35 @@ def save(project, args):
             for j in judges
         ]
     judges = evaluation_judges.normalize(judges, old["judges"] if old else [])
+    actions = args.get(
+        "actions",
+        old.get("actions", {"train_on_pass": False})
+        if old
+        else {"train_on_pass": False},
+    )
+    if (
+        not isinstance(actions, dict)
+        or set(actions) != {"train_on_pass"}
+        or type(actions["train_on_pass"]) is not bool
+    ):
+        raise ValueError("Evaluation actions require boolean train_on_pass")
     if old:
-        old.update(name=name, judges=judges, revision=old["revision"] + 1)
+        old.update(
+            name=name,
+            judges=judges,
+            actions=copy.deepcopy(actions),
+            revision=old["revision"] + 1,
+        )
     else:
-        old = dict(id=uid(), name=name, judges=judges, revision=1)
+        old = dict(
+            id=uid(),
+            name=name,
+            judges=judges,
+            actions=copy.deepcopy(actions),
+            revision=1,
+        )
         policies.append(old)
-    if not args.get("id") or not active(project):
+    if not active(project):
         project.data["active_evaluation_policy"] = old["id"]
     return old
 

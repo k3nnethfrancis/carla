@@ -106,41 +106,44 @@ type documentSet struct {
 	Action         string
 }
 type state struct {
-	SelectionEnabled       bool                   `json:"selection_enabled"`
-	DocumentHeads          map[string]string      `json:"document_heads"`
-	DocumentSetHeads       map[string]string      `json:"document_set_heads"`
-	DocumentSets           []documentSet          `json:"document_sets"`
-	EvaluationPolicies     []evaluationPolicy     `json:"evaluation_policies"`
-	ActiveEvaluationPolicy string                 `json:"active_evaluation_policy"`
-	EvaluationRuns         []evaluationRun        `json:"evaluation_runs"`
-	EvaluationSets         []evaluationCollection `json:"evaluation_sets"`
-	ActiveEvaluation       string                 `json:"active_evaluation"`
-	MonitorKeySource       string                 `json:"monitor_key_source"`
-	Evaluators             []evaluator
-	Evaluations            []evaluationSummary
-	EvaluationPrompt       string `json:"evaluation_prompt"`
-	Workspace              workspace
-	Workspaces             []workspace
-	Selected               []string
-	Nodes                  []node
-	Current                *node
-	Models                 []localModel
-	ModelAlias             string `json:"model_alias"`
-	ModelContext           int    `json:"model_context"`
-	NativeContext          int    `json:"native_context"`
-	Settings               settings
-	PolicySpec             string `json:"policy_spec"`
-	PolicyPrompt           string `json:"policy_prompt"`
-	PolicyModel            string `json:"policy_model"`
-	Annotations            []annotation
-	SimulatorConfig        map[string]any    `json:"simulator_config"`
-	SimulationRuns         []runSummary      `json:"simulation_runs"`
-	GrowSettings           settings          `json:"grow_settings"`
-	SelectorModels         []localModel      `json:"selector_models"`
-	PolicyRuns             []policyRun       `json:"policy_runs"`
-	Bindings               map[string]string `json:"bindings"`
-	ActiveNode             string            `json:"active_node"`
-	Busy                   bool
+	BehaviorLibrary           []libraryBehavior              `json:"behavior_library"`
+	OperationalPolicies       map[string][]operationalPolicy `json:"operational_policies"`
+	ActiveOperationalPolicies map[string]string              `json:"active_operational_policies"`
+	SelectionEnabled          bool                           `json:"selection_enabled"`
+	DocumentHeads             map[string]string              `json:"document_heads"`
+	DocumentSetHeads          map[string]string              `json:"document_set_heads"`
+	DocumentSets              []documentSet                  `json:"document_sets"`
+	EvaluationPolicies        []evaluationPolicy             `json:"evaluation_policies"`
+	ActiveEvaluationPolicy    string                         `json:"active_evaluation_policy"`
+	EvaluationRuns            []evaluationRun                `json:"evaluation_runs"`
+	EvaluationSets            []evaluationCollection         `json:"evaluation_sets"`
+	ActiveEvaluation          string                         `json:"active_evaluation"`
+	MonitorKeySource          string                         `json:"monitor_key_source"`
+	Evaluators                []evaluator
+	Evaluations               []evaluationSummary
+	EvaluationPrompt          string `json:"evaluation_prompt"`
+	Workspace                 workspace
+	Workspaces                []workspace
+	Selected                  []string
+	Nodes                     []node
+	Current                   *node
+	Models                    []localModel
+	ModelAlias                string `json:"model_alias"`
+	ModelContext              int    `json:"model_context"`
+	NativeContext             int    `json:"native_context"`
+	Settings                  settings
+	PolicySpec                string `json:"policy_spec"`
+	PolicyPrompt              string `json:"policy_prompt"`
+	PolicyModel               string `json:"policy_model"`
+	Annotations               []annotation
+	SimulatorConfig           map[string]any    `json:"simulator_config"`
+	SimulationRuns            []runSummary      `json:"simulation_runs"`
+	GrowSettings              settings          `json:"grow_settings"`
+	SelectorModels            []localModel      `json:"selector_models"`
+	PolicyRuns                []policyRun       `json:"policy_runs"`
+	Bindings                  map[string]string `json:"bindings"`
+	ActiveNode                string            `json:"active_node"`
+	Busy                      bool
 }
 type row struct {
 	id, label, kind, preview string
@@ -300,6 +303,7 @@ func (m *model) dispatch(command string, args map[string]any) (string, tea.Cmd) 
 	if m.pending {
 		return "", nil
 	}
+	command, args = m.routeOperationalMutation(command, args)
 	m.pending = true
 	return m.client.request(command, args)
 }
@@ -482,9 +486,9 @@ func (m *model) beginEdit(kind string) tea.Cmd {
 	} else if kind == "monitor_spec" {
 		text = m.dimension(m.behaviorEditID).Spec
 	} else if kind == "policy_spec" {
-		text = m.data.PolicySpec
+		text = m.selectionSpec()
 	} else if kind == "policy_prompt" {
-		text = m.data.PolicyPrompt
+		text = m.selectionString("policy_prompt")
 	} else if m.data.Current == nil {
 		return nil
 	}
@@ -512,6 +516,12 @@ func (m *model) saveEditor() tea.Cmd {
 			return nil
 		}
 		return m.submitEditor("loom-policy.update", args)
+	}
+	if kind == "operational-selection-new" {
+		return m.saveOperationalSelectionDraft(text)
+	}
+	if kind == "library-spec" {
+		return m.saveLibraryEditor(text)
 	}
 	if strings.HasPrefix(kind, "policy-") {
 		return m.savePolicyEditor(text)
@@ -808,6 +818,9 @@ func (m *model) apply(e event) tea.Cmd {
 		}
 		if m.editRequest != "" {
 			if e.ID == m.editRequest {
+				if m.editReturn != nil && (m.editing == "operational-selection-new" || m.editing == "policy-behavior-new" || (m.editing == "library-spec" && m.editReturn.kind == "behavior-library-new")) {
+					m.editReturn = m.editReturn.parent
+				}
 				m.enterLoom = m.editing == "document"
 				m.editRequest, m.editing = "", ""
 				m.dialog, m.editReturn = m.editReturn, nil

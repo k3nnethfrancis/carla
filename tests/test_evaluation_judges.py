@@ -256,6 +256,8 @@ async def test_copied_policy_same_ids_and_revisions_do_not_reuse_different_specs
     fork["name"] = "Different requirements"
     fork["judges"][0]["behaviors"][0]["spec"] = "Different criterion"
     second = policies.save(lab.project, fork)
+    assert policies.active(lab.project)["id"] == first["id"]
+    lab.project.data["active_evaluation_policy"] = second["id"]
     assert first["judges"][0]["revision"] == second["judges"][0]["revision"]
     group = data.resolve(lab.project)
     assert (

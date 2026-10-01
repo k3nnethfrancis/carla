@@ -1,6 +1,9 @@
 package main
 
-import tea "charm.land/bubbletea/v2"
+import (
+	tea "charm.land/bubbletea/v2"
+	"fmt"
+)
 
 // Configuration is a contextual view, not a separate settings copy per tab.
 func (m *model) openConfig() tea.Cmd {
@@ -30,13 +33,16 @@ func (m *model) openConfig() tea.Cmd {
 }
 func (m *model) openSelectionConfig() tea.Cmd {
 	label := "Selection · Off"
-	if m.data.SelectionEnabled {
+	if m.selectionEnabled() {
 		label = "Selection · On"
 	}
-	m.dialog = &dialog{kind: "grow-config", title: "Selection policy", rows: []row{
+	d := &dialog{kind: "grow-config", title: "Selection policy", rows: []row{
 		{id: "selection_enabled", label: label, preview: selectionTriggerHelp},
-		{id: "judges", label: "Judges · 1", preview: "The selection model and the behavior it uses to judge alternatives. Selection currently uses one LLM judge."},
+		{id: "judges", label: "Judges · 1", preview: "The selection model and the behaviors it uses to judge alternatives. Selection currently uses one LLM judge."},
 	}}
+	defer orderOperationalRows(d)
+	m.appendOperationalControls(d)
+	m.dialog = d
 	return nil
 }
 
@@ -46,27 +52,50 @@ const evaluationJudgesHelp = "Criteria + model used by named evaluations.\nChoos
 
 func (m *model) openSelectionJudges() tea.Cmd {
 	m.dialog = &dialog{kind: "grow-config", title: "Selection judges", rows: []row{
-		{id: "judge", label: m.data.PolicyModel + " (LLM)", preview: "Compares candidates together and selects which qualifying candidate continues."},
+		{id: "judge", label: m.selectionModelName() + " (LLM)", preview: "Compares candidates together and selects which qualifying candidate continues."},
 	}}
 	return nil
 }
 func (m *model) openSelectionJudge() tea.Cmd {
 	m.dialog = &dialog{kind: "grow-config", title: "Selection judge", rows: []row{
-		{id: "selector", label: "Model · " + m.data.PolicyModel + " (LLM)", preview: "The local instruction-following model used to assess alternatives."},
+		{id: "selector", label: "Model · " + m.selectionModelName() + " (LLM)", preview: "The local instruction-following model used to assess alternatives."},
 		{id: "prompt", label: "Prompt", preview: "Judges candidates together in one request. The prompt defines the required JSON selection response; separate behavior calls are not used."},
-		{id: "behaviors", label: "Behaviors · 1", preview: "Selection criteria define which candidates qualify and are worth continuing."},
+		{id: "behaviors", label: fmt.Sprintf("Behaviors · %d", len(m.selectionBehaviors())), preview: "Selection criteria define which candidates qualify and are worth continuing."},
 	}}
 	return nil
 }
 func (m *model) openSelectionBehaviors() tea.Cmd {
-	m.dialog = &dialog{kind: "grow-config", title: "Selection behaviors", rows: []row{
-		{id: "behavior", label: "Selection criteria", preview: "Defines which alternatives qualify to continue. " + m.data.PolicySpec},
-	}}
+	d := &dialog{kind: "grow-config", title: "Selection behaviors"}
+	for _, b := range m.selectionBehaviors() {
+		id, _ := b["id"].(string)
+		name, _ := b["name"].(string)
+		spec, _ := b["spec"].(string)
+		d.rows = append(d.rows, row{id: id, label: name, preview: "Criteria applied to candidates. " + spec})
+	}
+	d.rows = append(d.rows, row{id: "new-behavior", label: "+ New behavior", preview: "Add another named criterion for this judge."}, row{id: "library-behavior", label: "From library", preview: "Copy a saved behavior definition into this judge."})
+	m.dialog = d
 	return nil
 }
 func (m *model) openSelectionBehavior() tea.Cmd {
-	m.dialog = &dialog{kind: "grow-config", title: "Selection criteria", rows: []row{
-		{id: "spec", label: "Behavior spec", preview: "Defines which candidate should continue. " + m.data.PolicySpec},
+	id := m.operationalBehaviorID()
+	if id == "" {
+		id = "criteria"
+	}
+	name, spec, enabled := "Selection criteria", "", false
+	for _, b := range m.selectionBehaviors() {
+		if b["id"] == id {
+			name, _ = b["name"].(string)
+			spec, _ = b["spec"].(string)
+			enabled, _ = b["enabled"].(bool)
+		}
+	}
+	state := "Off"
+	if enabled {
+		state = "On"
+	}
+	m.dialog = &dialog{kind: "grow-config", title: "Selection behavior", args: map[string]any{"selection_behavior": id}, rows: []row{
+		{id: "behavior-enabled", label: "Enabled · " + state, preview: "Include this criterion in the selection judge’s candidate assessment."},
+		{id: "spec", label: "Behavior spec · " + name, preview: "Defines which candidates qualify. " + spec},
 	}}
 	return nil
 }

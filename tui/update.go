@@ -25,7 +25,7 @@ var allActions = []action{
 	{"visitor", "Write a visitor message in a conversation fork", ""}, {"grid", "Show Loom grid", ""}, {"loom-policy", "Configure conversation warnings and stop rules", ""},
 	{"character-sampling", "Character temperature, top-p and output tokens", ""}, {"visitor-sampling", "Visitor temperature, top-p and output tokens", ""},
 	{"import", "Import a document into Library", ""},
-	{"policy", "Monitoring, selection and evaluation criteria", ""}, {"eval", "Evaluate selected material", ""}, {"evaluations", "Evaluation datasets", "6"},
+	{"behaviors", "Reusable behavior specs", ""}, {"policy", "Monitoring, selection and evaluation criteria", ""}, {"eval", "Evaluate selected material", ""}, {"evaluations", "Evaluation datasets", "6"},
 }
 
 func (m *model) perform(id string) tea.Cmd {
@@ -51,6 +51,9 @@ func (m *model) perform(id string) tea.Cmd {
 	}
 	if id == "snapshot" {
 		return m.exportItems()
+	}
+	if id == "behaviors" {
+		return m.openBehaviorLibrary()
 	}
 	if id == "policy" {
 		return m.openPolicy()
@@ -82,7 +85,7 @@ func (m *model) perform(id string) tea.Cmd {
 		return m.editConversation(true)
 	}
 	if id == "loom-policy" {
-		return m.openLoomPolicy()
+		return m.openOperationalPolicies("monitoring")
 	}
 	if id == "grid" {
 		m.conversationOpen = false
@@ -155,7 +158,7 @@ func (m *model) perform(id string) tea.Cmd {
 	case "grow-config":
 		return m.openGrowConfig()
 	case "grow-policy":
-		return m.beginEdit("policy_spec")
+		return m.openOperationalPolicies("selection")
 	case "sim-config":
 		return m.openSimulatorConfig()
 	case "branch":
@@ -179,7 +182,7 @@ func (m *model) perform(id string) tea.Cmd {
 	case "edit":
 		return m.beginEdit("document")
 	case "spec":
-		return m.beginEdit("policy_spec")
+		return m.openOperationalPolicies("selection")
 	case "prompt":
 		return m.beginEdit("policy_prompt")
 	case "import":

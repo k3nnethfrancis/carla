@@ -6,7 +6,7 @@ from . import credentials
 from .exploration import require_selector
 
 
-def selection(args, saved, action, count, model):
+def selection(args, saved, action, count, model, *, behaviors=None):
     enabled = args.get("selection", saved)
     if type(enabled) is not bool:
         raise ValueError("Selection must be on or off")
@@ -19,6 +19,10 @@ def selection(args, saved, action, count, model):
             )
     active = enabled and action == "loom" and count > 1 and "loops" in args
     if active:
+        if behaviors is not None and not any(b.get("enabled", True) for b in behaviors):
+            raise ValueError(
+                "Enable at least one selection behavior before using selection"
+            )
         require_selector(model)
     return active
 

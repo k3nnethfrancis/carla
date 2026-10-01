@@ -118,6 +118,8 @@ async def test_editing_inactive_policy_preserves_active_and_old_empty_data_recov
     behavior = define(lab)
     first = policies.save(lab.project, {"name": "First", "judges": [behavior["id"]]})
     second = policies.save(lab.project, {"name": "Second", "judges": [behavior["id"]]})
+    assert policies.active(lab.project)["id"] == first["id"]
+    lab.project.data["active_evaluation_policy"] = second["id"]
     policies.save(
         lab.project, {"id": first["id"], "name": "Edited", "judges": [behavior["id"]]}
     )

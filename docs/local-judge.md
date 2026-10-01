@@ -49,7 +49,7 @@ in each judgment, even when the saved setting is `auto`.
 
 ## Use in Carla
 
-**Live monitoring:** `/policy` → Monitoring. Enable monitoring and choose
+**Live monitoring:** `/policy` → Monitoring → a policy. Enable monitoring and choose
 **DiffusionGemma (classifier)**. To change it later, open Judges → Model.
 The local worker starts automatically using `openjev-latest`. No API key is requested.
 Heartbeat, behavior specs, detection thresholds and Warn/Stop actions work exactly

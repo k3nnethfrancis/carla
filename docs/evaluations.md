@@ -13,9 +13,24 @@ inputs, triggers and effects. Configuring one does not silently enable another.
 All are inspectable. A monitor flag is not automatically a training rejection;
 a selected branch is not automatically an anthology or training member.
 
+## Policy configuration
+
+`/policy` has the same entry point in every tab: **Monitoring**, **Selection**,
+and **Evals**. Each category holds named policies. A policy contains **Judges**
+and **Actions**; monitoring also has a **Heartbeat**. Each judge owns its model,
+call settings and behaviors. Actions determine what Carla does with those judgments.
+
+Evaluate → Policies is the same collection as `/policy` → Evals. Changes made
+through either route affect the same policy. Data collections remain independent.
+
+`/behaviors` manages reusable workspace specs (name and description). Import a
+spec into a judge to copy its current revision, then configure the enabled state
+and detection or passing rules for that use. Editing a library spec does not
+silently change policies already using a copy, or any historical results.
+
 ## Monitoring
 
-Open `/policy` → Monitoring. Default is Off. `--monitoring on|off` overrides it
+Open `/policy` → Monitoring → a policy. Default is Off. `--monitoring on|off` overrides it
 for one Continue/Loom run without changing saved settings. On uses the configured
 provider, or the last explicitly selected provider if monitoring is currently Off.
 If no provider has been configured, choose one in `/policy` first. DiffusionGemma (local) uses an
@@ -25,7 +40,7 @@ and external data flow](configuration.md#optional-monitoring) apply here.
 
 Open **Judges → a judge → Behaviors**. Each condition has a name, spec, enabled status, detection rule
 and action. Most likely means estimated probability above 50%; Threshold uses
-your chosen cutoff. Warn annotates the trace and highlights detection; Stop ends
+your chosen cutoff. The policy’s Actions map those detections to Warn or Stop. Warn annotates the trace and highlights detection; Stop ends
 the flagged generation/conversation. Disabled conditions retain their settings.
 Custom behaviors can be deleted; built-in ones can be disabled.
 
@@ -37,8 +52,11 @@ and fail open. Scores are model estimates, not calibrated guarantees.
 
 ## Selection
 
-Open `/policy` → Selection → Judges to configure the local instruct evaluator
-and its prompt. Open the judge’s Behaviors to edit selection criteria. The generator's raw prompt never receives these
+Open `/policy` → Selection → a policy → Judges to configure the local instruct evaluator
+and its prompt. Open the judge’s Behaviors to create or import criteria and enable
+the ones to use. Enabled specs are combined in one candidate-set judgment.
+Selection still uses one configured local LLM, with one candidate-set call rather
+than monitoring’s separate/bundled call switch. The generator's raw prompt never receives these
 instructions. The selector receives candidate text and criteria separately.
 
 Selection triggers only when it is **On**, the Loom has **2 or more alternatives**,
@@ -149,6 +167,10 @@ examples too. `/eval --train-on-pass true` marks only items whose judges all pas
 in that run; it does not undo an earlier manual training selection.
 
 `/notes` records item notes. Notes/training changes have metadata histories.
+The Evals policy’s Actions can enable marking passing items for training by
+default. An explicit `--train-on-pass true|false` overrides that default for `/eval`.
+Generation `--eval` uses the named policy’s saved default.
+
 `/export` saves explicitly selected items, or the entire open collection, under
 the workspace's `exports/` directory. It writes a versioned `manifest.json` plus
 text reading copies. Training marks are preserved; they do not silently filter

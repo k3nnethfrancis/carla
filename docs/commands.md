@@ -32,7 +32,8 @@ and contextual controls; old editing commands continue to work.
 The shared controls are:
 
 - `/config`: execution settings, models, workspace selection and keybindings.
-- `/policy`: monitoring, selection and evaluation definitions.
+- `/policy`: named Monitoring, Selection and Evals policies, with judges and actions.
+- `/behaviors`: reusable behavior specs for this workspace.
 - `/stop`: cancel the active operation, retaining partial output.
 - `/help`: command descriptions and arguments.
 - `/rename`: name a focused document or individual conversation; optionally update descendant ancestry names.
@@ -132,8 +133,9 @@ only explicitly configured Stop actions terminate flagged work.
 
 ## Evaluation
 
-Evaluate has Data, Policies and Runs. `/policy` opens its policies; `/config`
-configures the current data collection or policy. Choose behaviors in a policy,
+Evaluate has Data, Policies and Runs. Its Policies view and `/policy` → Evals
+use the same named policies. `/policy` always shows all three policy categories;
+`/config` configures the current view. Add judges and their behaviors to a policy,
 add saved documents/conversations to Data, then run the policy on those items.
 Adding existing evidence does not run another judge.
 
@@ -147,7 +149,8 @@ Adding existing evidence does not run another judge.
 `/eval` on selected Branches/Anthology/Simulator material runs the active policy
 or the named policy. In Evaluate, select collection items to judge. If configuration
 is missing, Carla explains what to set up. `--train-on-pass true` marks an item only
-when every judge completes and passes. It defaults to false. Manual training marks
+when every enabled behavior completes and passes. The policy’s Actions set the
+default (initially off); an explicit true or false overrides it for that run. Manual training marks
 and notes remain metadata; changing live content never transfers its old judgment.
 
 Exports preserve training flags but do not filter to training-marked items

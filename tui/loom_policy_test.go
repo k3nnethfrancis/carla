@@ -20,7 +20,7 @@ func policyFixture() *model {
 func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 	m := policyFixture()
 	m.width, m.height = 120, 36
-	m.perform("loom-policy")
+	m.openLoomPolicy()
 	root := m.dialog
 	root.index = 2
 	m.submitDialog()
@@ -40,7 +40,7 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 			t.Fatal("default can be deleted")
 		}
 	}
-	m.dialog.index = 4
+	m.dialog.index = 3
 	m.submitDialog()
 	if m.dialog.kind != "loom-policy-pick" {
 		t.Fatal("missing decision picker")
@@ -73,8 +73,7 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 	m.closeDialog()
 	m.dialog.index = 2
 	m.submitDialog()
-	m.dialog.index = len(m.dialog.rows) - 1
-	m.submitDialog()
+	chooseBehaviorRow(t, m, "new")
 	if m.behaviorDraft == nil || m.dialog.kind != "loom-policy-dimension" {
 		t.Fatal("missing creation form")
 	}

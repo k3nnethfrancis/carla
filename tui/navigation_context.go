@@ -108,6 +108,18 @@ func (m *model) refreshConfig() {
 		return
 	}
 	switch d.kind {
+	case "behavior-library":
+		m.openBehaviorLibrary()
+	case "behavior-library-item":
+		m.openLibraryBehavior(d.args["id"].(string))
+	case "operational-policy-list":
+		m.openOperationalPolicies(d.args["purpose"].(string))
+	case "operational-policy-actions":
+		m.openOperationalActions()
+	case "operational-policy-action":
+		m.openOperationalAction(d.args["id"].(string))
+	case "eval-policy-actions":
+		m.openEvaluationActions(d.args["id"].(string))
 	case "eval-policy-list":
 		m.openEvaluationPolicies()
 	case "eval-policy-config":
@@ -134,6 +146,8 @@ func (m *model) refreshConfig() {
 		m.openLoomPolicy()
 	case "loom-policy-timing":
 		m.openMonitorTiming()
+	case "loom-policy-action":
+		m.openOperationalAction(d.args["id"].(string))
 	case "loom-policy-dimension":
 		m.openDimension(d.args["id"].(string))
 	case "sim-openings":
@@ -150,12 +164,16 @@ func (m *model) refreshConfig() {
 			m.openSelectionJudge()
 		case "Selection behaviors":
 			m.openSelectionBehaviors()
-		case "Selection criteria":
+		case "Selection criteria", "Selection behavior":
 			m.openSelectionBehavior()
 		case "Selection policy":
 			m.openSelectionConfig()
 		default:
-			m.openGrowConfig()
+			if strings.HasPrefix(d.title, "Selection policy") {
+				m.openSelectionConfig()
+			} else {
+				m.openGrowConfig()
+			}
 		}
 	case "sim-sampling":
 		m.openSampling(d.args["group"].(string))
@@ -163,6 +181,14 @@ func (m *model) refreshConfig() {
 		return
 	}
 	m.dialog.parent = d.parent
+	for _, key := range []string{"operational_purpose", "operational_id", "selection_behavior"} {
+		if value, ok := d.args[key]; ok {
+			if m.dialog.args == nil {
+				m.dialog.args = map[string]any{}
+			}
+			m.dialog.args[key] = value
+		}
+	}
 	// Keep a filtered choice stable when its saved value refreshes the panel.
 	if d.query != "" {
 		m.dialog.query = d.query

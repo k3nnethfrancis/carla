@@ -61,6 +61,17 @@ def configuration(project, alias):
         project.data.get("simulator_config", {})
     )
     config.pop("monitor_questions", None)
+    key = project.data.get("active_operational_policies", {}).get("monitoring")
+    named = next(
+        (
+            p
+            for p in project.data.get("operational_policies", {}).get("monitoring", [])
+            if p["id"] == key
+        ),
+        None,
+    )
+    if named:
+        config["monitor_policy"] = {k: named[k] for k in ("id", "name", "revision")}
     return config
 
 

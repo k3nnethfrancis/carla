@@ -21,9 +21,10 @@ func (m *model) openBehaviors() {
 		if item.Decision == "threshold" {
 			detection = fmt.Sprintf("≥ %.0f%%", item.Threshold*100)
 		}
-		d.rows = append(d.rows, row{id: item.ID, label: item.Name + " · " + enabled + " · " + item.Action, preview: "Detection: " + detection + ". " + item.Spec})
+		d.rows = append(d.rows, row{id: item.ID, label: item.Name + " · " + enabled, preview: "Detection: " + detection + ". " + item.Spec})
 	}
-	d.rows = append(d.rows, row{id: "new", label: "+ New behavior", preview: "Configure its spec, detection rule and action before saving."})
+	d.rows = append(d.rows, row{id: "new", label: "+ New behavior", preview: "Configure its spec and detection rule before saving. Policy actions are configured separately."})
+	d.rows = append(d.rows, row{id: "library", label: "From library", preview: "Copy a saved behavior definition into this judge."})
 	m.dialog = d
 }
 

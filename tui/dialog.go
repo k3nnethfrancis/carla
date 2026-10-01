@@ -95,6 +95,12 @@ func (d *dialog) add(label, value string) {
 	d.fields = append(d.fields, field{label, i})
 }
 func (m *model) submitDialog() tea.Cmd {
+	if m.dialog != nil && strings.HasPrefix(m.dialog.kind, "operational-policy") {
+		return m.submitOperationalPolicy(m.dialog)
+	}
+	if m.dialog != nil && strings.HasPrefix(m.dialog.kind, "behavior-library") {
+		return m.submitBehaviorLibrary(m.dialog)
+	}
 	if m.dialog != nil && (m.dialog.kind == "policy" || strings.HasPrefix(m.dialog.kind, "eval-")) {
 		return m.submitEvaluation(m.dialog)
 	}
@@ -285,6 +291,9 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.helpKey(msg)
 	}
 	d := m.dialog
+	if d.kind == "eval-policy-actions" && (msg.Code == tea.KeySpace || msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight) {
+		return m.submitEvaluationPolicy(d)
+	}
 	if d.kind == "eval-policy-behavior" && len(d.rows) > 0 && d.rows[d.index].id == "enabled" && (msg.Code == tea.KeySpace || msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight) {
 		return m.submitPolicyJudge(d)
 	}

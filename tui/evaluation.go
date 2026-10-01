@@ -41,13 +41,10 @@ type evaluationRecord struct {
 }
 
 func (m *model) openPolicy() tea.Cmd {
-	if m.section == 4 {
-		return m.openEvaluationPolicies()
-	}
 	m.dialog = &dialog{kind: "policy", title: "Policy", rows: []row{
 		{id: "monitor", label: "Monitoring", preview: "Monitor document continuations and character replies; warn or explicitly stop. Shared across Branches and Simulator."},
 		{id: "selection", label: "Selection", preview: selectionTriggerHelp},
-		{id: "evaluators", label: "Evaluation policies", preview: "Configure reusable behaviors and models to assess saved documents and conversations."},
+		{id: "evaluators", label: "Evals", preview: "Configure reusable behaviors and models to assess saved documents and conversations."},
 	}}
 	return nil
 }
@@ -125,7 +122,13 @@ func (m *model) openEval(input string) tea.Cmd {
 		m.status = "Choose a policy in Evaluate → Policies, or use /eval policy-name"
 		return nil
 	}
-	args := map[string]any{"policy": policy.ID, "train_on_pass": auto}
+	args := map[string]any{"policy": policy.ID}
+	words, _ := generationWords(input)
+	for _, word := range words {
+		if word == "--train-on-pass" || strings.HasPrefix(word, "--train-on-pass=") {
+			args["train_on_pass"] = auto
+		}
+	}
 	if m.section == 4 {
 		if m.currentEvaluation() == nil {
 			m.status = "Open Data and select a collection to evaluate"
@@ -260,9 +263,9 @@ func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 	case "policy":
 		switch r.id {
 		case "monitor":
-			return parent(m.openLoomPolicy())
+			return parent(m.openOperationalPolicies("monitoring"))
 		case "selection":
-			return parent(m.openSelectionConfig())
+			return parent(m.openOperationalPolicies("selection"))
 		default:
 			return parent(m.openEvaluationPolicies())
 		}

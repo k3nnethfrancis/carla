@@ -23,12 +23,14 @@ type evaluationJudge struct {
 	Behaviors []evaluationBehavior `json:"behaviors"`
 }
 type evaluationBehavior struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	Spec      string  `json:"spec"`
-	Threshold float64 `json:"threshold"`
-	Enabled   bool    `json:"enabled"`
-	Revision  int     `json:"revision"`
+	ID             string  `json:"id"`
+	Name           string  `json:"name"`
+	Spec           string  `json:"spec"`
+	Threshold      float64 `json:"threshold"`
+	Enabled        bool    `json:"enabled"`
+	Revision       int     `json:"revision"`
+	SourceID       string  `json:"source_id,omitempty"`
+	SourceRevision int     `json:"source_revision,omitempty"`
 }
 
 // Legacy frozen runs contained a flat evaluator. Adapt only the display shape.
@@ -102,6 +104,7 @@ func (m *model) openPolicyBehaviors(id string, i int) tea.Cmd {
 		}
 		d.rows = append(d.rows, row{id: strconv.Itoa(k), label: label, preview: b.Spec})
 	}
+	d.rows = append(d.rows, row{id: "library", label: "From library", preview: "Copy an existing behavior spec into this judge. Local settings stay here."})
 	d.rows = append(d.rows, row{id: "new", label: "+ New behavior", preview: "Name the behavior, then write the criteria this judge should assess."})
 	m.dialog = d
 	return nil
@@ -121,6 +124,7 @@ func (m *model) openPolicyBehavior(id string, i, k int) tea.Cmd {
 	if j.Kind != "llm" {
 		rows = append(rows, row{id: "threshold", label: fmt.Sprintf("Pass threshold · %.0f%%", b.Threshold*100), preview: "Pass when the classifier’s probability that these criteria are met reaches this threshold."})
 	}
+	rows = append(rows, row{id: "library-save", label: "Save spec to library", preview: "Create a reusable spec from this behavior. Model, threshold and enabled state stay in this judge."})
 	rows = append(rows, row{id: "delete", label: "Remove behavior…", preview: "Remove this behavior from the judge. Previous results keep their exact spec."})
 	m.dialog = &dialog{kind: "eval-policy-behavior", title: b.Name, args: policyJudgeArgs(id, i, k), rows: rows}
 	return nil
@@ -135,7 +139,7 @@ func (m *model) policyModelPicker(d *dialog) tea.Cmd {
 	return nil
 }
 func (m *model) savePolicyDraft(d *dialog, p evaluationPolicy) tea.Cmd {
-	return m.saveDialog(d, "evaluation.policy.save", map[string]any{"id": p.ID, "name": p.Name, "judges": p.Judges})
+	return m.saveDialog(d, "evaluation.policy.save", map[string]any{"id": p.ID, "name": p.Name, "judges": p.Judges, "actions": p.Actions})
 }
 func (m *model) submitPolicyJudge(d *dialog) tea.Cmd {
 	id, _ := d.args["id"].(string)
@@ -243,7 +247,17 @@ func (m *model) submitPolicyJudge(d *dialog) tea.Cmd {
 			m.reflow()
 			return m.editor.Focus()
 		}
+	case "eval-policy-behavior-library":
+		b := m.libraryBehavior(r.id)
+		if b == nil {
+			return nil
+		}
+		p.Judges[i].Behaviors = append(p.Judges[i].Behaviors, evaluationBehavior{Name: b.Name, Spec: b.Spec, Enabled: true, Threshold: .8, SourceID: b.ID, SourceRevision: b.Revision})
+		return m.savePolicyDraft(d, p)
 	case "eval-policy-behaviors":
+		if r.id == "library" {
+			return m.openBehaviorLibraryPicker(d, "eval-policy-behavior-library", d.args)
+		}
 		if r.id == "new" {
 			m.dialog = &dialog{kind: "eval-policy-behavior-new", title: "New behavior", parent: d, args: d.args}
 			m.dialog.add("Name", "")
@@ -252,6 +266,10 @@ func (m *model) submitPolicyJudge(d *dialog) tea.Cmd {
 		b, _ := strconv.Atoi(r.id)
 		return child(m.openPolicyBehavior(id, i, b))
 	case "eval-policy-behavior":
+		if r.id == "library-save" {
+			b := p.Judges[i].Behaviors[k]
+			return m.send("behavior.save", map[string]any{"name": b.Name, "spec": b.Spec})
+		}
 		if r.id == "enabled" {
 			p.Judges[i].Behaviors[k].Enabled = !p.Judges[i].Behaviors[k].Enabled
 			return m.savePolicyDraft(&dialog{parent: d}, p)
@@ -334,9 +352,8 @@ func (m *model) savePolicyEditor(text string) tea.Cmd {
 		draft.Judges[i].Prompt = text
 	case "policy-behavior-new":
 		draft.Judges[i].Behaviors = append(draft.Judges[i].Behaviors, evaluationBehavior{Name: d.fields[0].input.Value(), Spec: text, Threshold: 0.8, Enabled: true})
-		m.editReturn = d.parent
 	default:
 		draft.Judges[i].Behaviors[k].Spec = text
 	}
-	return m.submitEditor("evaluation.policy.save", map[string]any{"id": draft.ID, "name": draft.Name, "judges": draft.Judges})
+	return m.submitEditor("evaluation.policy.save", map[string]any{"id": draft.ID, "name": draft.Name, "judges": draft.Judges, "actions": draft.Actions})
 }

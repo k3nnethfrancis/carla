@@ -364,7 +364,7 @@ func (m *model) renderDialog() string {
 		if d.query != "" {
 			footer = "Filter: " + d.query + " · " + footer
 		} else if d.kind != "keys" && d.kind != "delete" && d.kind != "loom-policy-bundle-confirm" && d.kind != "loom-policy-timing" && !strings.HasPrefix(d.kind, "setup-") {
-			if d.kind != "help" {
+			if d.kind != "help" && ansi.StringWidth("Type to filter · "+footer) <= r.w-4 {
 				footer = "Type to filter · " + footer
 			}
 		}
@@ -488,12 +488,12 @@ func (m *model) View() tea.View {
 				body = m.document.View()
 			}
 			if m.editing != "" {
-				if strings.HasPrefix(m.editing, "policy-") && m.editReturn != nil {
+				if (strings.HasPrefix(m.editing, "policy-") || m.editing == "library-spec") && m.editReturn != nil {
 					title = m.editReturn.title + " · Spec"
 					if m.editing == "policy-judge-prompt" {
 						title = m.editReturn.title + " · Prompt"
 					}
-					if m.editing == "policy-behavior-new" && len(m.editReturn.fields) > 0 {
+					if (m.editing == "policy-behavior-new" || m.editing == "library-spec") && len(m.editReturn.fields) > 0 {
 						title = m.editReturn.fields[0].input.Value() + " · Spec"
 					}
 				}

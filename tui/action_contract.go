@@ -17,7 +17,7 @@ func (m *model) paletteAvailable(id, input string) bool {
 			return false
 		}
 	}
-	primary := map[string]bool{"add": true, "remove": true, "branch": true, "continue": true, "loom": true, "eval": true, "snapshot": true, "configure": true, "policy": true, "cancel": true, "help": true, "library": true, "branches": true, "kept": true, "simulator": true, "evaluations": true}
+	primary := map[string]bool{"add": true, "remove": true, "branch": true, "continue": true, "loom": true, "eval": true, "snapshot": true, "configure": true, "policy": true, "behaviors": true, "cancel": true, "help": true, "library": true, "branches": true, "kept": true, "simulator": true, "evaluations": true}
 	if !primary[id] {
 		return strings.TrimSpace(input) != "/"
 	}

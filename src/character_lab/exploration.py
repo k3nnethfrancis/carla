@@ -5,6 +5,7 @@ no random fallback, confidence ranking or automatic anthology membership.
 """
 
 import asyncio
+import copy
 import json
 import uuid
 from pathlib import Path
@@ -21,6 +22,11 @@ def require_selector(model):
 async def explore(project, loops, model, runtime_factory, batch, advance, emit):
     """batch() returns immutable candidate views; advance() changes the next seed."""
     require_selector(model)
+    behaviors = project.data.get("selection_behaviors")
+    if behaviors is not None and not any(b.get("enabled", True) for b in behaviors):
+        raise ValueError(
+            "Enable at least one selection behavior before using selection"
+        )
     run = dict(
         id=uuid.uuid4().hex[:12],
         created=now(),
@@ -32,6 +38,17 @@ async def explore(project, loops, model, runtime_factory, batch, advance, emit):
         spec=project.data.get("policy_spec", DEFAULT_SPEC),
         prompt=project.data.get("policy_prompt", DEFAULT_PROMPT),
     )
+    key = project.data.get("active_operational_policies", {}).get("selection")
+    named = next(
+        (
+            p
+            for p in project.data.get("operational_policies", {}).get("selection", [])
+            if p["id"] == key
+        ),
+        None,
+    )
+    if named:
+        run["policy"] = copy.deepcopy(named)
     if not run["spec"].strip() or not run["prompt"].strip():
         raise ValueError("Selection criteria and prompt are required in /policy")
     project.data.setdefault("policy_runs", []).append(run)

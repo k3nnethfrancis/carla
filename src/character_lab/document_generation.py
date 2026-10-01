@@ -46,6 +46,7 @@ async def start(session, args, request_id, eval_plan):
         action,
         count,
         session.policy_model,
+        behaviors=p.data.get("selection_behaviors"),
     )
     policy_config = policy_overrides.monitoring(simulator.configuration(p, alias), args)
     policy_config["selection_enabled"] = selection

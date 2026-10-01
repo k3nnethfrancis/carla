@@ -72,6 +72,16 @@ def normalize(judges, previous=()):
                 raise ValueError("Invalid behavior")
             value = {k: copy.deepcopy(b.get(k)) for k in ("name", "spec", "threshold")}
             value.update(id=b.get("id") or uid(), enabled=b.get("enabled", True))
+            if "source_id" in b:
+                if (
+                    not isinstance(b["source_id"], str)
+                    or type(b.get("source_revision")) is not int
+                    or b["source_revision"] < 1
+                ):
+                    raise ValueError("Invalid copied behavior provenance")
+                value.update(
+                    source_id=b["source_id"], source_revision=b["source_revision"]
+                )
             if value["id"] in behavior_ids:
                 raise ValueError("Behavior identifiers must be unique within a judge")
             behavior_ids.add(value["id"])

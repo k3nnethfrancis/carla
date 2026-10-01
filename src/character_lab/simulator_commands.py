@@ -11,6 +11,7 @@ from . import (
     credentials,
     evaluation_sets,
     monitor,
+    operational_policies,
     policy_overrides,
     simulator,
     simulator_actions,
@@ -22,10 +23,42 @@ async def dispatch(session, command, args, request_id):
     p = session.project
     if command == "loom-policy.key":
         credentials.save_openrouter_key(args.get("key"))
+        if args.get("activate", True) is False:
+            if args.get("policy_id"):
+                saved = next(
+                    (
+                        x
+                        for x in p.data["operational_policies"]["monitoring"]
+                        if x["id"] == args["policy_id"]
+                    ),
+                    None,
+                )
+                if saved is None:
+                    raise ValueError("Policy not found")
+                await operational_policies.dispatch(
+                    session,
+                    "operational.policy.save",
+                    dict(
+                        purpose="monitoring",
+                        id=saved["id"],
+                        name=saved["name"],
+                        config={
+                            "monitor_mode": "off"
+                            if args.get("preserve_disabled")
+                            else "jev",
+                            "monitor_provider": "jev",
+                        },
+                    ),
+                    request_id,
+                )
+                return
+            await session.snapshot(request_id)
+            return
         config = simulator.configuration(p, session.runtime.model["alias"])
         config["monitor_mode"] = "jev"
         config["monitor_provider"] = "jev"
         p.data["simulator_config"] = config
+        operational_policies.sync(session, "monitoring")
         p.save()
         await session.snapshot(request_id)
         return
@@ -68,6 +101,7 @@ async def dispatch(session, command, args, request_id):
         policy_overrides.remember_provider(config, p.data.get("simulator_config", {}))
         simulator.validate(config, p, session.validate_settings)
         p.data["simulator_config"] = config
+        operational_policies.sync(session, "monitoring")
         p.save()
         await session.snapshot(request_id)
         return
@@ -241,6 +275,7 @@ async def dispatch(session, command, args, request_id):
             action or "loom",
             config.get("alternatives", config["conversations"]),
             session.policy_model,
+            behaviors=p.data.get("selection_behaviors"),
         )
         config = policy_overrides.monitoring(config, args)
         if action is None and config["loops"] > 1:

@@ -206,7 +206,9 @@ def prepare(session, group, definitions, items):
     return records
 
 
-async def run(session, group, definitions, items, auto=False, *, nested=False):
+async def run(session, group, definitions, items, auto=None, *, nested=False):
+    if auto is None:
+        auto = definitions.policy.get("actions", {}).get("train_on_pass", False)
     records = prepare(session, group, definitions, items)
     session.runtime.close()
     try:
@@ -363,7 +365,10 @@ async def dispatch(session, command, args, request_id):
                 )
             group["items"] = [i for i in group["items"] if i["id"] not in ids]
         elif command == "evaluation.collection.run":
-            auto = args.get("train_on_pass", False)
+            auto = args.get(
+                "train_on_pass",
+                definitions.policy.get("actions", {}).get("train_on_pass", False),
+            )
             if type(auto) is not bool:
                 raise ValueError("train_on_pass must be boolean")
             captured = [evaluation.capture(p, t) for t in args.get("targets", [])]

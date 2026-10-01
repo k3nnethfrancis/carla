@@ -12,6 +12,10 @@ type evaluationPolicy struct {
 	ID, Name string
 	Judges   []evaluationJudge
 	Revision int
+	Actions  evaluationActions `json:"actions"`
+}
+type evaluationActions struct {
+	TrainOnPass bool `json:"train_on_pass"`
 }
 type evaluationRun struct {
 	ID, Created, Collection, Status string
@@ -93,6 +97,7 @@ func (m *model) openEvaluationPolicy(id string) tea.Cmd {
 	m.dialog = &dialog{kind: "eval-policy-config", title: p.Name, args: map[string]any{"id": p.ID}, rows: []row{
 		{id: "name", label: "Name · " + p.Name, preview: "Name used by /eval and /loom --eval."},
 		{id: "judges", label: fmt.Sprintf("Judges · %d", len(p.Judges)), preview: "Choose models and configure the behaviors each assesses. Enabled behaviors must pass for an overall pass."},
+		{id: "actions", label: "Actions", preview: "Choose what happens when data passes this policy."},
 		{id: "active", label: active, preview: "Use this policy when /eval has no explicit policy name."},
 		{id: "delete", label: "Remove policy…", preview: "Remove this configuration; historical results remain."}}}
 	return nil
@@ -118,8 +123,13 @@ func (m *model) submitEvaluationPolicy(d *dialog) tea.Cmd {
 	if p == nil && d.kind != "eval-policy-list" {
 		return nil
 	}
+	if d.kind == "eval-policy-actions" {
+		draft := *p
+		draft.Actions.TrainOnPass = !draft.Actions.TrainOnPass
+		return m.savePolicyDraft(&dialog{parent: d}, draft)
+	}
 	if d.kind == "eval-policy-name" {
-		return m.saveDialog(d, "evaluation.policy.save", map[string]any{"id": p.ID, "name": d.fields[0].input.Value(), "judges": p.Judges})
+		return m.saveDialog(d, "evaluation.policy.save", map[string]any{"id": p.ID, "name": d.fields[0].input.Value(), "judges": p.Judges, "actions": p.Actions})
 	}
 	if len(d.rows) == 0 {
 		return nil
@@ -142,6 +152,9 @@ func (m *model) submitEvaluationPolicy(d *dialog) tea.Cmd {
 		return nil
 	}
 	switch r.id {
+	case "actions":
+		m.openEvaluationActions(p.ID)
+		m.dialog.parent = d
 	case "name":
 		m.dialog = &dialog{kind: "eval-policy-name", title: "Policy name", parent: d, args: d.args}
 		m.dialog.add("Name", p.Name)
@@ -221,4 +234,17 @@ func (m *model) evaluationRunStale(id string) bool {
 		}
 	}
 	return false
+}
+
+func (m *model) openEvaluationActions(id string) tea.Cmd {
+	p := m.findEvaluationPolicy(id)
+	if p == nil {
+		return nil
+	}
+	value := "Off"
+	if p.Actions.TrainOnPass {
+		value = "On"
+	}
+	m.dialog = &dialog{kind: "eval-policy-actions", title: p.Name + " · Actions", args: map[string]any{"id": id}, rows: []row{{id: "train", label: "Train on pass · " + value, preview: "Mark passing items for training. /eval --train-on-pass true|false overrides this default for one run."}}}
+	return nil
 }

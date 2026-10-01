@@ -82,7 +82,7 @@ Selection and local evaluation are separate instruct-model judge calls.
 | Fixed opener | Simulator → `/config` → Opening → Fixed → Message | First Visitor message for fresh conversations; `--msg` overrides it for one run. |
 | Generated opener | Simulator → `/config` → Opening → Generated → Generation prompt | Raw completion using its selected model/sampling, once per fresh conversation. |
 | Selection | `/policy` → Selection | Criteria and system prompt for candidate classification; never injected into generator text. |
-| Monitoring | `/policy` → Monitoring → Behaviors | Named behavior specs sent to local DiffusionGemma or Jev with context. The provider envelope is managed by Carla. |
+| Monitoring | `/policy` → Monitoring → a policy → Judges → Behaviors | Named behavior specs sent to local DiffusionGemma or Jev with context. The provider envelope is managed by Carla. |
 | Evaluation | Evaluate → Policies | Criteria and local judge system prompt, or DiffusionGemma/Jev behavior spec/threshold. |
 
 ### Document continuations
@@ -277,7 +277,7 @@ behavior is never treated as a negative score or a reason to stop. This setting
 covers live monitoring, not named evaluation judge execution.
 
 Checks apply to character replies and document continuations. In `/policy` →
-Monitoring → Heartbeat, toggle after-reply and during-reply checks separately.
+Monitoring → a policy → Heartbeat, toggle after-reply and during-reply checks separately.
 Both default to on, with a 512-output-token interval when monitoring is enabled.
 Turning during-reply checks off preserves the interval. Legacy interval 0 still
 disables mid-reply checks. Only one check per
@@ -289,7 +289,10 @@ not a locally calibrated guarantee. A Stop affects only the flagged conversation
 
 ## Policy and evaluation configuration
 
-Use `/policy` for monitoring and selection; in Evaluate it opens Policies.
+`/policy` always opens Monitoring, Selection and Evals, from every tab.
+Choose a named policy within a category to edit it or make it active.
+Editing an inactive policy does not enable or activate it. Evaluate → Policies
+opens the same Evals policy list; there is no separate evaluation configuration.
 Evaluation policies group judges, and each judge contains behaviors. The judge
 owns the model, prompt and Call mode. Behaviors own specs, enabled states and
 passing rules; they inherit their judge’s model.
@@ -300,7 +303,9 @@ managed local OpenJev worker after [one-time setup](local-judge.md).
 
 Data collections and policies are independent. Choose an active policy for bare
 `/eval`, or use `/eval "policy name"`. `/config` handles the current view's
-settings. Behavior definitions are workspace-local and revisioned; saved runs
+settings. `/behaviors` opens the workspace spec library. Importing into a judge copies the
+spec with its library revision; enabled states, detection rules and actions remain
+local to the policy. Saved runs
 retain the configurations used at execution. Adding data never invokes a model.
 See [evaluations](evaluations.md) for the Data / Policies / Runs workflow.
 
@@ -309,7 +314,9 @@ to cycle backward/forward, without opening a picker. Enter still opens the full
 picker. Heartbeat toggles use the same keys; Interval opens its numeric control.
 Typing filters the list, and the filter is retained after a setting changes.
 
-Monitoring's **Behaviors** panel lists each behavior's enabled state and action.
+Monitoring’s judge **Behaviors** panel contains specs, enabled states and detection
+rules. Its policy **Actions** panel maps detected behaviors to Warn or Stop and
+the warning color.
 **New behavior** shows the complete configuration before creation; edits stay in
 an unsaved draft until **Create behavior**. Specs use the multiline document
 editor (`/save` or the configured save binding; Escape cancels the text edit).
@@ -317,7 +324,7 @@ Leaving the new-behavior panel discards its unsaved draft.
 
 The **Detection rule** determines whether a behavior is flagged: **Most likely**
 requires estimated probability above 50%; **Threshold** uses your chosen cutoff.
-The separate **Action** determines what follows a detection: warn or stop.
+The policy’s **Actions** determine what follows a detection: warn or stop.
 Disabling a behavior skips it while retaining its settings.
 
 Long specs, criteria and prompts use the full document editor. Text wraps and

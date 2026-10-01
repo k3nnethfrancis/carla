@@ -85,7 +85,7 @@ func budgetLabel(n int) string {
 func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 	// Preserve the actual parent page, including its selected row and ancestry.
 	defer func() {
-		if m.dialog != nil && m.dialog != d.parent {
+		if m.dialog != nil && m.dialog != d.parent && m.dialog != d {
 			m.dialog.parent = d
 		}
 		if m.editing != "" {
@@ -96,14 +96,41 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 	case "loom-config":
 		switch r.id {
 		case "selection":
-			return m.openSelectionConfig()
+			return m.openOperationalPolicies("selection")
 		case "monitor":
-			return m.openLoomPolicy()
+			return m.openOperationalPolicies("monitoring")
 		default:
 			return m.perform(r.id)
 		}
 	case "grow-config":
+		m.dialog = d
+		if cmd, ok := m.operationalControl(d, r.id); ok {
+			return cmd
+		}
+		if d.title == "Selection behaviors" && r.id != "new-behavior" && r.id != "library-behavior" {
+			d.args = map[string]any{"selection_behavior": r.id}
+			m.openSelectionBehavior()
+			m.dialog.parent = d
+			return nil
+		}
 		switch r.id {
+		case "new-behavior":
+			m.dialog = &dialog{kind: "operational-policy-behavior-name", title: "New behavior", parent: d, args: map[string]any{}}
+			m.dialog.add("Name", "")
+			return m.dialog.fields[0].input.Focus()
+		case "library-behavior":
+			m.openBehaviorLibraryPicker(d, "operational-policy-library-selection", nil)
+			return nil
+		case "behavior-enabled":
+			id := m.operationalBehaviorID()
+			enabled := false
+			for _, b := range m.selectionBehaviors() {
+				if b["id"] == id {
+					enabled, _ = b["enabled"].(bool)
+				}
+			}
+			return m.saveSelectionBehavior(id, map[string]any{"enabled": !enabled})
+
 		case "judges":
 			m.openSelectionJudges()
 			m.dialog.parent = d
@@ -121,11 +148,13 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 			m.dialog.parent = d
 			return nil
 		case "selection_enabled":
-			return m.send("policy.configure", map[string]any{"selection_enabled": !m.data.SelectionEnabled})
+			return m.send("policy.configure", map[string]any{"selection_enabled": !m.selectionEnabled()})
 		case "models":
 			return m.openDialog("models")
-		case "spec", "prompt":
-			return m.perform(r.id)
+		case "spec":
+			return m.beginEdit("policy_spec")
+		case "prompt":
+			return m.beginEdit("policy_prompt")
 		case "selector":
 			next := &dialog{kind: "selector-pick", title: "Grow selector"}
 			for _, model := range m.data.SelectorModels {
@@ -142,9 +171,9 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 	case "sim-config", "sim-speakers", "sim-openings":
 		switch r.id {
 		case "selection":
-			return m.openSelectionConfig()
+			return m.openOperationalPolicies("selection")
 		case "monitor":
-			return m.openLoomPolicy()
+			return m.openOperationalPolicies("monitoring")
 		case "openings":
 			return m.openOpeningConfig()
 		case "opening_mode":

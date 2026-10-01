@@ -3,7 +3,6 @@ package main
 import (
 	tea "charm.land/bubbletea/v2"
 	"encoding/json"
-	"fmt"
 	"github.com/charmbracelet/x/ansi"
 	"net"
 	"strings"
@@ -81,7 +80,7 @@ func TestEvalCommandDispatchAndDefaults(t *testing.T) {
 		m.section = 1
 		m.branchSelection = map[string]bool{m.currentID(): true}
 		req := captureCommand(t, m, func() tea.Cmd { return m.openEval(input) })
-		if req.Command != "evaluation.collection.run" || string(req.Args["train_on_pass"]) != fmt.Sprint(strings.Contains(input, "true")) || m.evalArea != "runs" || string(req.Args["policy"]) != `"policy"` {
+		if req.Command != "evaluation.collection.run" || (strings.Contains(input, "true") && string(req.Args["train_on_pass"]) != "true") || m.evalArea != "runs" || string(req.Args["policy"]) != `"policy"` {
 			t.Fatal(req)
 		}
 	}
@@ -258,8 +257,13 @@ func TestEvaluateDataPoliciesRunsNavigation(t *testing.T) {
 		t.Fatal("back missed root")
 	}
 	m.openPolicy()
+	if m.dialog.kind != "policy" {
+		t.Fatal("Evaluate /policy must use the global hub")
+	}
+	m.dialog.index = 2
+	m.submitDialog()
 	if m.dialog.kind != "eval-policy-list" {
-		t.Fatal("Evaluate /policy must use same policy editor")
+		t.Fatal("Evals must use same policy editor")
 	}
 }
 
