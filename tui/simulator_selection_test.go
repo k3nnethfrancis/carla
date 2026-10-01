@@ -60,7 +60,7 @@ func TestSimulatorEnterOpensAndSelectsListConversation(t *testing.T) {
 		t.Fatal("Enter did not open")
 	}
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	var request struct {
 		Command string
 		Args    map[string]any
@@ -87,7 +87,7 @@ func TestLoomUsesCheckedParentNotHighlightedConversation(t *testing.T) {
 		t.Fatal(m.status)
 	}
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	var request struct {
 		Command string
 		Args    map[string]any
@@ -231,7 +231,7 @@ func TestContinueSelectedLoomDispatchesBatchWithConfiguredTurns(t *testing.T) {
 			t.Fatal(m.status)
 		}
 		done := make(chan tea.Msg, 1)
-		go func() { done <- cmd() }()
+		go func() { done <- runPrimaryCommand(cmd) }()
 		var request struct {
 			Command string
 			Args    map[string]any

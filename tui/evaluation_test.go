@@ -148,7 +148,7 @@ func TestEvaluationNotesSaveDoesNotEditSource(t *testing.T) {
 	m.client = &client{conn: left}
 	cmd := m.saveEditor()
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	var request struct {
 		Command string
 		Args    map[string]any

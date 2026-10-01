@@ -71,8 +71,9 @@ Evaluate has three views:
 - **Runs** contains the results of applying a policy to data. Each run preserves
   the input revisions and behavior configurations actually used.
 
-Create or open a data collection and add saved documents, conversations or
-existing judgments. In Policies, create a policy and choose its behaviors. A
+Create or open a data collection and use **Add data** to add saved documents,
+conversations or existing judgments. **Collection settings** lets you rename the
+collection or make it the default destination for data assessed from other tabs. In Policies, create a policy and choose its behaviors. A
 behavior uses a local LLM prompt or a DiffusionGemma/Jev classifier spec and
 probability threshold. Set the active policy to choose what bare `/eval` runs.
 Monitoring and Selection remain separately enabled operational policies; creating

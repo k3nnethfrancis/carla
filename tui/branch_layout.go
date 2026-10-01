@@ -56,6 +56,8 @@ func (m *model) scrollBranches(delta int) {
 			m.branchScrollRow = rows[min(m.selected, len(rows)-1)].id
 		}
 	}
+	// Deliberate horizontal navigation takes precedence until focus changes.
+	m.labelScroll.manualKey = m.focusedLabelTarget().key
 }
 
 func (m *model) branchRowText(item row, r rect) string {

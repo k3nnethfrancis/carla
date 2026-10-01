@@ -167,6 +167,7 @@ type dialog struct {
 type loomTile struct{ ID, Title, Text, Status string }
 
 type model struct {
+	labelScroll                 labelScrollState
 	branchScroll                int
 	branchScrollRow             string
 	pendingDocumentNodes        map[string]bool

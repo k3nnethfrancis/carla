@@ -218,7 +218,7 @@ func (m *model) evaluationView(width int) (text string) {
 	}
 	if m.evaluation == nil || m.evaluation.ID != m.targetRow().id {
 		if c := m.currentEvaluation(); c != nil {
-			return c.Name + "\n\nAdd saved documents, conversations or existing judgments. Adding does not run inference.\n\nRun selected or pending items with /eval. /policy chooses the assessment policy. /config edits the collection.\nSPACE selects · ENTER opens · /keep marks for training"
+			return c.Name + "\n\nAdd data · saved documents, conversations or existing judgments.\nCollection settings · name and default destination.\nRun · assess selected or pending items with the active policy.\n\n/policy chooses the behaviors used for assessment.\nSPACE selects · ENTER opens · /keep marks for training"
 		}
 		return "Evaluate\n\nData · saved documents and conversation traces.\nPolicies · behaviors and models used to assess them.\nRuns · results, preserving the exact inputs and policy.\n\nActive policy · " + m.activePolicyName()
 	}

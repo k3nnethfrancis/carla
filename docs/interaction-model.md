@@ -192,3 +192,12 @@ the optional child-ancestry toggle carries that name into descendants while
 preserving their custom titles. Clearing a title restores its automatic name.
 Names are display metadata; saved IDs, turns, prompts and evaluation references
 remain unchanged.
+
+
+## Reading long labels
+
+A focused list label that exceeds its available width pauses for one second,
+then scrolls horizontally so its full name can be read. Selection marks and
+tree indentation stay fixed. Moving focus or resizing resets the reveal;
+unfocused labels remain still. This applies to navigation and settings lists,
+not document text. `REDUCE_MOTION=1` keeps labels static.

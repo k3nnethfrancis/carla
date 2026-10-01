@@ -215,6 +215,15 @@ func (m *model) perform(id string) tea.Cmd {
 }
 
 func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	// Animation ticks only repaint: do not reflow, preview, or save workspace state.
+	if tick, ok := message.(labelScrollTick); ok {
+		return m, m.labelScroll.advance(tick)
+	}
+	updated, cmd := m.update(message)
+	return updated, tea.Batch(cmd, m.syncLabelScroll())
+}
+
+func (m *model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 	before, workspace := m.workspaceView(), m.data.Workspace.Path
 	defer func() {
 		if workspace == m.data.Workspace.Path && before != m.workspaceView() {

@@ -209,6 +209,9 @@ func (m *model) notesView(r rect) string {
 	for _, i := range indices {
 		label := line(safe(rows[i].label), r.w-4)
 		if i == m.selected {
+			if m.focus == 0 && !m.sectionFocus && m.dialog == nil && !m.searching {
+				label = m.scrollingLabel(safe(rows[i].label), r.w-4)
+			}
 			label = selectedStyle.Render(label)
 		}
 		lines = append(lines, label)

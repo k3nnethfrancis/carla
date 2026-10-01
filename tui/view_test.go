@@ -451,7 +451,7 @@ func TestContinueShortcutUsesDocumentCursor(t *testing.T) {
 			t.Fatal("shortcut did not send generation")
 		}
 		done := make(chan tea.Msg, 1)
-		go func() { done <- cmd() }()
+		go func() { done <- runPrimaryCommand(cmd) }()
 		var request struct {
 			Command string
 			Args    struct {
@@ -703,7 +703,7 @@ func TestSlashGenerationPreservesCursorAndDraft(t *testing.T) {
 				t.Fatal("command did not execute")
 			}
 			done := make(chan tea.Msg, 1)
-			go func() { done <- cmd() }()
+			go func() { done <- runPrimaryCommand(cmd) }()
 			var request struct {
 				Command string
 				Args    struct {
@@ -788,7 +788,7 @@ func TestLoomCountParsingAndCursorRequest(t *testing.T) {
 		t.Fatal("loom did not run")
 	}
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	var request struct {
 		Args struct {
 			Count, Offset int
@@ -1128,7 +1128,7 @@ func TestExistingNoteSaveUpdatesInPlace(t *testing.T) {
 		t.Fatal("missing save")
 	}
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	var request struct {
 		Command string
 		Args    map[string]any

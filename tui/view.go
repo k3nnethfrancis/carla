@@ -218,7 +218,11 @@ func (m *model) navigation(r rect) string {
 	for i := start; i < min(len(rows), start+visible); i++ {
 		item := rows[i]
 		label := m.branchRowText(item, r)
-		label = line(label, r.w-4)
+		if i == mIndex && m.focus == 0 && !m.sectionFocus && m.dialog == nil && !m.searching {
+			label = m.scrollingLabel(m.navigationLabel(item, r), r.w-4)
+		} else {
+			label = line(label, r.w-4)
+		}
 		if item.kind == "evaluation" {
 			if strings.Contains(item.label, "PASS") {
 				label = m.aiStyle().Render(label)
@@ -302,7 +306,7 @@ func (m *model) renderDialog() string {
 		for i := start; i < min(len(d.rows), start+visible); i++ {
 			label := line(safe(d.rows[i].label), r.w-4)
 			if i == d.index {
-				label = selectedStyle.Render(label)
+				label = selectedStyle.Render(m.scrollingLabel(safe(d.rows[i].label), r.w-4))
 			}
 			body = append(body, label)
 		}

@@ -35,7 +35,7 @@ func (m *model) collectionRows() []row {
 		if filter == "" {
 			filter = "all"
 		}
-		rows := []row{{id: "back", kind: "eval-back", label: "← Data"}, {id: "config", kind: "eval-config", label: "Configure · " + c.Name}, {id: "add", kind: "eval-add", label: "+ Add items / existing judgments"}, {id: "run", kind: "eval-execute", label: "Run · " + m.activePolicyName(), preview: "Assess selected or pending data using this policy. /policy changes the active policy."}, {id: "filter", kind: "eval-filter", label: "Show · " + filter}}
+		rows := []row{{id: "back", kind: "eval-back", label: "← Data"}, {id: "config", kind: "eval-config", label: "Collection settings", preview: "Rename this data collection or make it the default destination. Assessment behaviors belong in Policies."}, {id: "add", kind: "eval-add", label: "+ Add data", preview: "Choose saved documents, conversations or existing judgments. Adding data does not run a model."}, {id: "run", kind: "eval-execute", label: "Run · " + m.activePolicyName(), preview: "Assess selected or pending data using this policy. /policy changes the active policy."}, {id: "filter", kind: "eval-filter", label: "Show · " + filter}}
 		for i := len(c.Items) - 1; i >= 0; i-- {
 			e := c.Items[i]
 			status := evaluationStatus(e)
@@ -83,9 +83,9 @@ func (m *model) openCollectionConfig() tea.Cmd {
 		m.status = "Open a data collection first"
 		return nil
 	}
-	active := "Make active"
+	active := "Use as default"
 	if c.ID == m.data.ActiveEvaluation {
-		active = "Active collection"
+		active = "Default collection"
 	}
 	m.dialog = &dialog{kind: "eval-collection-config", title: c.Name, rows: []row{{id: "name", label: "Name · " + c.Name, preview: "Rename this collection of data."}, {id: "active", label: active, preview: "Use this collection for data added by /eval from documents and conversations."}}}
 	return nil
