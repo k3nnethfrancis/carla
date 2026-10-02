@@ -98,13 +98,20 @@ async def test_start_failure_cleans_up_owned_process(monkeypatch):
 
     process = Process()
     process.stdout.feed_eof()
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_exec", AsyncMock(return_value=process)
-    )
+
+    async def spawn(*args, **kwargs):
+        kwargs["stderr"].write(b"Synthetic missing dependency\n")
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
     monkeypatch.setattr(local_judge.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(local_judge.platform, "machine", lambda: "arm64")
     monkeypatch.setattr(local_judge.shutil, "which", lambda _: "/bin/uv")
     manager = local_judge.LocalJudge()
-    with pytest.raises(local_judge.LocalJudgeError, match="install"):
+    with pytest.raises(local_judge.LocalJudgeError, match="install") as error:
         await manager.ensure()
+    diagnostic = local_judge.Path(str(error.value).split("Startup log: ", 1)[1])
+    assert diagnostic.read_text() == "Synthetic missing dependency\n"
+    assert diagnostic.stat().st_mode & 0o077 == 0
+    diagnostic.unlink()
     assert manager.process is None and manager.log is None

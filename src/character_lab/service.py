@@ -21,6 +21,7 @@ from . import (
     evaluation_sets,
     exports,
     operational_policies,
+    policy_overrides,
     simulator,
     templates,
 )
@@ -714,7 +715,10 @@ class Session:
         policy_config = (
             copy.deepcopy(policy_config)
             if policy_config is not None
-            else simulator.configuration(p, self.runtime.model["alias"])
+            else policy_overrides.monitoring(
+                simulator.configuration(p, self.runtime.model["alias"]),
+                {"monitoring": False},
+            )
         )
         policy_record = {
             key: value
@@ -825,6 +829,12 @@ class Session:
                                     job_id,
                                 )
                                 watcher.checkpoint()
+                        if watcher.enabled:
+                            await self.emit(
+                                "operation",
+                                dict(stage="monitoring", index=i + 1, count=count),
+                                job_id,
+                            )
                         await watcher.finish()
                         node["policy_stopped"] = watcher.stopped
                 except asyncio.CancelledError:

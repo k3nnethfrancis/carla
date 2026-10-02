@@ -15,7 +15,7 @@ type generationOptions struct {
 }
 
 func (o generationOptions) apply(args map[string]any) {
-	// Omitted overrides inherit policy settings; explicit false must survive.
+	// The backend resolves stage defaults; explicit false must survive.
 	if o.Selection != nil {
 		args["selection"] = *o.Selection
 	}

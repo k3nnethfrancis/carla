@@ -169,6 +169,10 @@ These use criteria to judge text, but serve different purposes:
 | Selection | Split Loom runs with explicit `--loops` | Reviews candidates and chooses one path to develop. Does not automatically keep or mark it for training. |
 | Evaluation | On saved items, or after `/loom --eval "name"` | Records whole-item judgments in a named collection for review and dataset curation. |
 
+Plain document `/loom`, `/loom N` and `/continue` generate without judging.
+Use `--monitoring on`, `--selection on` (with 2+ alternatives and explicit `--loops`)
+or `--eval "policy"` to opt in. Simulator uses its saved monitoring/selection settings.
+
 Use `/policy` to configure monitoring, selection and reusable judges. Selection
 uses a local instruct model. Monitoring can use local DiffusionGemma through OpenJev, or optional Jev through
 OpenRouter. Evaluation judges also support registered local instruct models, selected per judge.

@@ -945,7 +945,11 @@ async def test_document_monitor_stop_preserves_output_and_never_selects(
     monkeypatch.setattr(monitor, "scan", scan)
     session.project.add("Seed", kind="source")
     await session.execute("simulator.configure", {"monitor_mode": provider}, "config")
-    await session.execute("continue", {"count": 1, "loops": 1}, "loom")
+    await session.execute(
+        "continue",
+        {"action": "loom", "count": 1, "loops": 1, "monitoring": True},
+        "loom",
+    )
     await session.job
     node = session.project.data["nodes"][-1]
     assert node["status"] == "policy_stopped"

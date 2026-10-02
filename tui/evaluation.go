@@ -45,7 +45,7 @@ type evaluationRecord struct {
 
 func (m *model) openPolicy() tea.Cmd {
 	m.dialog = &dialog{kind: "policy", title: "Policy", rows: []row{
-		{id: "monitor", label: "Monitoring", preview: "Monitor document continuations and character replies; warn or explicitly stop. Shared across Branches and Simulator."},
+		{id: "monitor", label: "Monitoring", preview: "Configure shared monitoring rules. Simulator uses saved On/Off; document Looms require --monitoring on."},
 		{id: "selection", label: "Selection (/loom --loops)", preview: selectionTriggerHelp},
 		{id: "evaluators", label: "Evals", preview: "Configure reusable behaviors and models to assess saved documents and conversations."},
 	}}

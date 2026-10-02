@@ -57,8 +57,9 @@ as for Jev. Call mode defaults to Separate (one request per enabled behavior).
 Bundled is available after a warning confirmation; fewer requests can be faster,
 but shared question context can change judgments. Monitoring remains Off in a new
 workspace until explicitly enabled.
-The same policy covers document continuations and Character replies; Visitor
-replies are not monitored separately.
+The same rules can assess document continuations with `--monitoring on`.
+Document Looms default to judging Off; Simulator follows the saved policy switch.
+Visitor replies are not monitored separately.
 
 **Whole-item evaluations:** open Evaluate → Policies → a policy. Add a
 **DiffusionGemma (classifier)** judge and define specs and pass thresholds in the
@@ -88,6 +89,9 @@ Carla gives local requests a 120-second timeout (3 seconds to connect), with no
 retries or remote fallback. A missing service, timeout, oversized input or invalid
 score remains an explicit unavailable/error result. Monitoring errors do not stop
 generation; evaluation errors cannot create a pass or mark a new item for training.
+Failed managed startup retains a private temporary log; the error gives its path.
+This preserves dependency/model startup errors for diagnosis without changing
+providers or downloading anything automatically.
 Only a configured Stop rule applied to a successful classification stops output.
 Full history/text is sent: the service's context limit produces an error instead
 of silently truncating evidence (OpenJev defaults to 32,768 prompt tokens).

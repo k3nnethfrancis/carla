@@ -122,7 +122,10 @@ One-output loops always advance directly. An explicit `--selection on` requires
 /continue --monitoring on
 ```
 
-Both flags override only this run. Omitting them uses saved policy settings;
+Both flags override only this run. Document Continue/Loom defaults to monitoring
+and selection Off, even if a Simulator policy is On. Opt in with `--monitoring on`
+or `--selection on`; evaluations run only with `--eval "policy"`.
+Simulator inherits saved policy settings when flags are omitted;
 `--selection off` bypasses selection even when saved On. `--monitoring on` uses
 the configured provider (or the last explicitly chosen provider when saved Off).
 If none has been configured, Carla asks you to choose one in `/policy` first.

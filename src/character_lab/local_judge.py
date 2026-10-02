@@ -87,9 +87,25 @@ class LocalJudge:
                             await asyncio.sleep(0.2)
                     raise LocalJudgeError("Local judge exited during startup. " + SETUP)
             except BaseException as exc:
+                diagnostic = ""
+                if isinstance(exc, (LocalJudgeError, TimeoutError)) and self.log:
+                    # Startup stderr contains the actual dependency/model error.
+                    # Retain only its bounded tail on failure, outside the repo;
+                    # NamedTemporaryFile gives the diagnostic owner-only access.
+                    self.log.seek(0, os.SEEK_END)
+                    self.log.seek(max(0, self.log.tell() - 65536))
+                    with tempfile.NamedTemporaryFile(
+                        prefix="carla-local-judge-", suffix=".log", delete=False
+                    ) as output:
+                        output.write(self.log.read())
+                        diagnostic = " Startup log: " + output.name
                 await self.close()
                 if isinstance(exc, TimeoutError):
-                    raise LocalJudgeError("Local judge startup timed out.") from None
+                    raise LocalJudgeError(
+                        "Local judge startup timed out." + diagnostic
+                    ) from None
+                if isinstance(exc, LocalJudgeError):
+                    raise LocalJudgeError(str(exc) + diagnostic) from None
                 raise
 
     async def close(self):

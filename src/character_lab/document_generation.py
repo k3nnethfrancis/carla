@@ -42,13 +42,15 @@ async def start(session, args, request_id, eval_plan):
         raise ValueError("Alternatives must be a positive integer")
     selection = policy_overrides.selection(
         args,
-        p.data.get("selection_enabled", False),
+        False,  # Document exploration opts into judging per run.
         action,
         count,
         session.selection_model(),
         behaviors=p.data.get("selection_behaviors"),
     )
-    policy_config = policy_overrides.monitoring(simulator.configuration(p, alias), args)
+    policy_config = policy_overrides.monitoring(
+        simulator.configuration(p, alias), {"monitoring": False, **args}
+    )
     policy_config["selection_enabled"] = selection
     policy_config["loops"] = loops
     targets = [key for key in ("refs", "node", "nodes", "set", "scope") if key in args]

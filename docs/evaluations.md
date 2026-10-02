@@ -41,8 +41,10 @@ before enabling them, especially specs originally written for a monitoring heart
 
 ## Monitoring
 
-Open `/policy` → Monitoring → a policy. Default is Off. `--monitoring on|off` overrides it
-for one Continue/Loom run without changing saved settings. On uses the configured
+Open `/policy` → Monitoring → a policy. Default is Off. Simulator inherits the
+saved switch. Document Continue/Loom starts with monitoring and selection Off;
+use `--monitoring on` or `--selection on` to opt in for that run.
+`--monitoring on|off` does not change saved settings. On uses the configured
 provider, or the last explicitly selected provider if monitoring is currently Off.
 If no provider has been configured, choose one in `/policy` first. DiffusionGemma (local) uses an
 [OpenJev service](local-judge.md) without an API key. Selecting Jev requires a saved or
