@@ -12,16 +12,11 @@ func TestBranchesFitExpandedRowsWithoutHoverResize(t *testing.T) {
 	for _, width := range []int{60, 120, 180} {
 		m := fixture()
 		m.width, m.height, m.section, m.focus = width, 36, 1, 0
-		for _, nameWidth := range []int{5, 27, 48, 200} {
+		for _, nameWidth := range []int{27, 48, 200} {
 			m.data.Nodes = []node{{ID: "root", Title: "doc-1"}, {ID: "child", Parent: "root", Title: strings.Repeat("x", nameWidth)}}
 			got := m.layout().panels[0].box.w
-			needed := 0
-			for _, r := range m.rows() {
-				needed = max(needed, r.depth+ansi.StringWidth(r.label)+4)
-			}
-			want := min(width-2, max(24, (needed+3)/4*4))
-			if got != want {
-				t.Fatalf("got %d want %d", got, want)
+			if got != 28 || len(m.layout().panels) != 2 {
+				t.Fatalf("long shallow names must leave room for document: %+v", m.layout())
 			}
 			m.selected = 1
 			if m.layout().panels[0].box.w != got {
@@ -40,7 +35,13 @@ func TestBranchesFitExpandedRowsWithoutHoverResize(t *testing.T) {
 func TestFullBranchPaneSkipsHiddenDocumentAndAllowsNotes(t *testing.T) {
 	m := fixture()
 	m.width, m.height, m.section, m.focus = 120, 36, 1, 0
-	m.data.Nodes = []node{{ID: "root", Title: strings.Repeat("x", 180)}}
+	m.data.Nodes = []node{{ID: "root", Title: "doc-1"}}
+	parent := "root"
+	for i := 0; i < 120; i++ {
+		id := strings.Repeat("n", i+1)
+		m.data.Nodes = append(m.data.Nodes, node{ID: id, Parent: parent, Title: "continue-1-doc-1"})
+		parent = id
+	}
 	m.reflow()
 	m.cycleFocus(1)
 	if m.focus != 3 {
@@ -64,6 +65,33 @@ func TestFullBranchPaneSkipsHiddenDocumentAndAllowsNotes(t *testing.T) {
 	}
 }
 
+func TestCompactBranchNamesRetainFullMarquee(t *testing.T) {
+	t.Setenv("REDUCE_MOTION", "")
+	m := fixture()
+	m.width, m.height, m.section, m.focus = 120, 36, 1, 0
+	name := "continue-1-edit-3-doc-1-日本語"
+	m.data.Nodes = []node{{ID: "root", Title: "doc-1"}, {ID: "child", Parent: "root", Title: name}}
+	m.selected = 1
+	m.reflow()
+	panel := m.layout().panels[0].box
+	r := m.rows()[1]
+	if !strings.HasSuffix(m.branchRowText(r, panel), "…") {
+		t.Fatal("unfocused overflow must show an ellipsis")
+	}
+	if m.syncLabelScroll() == nil || !strings.Contains(m.labelScroll.target.text, name) {
+		t.Fatal("focused marquee must retain the full name")
+	}
+	for m.labelScroll.offset < m.labelScroll.limit {
+		m.labelScroll.advance(labelScrollTick(m.labelScroll.generation))
+	}
+	if !strings.HasSuffix(strings.TrimSpace(m.scrollingLabel(m.navigationLabel(r, panel), panel.w-4)), "日本語") {
+		t.Fatal("marquee must reach the name's end")
+	}
+	if m.layout().panels[0].box.w != panel.w {
+		t.Fatal("revealing the title must not resize the tree")
+	}
+}
+
 func TestBranchHorizontalViewportMatchesMouseTargets(t *testing.T) {
 	m := fixture()
 	m.width, m.height, m.section, m.focus = 60, 36, 1, 0
@@ -76,15 +104,16 @@ func TestBranchHorizontalViewportMatchesMouseTargets(t *testing.T) {
 	}
 	m.selected = 10
 	m.reflow()
+	before := m.branchHorizontalOffset(m.layout().panels[0].box)
 	m.scrollBranches(8)
 	panel := m.layout().panels[0].box
 	rows := m.rows()
 	r := rows[m.selected]
 	offset := m.branchHorizontalOffset(panel)
-	if offset != 8 {
+	if offset != before+8 {
 		t.Fatal(offset)
 	}
-	if !strings.HasPrefix(ansi.Strip(m.branchRowText(r, panel)), "  ▾") {
+	if !strings.HasPrefix(strings.TrimLeft(ansi.Strip(m.branchRowText(r, panel)), " "), "▾") {
 		t.Fatal(m.branchRowText(r, panel))
 	}
 	arrowX := m.treeRowX(r, panel)

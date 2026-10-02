@@ -11,11 +11,13 @@ func (m *model) adaptiveBranches() bool {
 }
 
 // Measure all expanded rows, not the hovered row: navigation cannot resize the
-// panes. Small cell increments preserve as much document space as possible.
+// panes. Names contribute at most 16 display cells; indentation can still expand
+// the tree. Full names remain available through the focused marquee and scrolling.
 func (m *model) branchPaneWidth(available int) int {
 	needed := 4
 	for _, r := range m.rows() {
-		needed = max(needed, r.depth+ansi.StringWidth(safe(r.label))+4)
+		prefix, name := labelParts(safe(r.label))
+		needed = max(needed, r.depth+ansi.StringWidth(prefix)+min(16, ansi.StringWidth(name))+4)
 	}
 	// Four-cell increments avoid wasting a quarter screen on a short name.
 	return min(available, max(24, (needed+3)/4*4))
@@ -66,7 +68,7 @@ func (m *model) branchRowText(item row, r rect) string {
 		return text
 	}
 	offset := m.branchHorizontalOffset(r)
-	return ansi.Cut(text, offset, offset+max(1, r.w-4))
+	return ansi.Truncate(ansi.Cut(text, offset, ansi.StringWidth(text)), max(1, r.w-4), "…")
 }
 
 func (m *model) treeRowX(item row, r rect) int {
