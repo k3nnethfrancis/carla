@@ -329,6 +329,20 @@ func (m *model) collectionItemView(e *evaluationRecord, width int) string {
 	if e.Note != "" {
 		text += "\nNotes\n" + safe(e.Note) + "\n"
 	}
-	text += "\n\n" + strings.Repeat("─", max(1, min(width, 60))) + "\nSaved text · evaluated input\n\n" + safe(e.Text)
+	text += "\n\n" + strings.Repeat("─", max(1, min(width, 60))) + "\nSaved text · evaluated input\n\n" + m.evaluatedInput(e, width)
 	return ansi.Wrap(text, width, "")
+}
+
+// Use only the frozen source, never the current simulator conversation. Old
+// records without structured turns retain their exact plain-text fallback.
+func (m *model) evaluatedInput(e *evaluationRecord, width int) string {
+	if e.Kind == "conversation" {
+		var source struct {
+			Conversation *simulationConversation `json:"conversation"`
+		}
+		if json.Unmarshal(e.Source, &source) == nil && source.Conversation != nil && len(source.Conversation.Turns) > 0 {
+			return m.conversationTurns(source.Conversation.Turns, width)
+		}
+	}
+	return safe(e.Text)
 }

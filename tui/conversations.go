@@ -421,8 +421,17 @@ func (m *model) conversationDocument(width int) string {
 		return "Select a conversation to open it, or select a Loom to view its grid."
 	}
 	c := m.simulation.Conversations[m.gridSelection]
+	text := m.conversationTurns(c.Turns, width)
+	if failure := conversationFailure(m.simulation, c); failure != "" {
+		text += "\n\n\n" + m.accent("#A84F39", "#DB937C").Render(ansi.Wrap(safe(failure), width, ""))
+	}
+	return text
+}
+
+// Render live and frozen conversations with the same role labels and spacing.
+func (m *model) conversationTurns(turns []simulationTurn, width int) string {
 	var blocks []string
-	for i, t := range c.Turns {
+	for i, t := range turns {
 		style := m.humanStyle().Bold(false)
 		if t.Role == "character" {
 			style = m.aiStyle()
@@ -443,12 +452,9 @@ func (m *model) conversationDocument(width int) string {
 			block += "\n\n" + m.accent("#79628C", "#B8A0CB").Render(ansi.Wrap("// policy · "+safe(info), width, ""))
 		}
 		if len(t.Flags) > 0 {
-			block += "\n" + dim.Render(ansi.Wrap("// generation · "+strings.Join(t.Flags, ", "), width, ""))
+			block += "\n" + dim.Render(ansi.Wrap("// generation · "+safe(strings.Join(t.Flags, ", ")), width, ""))
 		}
 		blocks = append(blocks, block)
-	}
-	if error := conversationFailure(m.simulation, c); error != "" {
-		blocks = append(blocks, m.accent("#A84F39", "#DB937C").Render(ansi.Wrap(safe(error), width, "")))
 	}
 	return strings.Join(blocks, "\n\n\n")
 }

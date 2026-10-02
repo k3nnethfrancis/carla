@@ -116,3 +116,33 @@ func TestEvaluationJudgmentsAreSeparatedColoredAndSanitized(t *testing.T) {
 		t.Fatal("NO_COLOR ignored")
 	}
 }
+
+func TestEvaluatedConversationUsesFrozenSimulatorRendering(t *testing.T) {
+	m := evalFixture()
+	turns := []simulationTurn{{Role: "user", Text: "Opening"}, {Role: "character", Text: "Frozen reply"}, {Role: "visitor", Text: "Next visitor"}}
+	source, _ := json.Marshal(map[string]any{"conversation": simulationConversation{Turns: turns}})
+	e := evaluationRecord{Kind: "conversation", Source: source, Text: "user:\nOpening\n\ncharacter:\nFrozen reply\n\nvisitor:\nNext visitor"}
+	for _, width := range []int{30, 90} {
+		m.simulation = &simulationRun{Conversations: []simulationConversation{{Turns: turns}}}
+		m.conversationOpen = true
+		m.gridSelection = 0
+		if got := m.evaluatedInput(&e, width); got != m.conversationDocument(width) {
+			t.Fatal("different conversation renderers", got)
+		}
+		m.simulation.Conversations[0].Turns[1].Text = "Later live reply"
+		view := m.collectionItemView(&e, width)
+		for _, want := range []string{"01  Visitor", "02  Character", "03  Visitor", "Frozen reply"} {
+			if !strings.Contains(ansi.Strip(view), want) {
+				t.Fatal(want, view)
+			}
+		}
+		if strings.Contains(view, "Later live reply") || strings.Contains(view, "user:") {
+			t.Fatal("live state or internal role leaked")
+		}
+		turns[1].Text = "Frozen reply"
+	}
+	e.Source = nil
+	if m.evaluatedInput(&e, 60) != e.Text {
+		t.Fatal("legacy fallback changed")
+	}
+}
