@@ -41,16 +41,21 @@ func TestSettingsSaveReturnsToParentAndRefreshes(t *testing.T) {
 	m.data.SimulatorConfig = map[string]any{"character_alias": "base", "turns": float64(2)}
 	m.openSimulatorConfig()
 	parent := m.dialog
-	parent.index = 1
+	for i, r := range parent.rows {
+		if r.id == "character_alias" {
+			parent.index = i
+		}
+	}
+	index := parent.index
 	m.submitDialog()
 	m.submitDialog() // model selection queues the same backend command as /model
-	if m.dialog != parent || parent.index != 1 {
+	if m.dialog != parent || parent.index != index {
 		t.Fatal("save closed parent")
 	}
 	m.pending = false
 	m.data.SimulatorConfig["character_alias"] = "changed"
 	m.refreshConfig()
-	if m.dialog.index != 1 || !strings.Contains(m.dialog.rows[1].label, "changed") {
+	if m.dialog.index != index || !strings.Contains(m.dialog.rows[index].label, "changed") {
 		t.Fatal("parent values stale")
 	}
 }
@@ -97,6 +102,11 @@ func TestBatchRemovalAndFilteredDocumentPicker(t *testing.T) {
 	m.dialog = nil
 	m.data.SimulatorConfig = map[string]any{"documents": []any{second.ID}}
 	m.openSimulatorConfig()
+	for i, r := range m.dialog.rows {
+		if r.id == "documents" {
+			m.dialog.index = i
+		}
+	}
 	m.submitDialog()
 	m.filterDialog(tea.KeyPressMsg{Code: 'A', Text: "Another"})
 	if len(m.dialog.rows) != 1 || m.dialog.rows[0].id != "second" {

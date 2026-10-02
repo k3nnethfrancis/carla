@@ -584,6 +584,11 @@ func (m *model) directConfig(id, input string) (tea.Cmd, bool) {
 	}
 	if id == "configure" {
 		m.openSimulatorConfig()
+		if arg == "character_template" || arg == "visitor_template" || arg == "visitor_brief" {
+			parent := m.dialog
+			m.openSimulatorPrompts()
+			m.dialog.parent = parent
+		}
 		d := m.dialog
 		for i, r := range d.rows {
 			if r.id == arg {

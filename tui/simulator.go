@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 func (m *model) simString(key string) string { v, _ := m.data.SimulatorConfig[key].(string); return v }
@@ -35,10 +36,11 @@ func (m *model) simulationText() string {
 func (m *model) openSimulatorConfig() tea.Cmd {
 	d := &dialog{kind: "sim-config", title: "Simulator"}
 	for _, entry := range []struct{ key, label string }{
+		{"turns", "Turns"}, {"character_tokens", "Character tokens"}, {"visitor_tokens", "Visitor tokens"},
 		{"documents", "Anthology documents"}, {"character_alias", "Character model"}, {"visitor_alias", "Visitor model"},
-		{"openings", "Opening"}, {"turns", "Turns per continuation"}, {"visitor_brief", "Visitor brief"},
+		{"openings", "Opening"},
 		{"character_settings", "Character sampling"}, {"visitor_settings", "Visitor sampling"},
-		{"character_template", "Character prompt"}, {"visitor_template", "Visitor prompt"},
+		{"prompts", "Prompts"},
 	} {
 		value := fmt.Sprint(m.data.SimulatorConfig[entry.key])
 		if entry.key == "documents" {
@@ -46,6 +48,11 @@ func (m *model) openSimulatorConfig() tea.Cmd {
 		}
 		label := entry.label
 		switch entry.key {
+		case "character_tokens", "visitor_tokens":
+			group := strings.TrimSuffix(entry.key, "_tokens") + "_settings"
+			values, _ := m.data.SimulatorConfig[group].(map[string]any)
+			label += " · " + samplingValue("n_predict", values["n_predict"])
+			value = "Maximum new tokens per reply for this speaker. --tokens overrides both speakers for one run; Max uses remaining context."
 		case "character_alias", "visitor_alias":
 			label += " · " + m.modelName(m.simString(entry.key))
 		case "openings":
@@ -55,6 +62,11 @@ func (m *model) openSimulatorConfig() tea.Cmd {
 			label += fmt.Sprintf(" · %d selected", len(m.simDocs()))
 		case "conversations", "turns":
 			label += " · " + value
+			value = "Additional character replies per conversation, per loop. --turns overrides one run."
+		case "character_settings", "visitor_settings":
+			value = "Temperature and top-p for this speaker. Token limits are shown above."
+		case "prompts":
+			value = "Character and visitor prompt templates, plus the visitor brief."
 		}
 		d.rows = append(d.rows, row{id: entry.key, label: label, preview: value})
 	}
@@ -95,6 +107,8 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 	switch d.kind {
 	case "loom-config":
 		switch r.id {
+		case "tokens":
+			return m.numberConfig("document", "n_predict", float64(m.data.Settings.Tokens), "")
 		case "selection":
 			return m.openOperationalPolicies("selection")
 		case "monitor":
@@ -188,6 +202,13 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 		return m.saveDialog(d, "grow.selector", map[string]any{"alias": r.id})
 	case "sim-config", "sim-speakers", "sim-openings":
 		switch r.id {
+		case "prompts":
+			m.openSimulatorPrompts()
+		case "character_tokens", "visitor_tokens":
+			group := strings.TrimSuffix(r.id, "_tokens") + "_settings"
+			values, _ := m.data.SimulatorConfig[group].(map[string]any)
+			value, _ := values["n_predict"].(float64)
+			return m.numberConfig("sim", "n_predict", value, group)
 		case "selection":
 			return m.openOperationalPolicies("selection")
 		case "monitor":
@@ -237,12 +258,7 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 			m.dialog = next
 			return next.fields[0].input.Focus()
 		case "character_settings", "visitor_settings", "opening_settings":
-			next := &dialog{kind: "sim-sampling", title: r.label, args: map[string]any{"group": r.id}}
-			values, _ := m.data.SimulatorConfig[r.id].(map[string]any)
-			for _, key := range []string{"n_predict", "temperature", "top_p"} {
-				next.rows = append(next.rows, row{id: key, label: samplingLabel(key) + " · " + samplingValue(key, values[key])})
-			}
-			m.dialog = next
+			return m.openSampling(r.id)
 		default:
 			value, _ := m.data.SimulatorConfig[r.id].(float64)
 			return m.numberConfig("sim", r.id, value, "")
@@ -348,6 +364,9 @@ func (m *model) saveNumber(d *dialog) tea.Cmd {
 	if d.args["scope"] == "loom-policy" {
 		command = "loom-policy.update"
 		args = map[string]any{"id": group, key: setting}
+	} else if d.args["scope"] == "document" {
+		command = "configure"
+		args = map[string]any{"settings": args}
 	} else if d.args["scope"] == "grow" {
 		command = "grow.configure"
 		args = map[string]any{"settings": args}
@@ -366,6 +385,8 @@ func (m *model) saveNumber(d *dialog) tea.Cmd {
 
 func samplingLabel(key string) string {
 	switch key {
+	case "turns":
+		return "Turns"
 	case "n_predict":
 		return "Output tokens"
 	case "top_p":
@@ -374,6 +395,14 @@ func samplingLabel(key string) string {
 		return "Temperature"
 	}
 	return key
+}
+
+func (m *model) openSimulatorPrompts() {
+	m.dialog = &dialog{kind: "sim-config", title: "Prompts", rows: []row{
+		{id: "character_template", label: "Character prompt", preview: "Template used to continue the character's side of the conversation."},
+		{id: "visitor_template", label: "Visitor prompt", preview: "Template used to generate the visitor's replies."},
+		{id: "visitor_brief", label: "Visitor brief", preview: "Instructions describing the visitor's role and conversational goals."},
+	}}
 }
 func samplingValue(key string, value any) string {
 	if key == "n_predict" && fmt.Sprint(value) == "-1" {

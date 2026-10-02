@@ -147,6 +147,12 @@ func (m *model) refreshConfig() {
 	case "sim-openings":
 		m.openOpeningConfig()
 	case "sim-config":
+		if d.title == "Prompts" {
+			m.openSimulatorPrompts()
+		} else {
+			m.openConfig()
+		}
+	case "loom-config":
 		m.openConfig()
 	case "sim-speakers":
 		m.speakerPicker()
@@ -232,7 +238,14 @@ func (m *model) openSampling(group string) tea.Cmd {
 	d := &dialog{kind: "sim-sampling", title: strings.TrimSuffix(group, "_settings") + " sampling", args: map[string]any{"group": group}}
 	values, _ := m.data.SimulatorConfig[group].(map[string]any)
 	for _, key := range []string{"n_predict", "temperature", "top_p"} {
-		d.rows = append(d.rows, row{id: key, label: samplingLabel(key) + " · " + samplingValue(key, values[key])})
+		if key == "n_predict" && group != "opening_settings" {
+			continue // Speaker token limits are first-level configuration controls.
+		}
+		d.rows = append(d.rows, row{id: key, label: samplingLabel(key) + " · " + samplingValue(key, values[key]), preview: map[string]string{
+			"n_predict":   "Maximum new tokens for a generated opening.",
+			"temperature": "Higher values increase variation; lower values favor likely continuations.",
+			"top_p":       "Sample from tokens covering this cumulative probability (0–1).",
+		}[key]})
 	}
 	m.dialog = d
 	return nil

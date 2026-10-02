@@ -88,7 +88,11 @@ and raw completion templates.
 | `--monitoring on\|off` | Continue, Loom | Override monitoring for this run using the configured provider and behavior rules. |
 | `--loops N` | Continue, Loom | Repeat generation; with selection enabled, judge each batch and continue from the winner. |
 
-Persistent defaults live in `/config`. Flags override one operation and are saved
+Persistent defaults live in `/config`. Branches puts **Tokens** first, with model
+selection and **Advanced settings** for sampling and context. Simulator puts
+**Turns**, **Character tokens** and **Visitor tokens** first; speaker sampling and
+**Prompts** open submenus. Turns counts additional character replies per loop;
+tokens cap each individual completion, not the whole Loom. Flags override one operation and are saved
 with its provenance. Model flags do not change workspace defaults. Token caps
 apply independently to each speaker; reaching a cap does not stop later turns.
 Token ranges are not supported. Conversation-specific flags on documents are
