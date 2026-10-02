@@ -17,7 +17,7 @@ type evaluationRunDraft struct {
 
 func evaluationAreaTitle(area string) string {
 	if area == "runs" {
-		return "Results"
+		return "Runs"
 	} // Keep saved navigation compatible.
 	return strings.Title(area)
 }
@@ -41,7 +41,7 @@ func (m *model) newEvaluationRun(policy string, train *bool) tea.Cmd {
 		m.status = "Choose an existing Evals policy"
 		return nil
 	}
-	draft := &evaluationRunDraft{Dataset: m.data.ActiveEvaluation, Policy: policy, TrainOnPass: train}
+	draft := &evaluationRunDraft{Policy: policy, TrainOnPass: train}
 	if c := m.currentEvaluation(); c != nil {
 		draft.Dataset = c.ID
 		draft.Selected = m.evaluationIDs()
@@ -77,7 +77,7 @@ func (m *model) openEvaluationRunSetup(draft *evaluationRunDraft, parent *dialog
 		scope = fmt.Sprintf("Selected %d items", len(draft.Selected))
 	}
 	m.dialog = &dialog{kind: "eval-run-config", title: "New evaluation run", parent: parent, args: map[string]any{"draft": draft}, rows: []row{
-		{id: "dataset", label: "Dataset · " + dataset, preview: "Saved documents and conversation traces to assess. Changing this does not change your default dataset."},
+		{id: "dataset", label: "Dataset · " + dataset, preview: "Saved documents and conversation traces to assess. Choose the dataset for this run."},
 		{id: "policy", label: "Policy · " + policy, preview: "Use an existing Evals policy. Edit reusable judges and behaviors through /policy → Evals."},
 		{id: "scope", label: "Data · " + scope, preview: "All items includes previously evaluated data. To assess a subset, select items in Data with SPACE, then use /eval."},
 		{id: "training", label: "On pass · " + onPass, preview: "For this run only: record results, or also mark passing items for training. No model training is started."},

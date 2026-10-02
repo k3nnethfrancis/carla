@@ -581,8 +581,9 @@ func (m *model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 								return m, m.toggleTarget()
 							}
 						}
-						if m.section == 3 && (strings.HasPrefix(r.label, "▾") || strings.HasPrefix(r.label, "▸")) && msg.X == rowX {
+						if m.section == 3 && (strings.HasPrefix(strings.TrimPrefix(strings.TrimPrefix(r.label, "✓ "), "  "), "▾") || strings.HasPrefix(strings.TrimPrefix(strings.TrimPrefix(r.label, "✓ "), "  "), "▸")) && msg.X == rowX+2 {
 							m.collapsed[r.id] = !m.collapsed[r.id]
+							m.reflow()
 							return m, nil
 						}
 						if m.section == 1 && m.hasChildren(r.id) && msg.X == rowX {

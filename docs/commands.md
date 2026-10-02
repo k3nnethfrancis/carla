@@ -151,7 +151,7 @@ only explicitly configured Stop actions terminate flagged work.
 
 ## Evaluation
 
-Evaluate has Data, Policies and Results. Its Policies view and `/policy` → Evals
+Evaluate has Data, Policies and Runs. Its Policies view and `/policy` → Evals
 use the same named policies. `/policy` always shows all three policy categories;
 `/config` configures the current view. Add behaviors and judge settings to a policy,
 add saved documents/conversations to Data, then run the policy on those items.

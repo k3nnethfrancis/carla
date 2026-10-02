@@ -223,6 +223,9 @@ func (m *model) navigation(r rect) string {
 		} else {
 			label = line(label, r.w-4)
 		}
+		if item.kind == "eval-run" && strings.Contains(item.label, "running") {
+			label = m.aiStyle().Render(label)
+		}
 		if item.kind == "evaluation" {
 			if strings.Contains(item.label, "PASS") {
 				label = m.aiStyle().Render(label)

@@ -140,9 +140,7 @@ async def test_eval_policy_training_action(lab, explicit):
         args["train_on_pass"] = explicit
     await lab.execute("evaluation.collection.run", args, "run")
     await lab.job
-    assert evaluation_sets.resolve(lab.project)["items"][0]["training"] is (
-        explicit is None
-    )
+    assert lab.project.data["evaluations"][0]["training"] is (explicit is None)
 
 
 @pytest.mark.asyncio
@@ -157,7 +155,7 @@ async def test_generation_eval_uses_frozen_training_action(lab):
     )
     node = lab.project.add("Exact coherent text")
     await evaluation_sets.after_generation(lab, plan, [{"node": node["id"]}])
-    assert evaluation_sets.resolve(lab.project)["items"][0]["training"] is True
+    assert lab.project.data["evaluations"][0]["training"] is True
 
 
 @pytest.mark.asyncio

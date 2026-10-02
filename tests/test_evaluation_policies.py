@@ -34,7 +34,8 @@ async def test_policy_runs_independently_of_data_and_freezes_configuration(lab):
     result = policies.run_summaries(lab.project)[0]
     assert result["status"] == "complete" and result["passed"] is True
     assert len(result["records"]) == 4
-    assert result["collection"] == group["id"]
+    assert result["collection"] == ""
+    assert group["items"] == []
     frozen = copy.deepcopy(result)
     define(lab, id=first["id"], spec="A changed spec")
     await lab.execute(
@@ -49,7 +50,7 @@ async def test_policy_runs_independently_of_data_and_freezes_configuration(lab):
     assert lab.events[-1][1]["policy"]["name"] == "Quality"
     await lab.execute("evaluation.policy.delete", {"id": policy["id"]}, "delete")
     assert policies.run_summaries(lab.project)[0] == frozen
-    assert group["items"][0]["text"] == "A coherent continuation"
+    assert lab.project.data["evaluations"][0]["text"] == "A coherent continuation"
 
 
 @pytest.mark.asyncio
@@ -82,7 +83,7 @@ async def test_legacy_split_preserves_records_and_missing_behavior_references(la
 
 
 @pytest.mark.asyncio
-async def test_generation_plan_freezes_policy_and_creates_default_data(
+async def test_generation_plan_freezes_policy_without_implicit_dataset(
     lab, monkeypatch
 ):
     from test_evaluation import Judge
@@ -98,7 +99,7 @@ async def test_generation_plan_freezes_policy_and_creates_default_data(
     node = lab.project.add("Seed")
     await lab.execute("continue", {"node": node["id"], "eval": "Quality"}, "loom")
     await lab.job
-    assert data.collections(lab.project)[0]["name"] == "Data"
+    assert data.collections(lab.project) == []
     result = policies.run_summaries(lab.project)[0]
     assert result["policy"]["name"] == "Quality"
     assert result["passed"] is True
@@ -129,3 +130,30 @@ async def test_editing_inactive_policy_preserves_active_and_old_empty_data_recov
     policies.migrate(lab.project)
     assert data.resolve(lab.project)["name"] == "Historical data"
     assert data.resolve(lab.project)["items"][0]["text"] == "Legacy standalone result"
+
+
+@pytest.mark.asyncio
+async def test_live_run_events_link_failed_and_completed_judgments(lab):
+    from test_evaluation import Judge
+
+    class StreamingJudge(Judge):
+        async def judge(self, messages, trace):
+            await self.on_judge_token('{"passed": true}')
+            raise ValueError("Synthetic judge failure")
+
+    lab.runtime_factory = StreamingJudge
+    definition = define(lab)
+    policies.save(lab.project, {"name": "Quality", "judges": [definition["id"]]})
+    node = lab.project.add("Frozen input")
+    await lab.execute(
+        "evaluation.collection.run", {"targets": [{"node": node["id"]}]}, "live"
+    )
+    await lab.job
+    assert data.collections(lab.project) == []
+    updates = [e[1] for e in lab.events if e[0] == "evaluation_run"]
+    assert updates[0]["opened"] is True
+    assert updates[-1]["status"] == "incomplete"
+    assert updates[-1]["results"][0]["error"] == "Synthetic judge failure"
+    progress = [e[1] for e in lab.events if e[0] == "evaluation_progress"]
+    assert all(e["run"] == updates[0]["id"] for e in progress)
+    assert any(e["text"] == '{"passed": true}' for e in progress)

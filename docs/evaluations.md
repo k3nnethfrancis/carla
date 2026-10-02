@@ -100,7 +100,7 @@ The generator unloads before local selection judging. Exact candidate context,
 criteria, prompt and response are retained. Preserve the JSON contract if editing
 the choice prompt; malformed responses remain errors.
 
-## Data, Policies and Results
+## Data, Policies and Runs
 
 Evaluate has three views and a run setup action:
 
@@ -109,35 +109,38 @@ Evaluate has three views and a run setup action:
 - **Policies** contains assessment definitions: a shared set of behaviors, judge
   settings and an On pass setting. Each judge owns its model and call settings and assesses
   the same enabled policy behaviors. A policy is independent of its input data.
-- **Results** contains the results of applying a policy to data. Each run preserves
+- **Runs** contains the results of applying a policy to data. Each run preserves
   the input revisions and behavior configurations actually used.
 
-Create or open a data collection and use **Add data** to add saved documents,
-conversations or existing judgments. **Dataset settings** lets you rename the
-collection or make it the default destination for data assessed from other tabs.
+Creating a dataset opens **Add** immediately, with Anthology documents first,
+then other documents, conversations and existing judgments. Reopen **Add** to add
+more items later. **Settings** lets you rename or remove the dataset. There is no
+default dataset: direct `/eval` and `--eval` runs freeze their inputs in Runs without
+adding them to a dataset. Add existing judgments to a dataset explicitly when wanted.
 Use **+ New run** on the Evaluate page to configure one evaluation:
 
 1. **Dataset:** choose saved data from Data.
 2. **Policy:** choose an existing Evals policy (the same policies as `/policy` → Evals).
 3. **Data:** assess all dataset items, or the subset selected before opening setup.
 4. **On pass:** inherit the policy default, record only, or mark passing items for training.
-5. **Start run:** execute and open Results. Setup alone does not call a model.
+5. **Start run:** execute and open Runs. Setup alone does not call a model.
 
 You can also focus a dataset in Data and type `/eval`, or select items inside it
 with Space and type `/eval`. Both open the same setup with that context filled in.
 `/eval "Voice" --train-on-pass true` preselects a policy and run option. Changing
 the dataset resets the item selection to all items in that dataset. Previously
 evaluated items are included; every run records new results. Escape backs out of
-pickers or cancels setup. These choices do not change saved dataset/policy defaults.
+pickers or cancels setup. These choices do not change the active policy.
 Outside Evaluate, `/eval` still directly assesses selected documents/conversations.
 
-To remove a collection, use **Dataset settings → Remove collection**, or focus
+To remove a collection, use **Settings → Remove collection**, or focus
 it in the Data list and use `/remove` (`/delete` is an alias). Confirmation removes
 the collection and its membership from Data. Source documents, conversations,
 policies and historical results remain; a recovery copy is retained in the workspace.
-Removing the default collection uses the next remaining collection as the default.
-If none remain, the next `/eval` from a document or conversation creates a new Data
-collection.
+Starting an evaluation opens its run in **Runs**. Running rows use an accent color.
+The document pane shows the current item, judge and call count, streams actual LLM
+judge text, and displays completed assessments or errors. Classifier calls show
+waiting progress followed by returned scores; they do not generate a text stream.
 
 Open **Policies → a policy** to configure assessment:
 
@@ -184,7 +187,7 @@ phase. Generation and evaluation share the session operation lock.
 
 ## Interpret and preserve results
 
-Open Results to inspect an execution and its judgments. Every assessment retains
+Open Runs to inspect an execution and its judgments. Every assessment retains
 its input text, source lineage, generation-model provenance, behavior revision,
 request/response and result. A passing item requires every assigned behavior to
 complete and pass. Errors and interruptions are incomplete assessments, not

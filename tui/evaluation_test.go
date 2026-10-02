@@ -242,7 +242,7 @@ func TestEvaluateDataPoliciesRunsNavigation(t *testing.T) {
 	m.section = 4
 	m.focus = 0
 	rows := m.rows()
-	if len(rows) != 4 || rows[0].label != "Data" || rows[1].label != "Policies" || rows[2].label != "Results" || rows[3].label != "+ New run" {
+	if len(rows) != 4 || rows[0].label != "Data" || rows[1].label != "Policies" || rows[2].label != "Runs" || rows[3].label != "+ New run" {
 		t.Fatalf("root: %#v", rows)
 	}
 	m.evaluationCollectionAction("eval-area", "data")
@@ -419,7 +419,7 @@ func TestCollectionRemovalConfirmationAndReply(t *testing.T) {
 		if fromSettings {
 			m.enterCollection("set")
 			m.openCollectionConfig()
-			m.dialog.index = 2
+			m.dialog.index = 1
 			m.submitDialog()
 		} else {
 			m.selected = 2

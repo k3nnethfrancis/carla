@@ -188,6 +188,8 @@ async def assess_group(records, judge):
 
 
 async def evaluate(session, records, *, manage_job=True):
+    from . import evaluation_policies
+
     project = session.project
     judge = None
     judge_model = None
@@ -231,6 +233,31 @@ async def evaluate(session, records, *, manage_job=True):
                 },
                 session.job_id,
             )
+            batch = group[0].get("batch")
+            await evaluation_policies.publish_run(session, batch)
+
+            async def progress(text=""):
+                if batch:
+                    await session.emit(
+                        "evaluation_progress",
+                        dict(
+                            run=batch,
+                            record=group[0]["id"],
+                            title=group[0]["title"],
+                            judge=definition["name"],
+                            stage="Generating judgment"
+                            if text
+                            else "Waiting for judge response",
+                            text=text,
+                            call=index + 1,
+                            total=len(groups),
+                        ),
+                        session.job_id,
+                    )
+
+            if judge is not None:
+                judge.on_judge_token = progress
+            await progress()
             try:
                 results = await assess_group(group, judge)
                 for record, result in zip(group, results):
@@ -253,6 +280,7 @@ async def evaluate(session, records, *, manage_job=True):
                     record["trace"] = copy.deepcopy(record["trace"])
                 project.save()
             await session.snapshot()
+            await evaluation_policies.publish_run(session, batch)
     except asyncio.CancelledError:
         for record in records:
             if record["status"] in {"queued", "running"}:
@@ -268,6 +296,8 @@ async def evaluate(session, records, *, manage_job=True):
         if manage_job:
             session.job = None
         await session.snapshot()
+        for batch in {r.get("batch") for r in records}:
+            await evaluation_policies.publish_run(session, batch)
         passed = sum(r.get("passed") is True for r in records)
         failed = sum(r.get("passed") is False for r in records)
         other = len(records) - passed - failed
@@ -371,10 +401,10 @@ async def dispatch(session, command, args, request_id):
                     metadata_history=[],
                 )
             )
-        # Keep the original single-behavior endpoint visible in Data and Runs.
+        # Keep the original single-behavior endpoint visible in Runs.
         from . import evaluation_policies, evaluation_sets
 
-        group = evaluation_sets.data_collection(p)
+        group = dict(id="", name="", items=[])
         items = [evaluation_sets.add_capture(group, item) for item in captures]
         for item, record in zip(items, records):
             record.update(collection=group["id"], item=item["id"])

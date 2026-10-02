@@ -207,7 +207,7 @@ func (m *model) refreshConfig() {
 }
 func (m *model) saveDialog(d *dialog, command string, args map[string]any) tea.Cmd {
 	// Keep validation-sensitive forms open until their own backend reply arrives.
-	if command == "evaluation.collection.delete" || d.kind == "eval-run-config" || len(d.fields) > 0 && d.args["field"] == "monitor_local_model" {
+	if command == "evaluation.collection.delete" || d.kind == "eval-run-config" || d.kind == "eval-collection-new" || len(d.fields) > 0 && d.args["field"] == "monitor_local_model" {
 		id, cmd := m.dispatch(command, args)
 		if cmd != nil {
 			delete(d.args, "error")

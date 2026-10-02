@@ -27,7 +27,7 @@ See the [README](../README.md#quick-start) for installation and model setup.
    conversation to inspect its text, prompts, settings and policy evidence.
 7. In **Evaluate → Data**, add saved conversations to a collection. In
    **Policies**, add behaviors and judge settings, and choose the active policy. Run `/eval`
-   on the data and inspect **Results**. Review evidence, mark desired training
+   on the data and inspect **Runs**. Review evidence, mark desired training
    items with the collection controls and use `/export` to save the selected items or collection. The [evaluation guide](evaluations.md)
    covers reuse, reruns, pass rules and metadata.
 

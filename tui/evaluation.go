@@ -181,9 +181,9 @@ func (m *model) evaluationView(width int) (text string) {
 	}
 	if m.evaluation == nil || m.evaluation.ID != m.targetRow().id {
 		if c := m.currentEvaluation(); c != nil {
-			return c.Name + "\n\nAdd data · saved documents, conversations or existing judgments.\nDataset settings · name and default destination.\n/eval configures a new run for this dataset or selected items.\nSPACE selects · ENTER opens · /keep marks for training"
+			return c.Name + "\n\nAdd · saved documents, conversations or existing judgments.\nSettings · rename or remove this dataset.\n/eval configures a new run for this dataset or selected items.\nSPACE selects · ENTER opens · /keep marks for training"
 		}
-		return "Evaluate\n\nData · saved documents and conversation traces.\nPolicies · judges and the behaviors they assess.\nResults · recorded assessments with exact inputs and policy.\n+ New run · choose a dataset and policy before starting."
+		return "Evaluate\n\nData · saved documents and conversation traces.\nPolicies · judges and the behaviors they assess.\nRuns · recorded assessments with exact inputs and policy.\n+ New run · choose a dataset and policy before starting."
 	}
 	return m.collectionItemView(m.evaluation, width)
 }

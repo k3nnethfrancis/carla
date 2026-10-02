@@ -132,7 +132,7 @@ func TestEvaluatePoliciesUsesSameEntryPoint(t *testing.T) {
 	if fromPage.kind != m.dialog.kind || !reflect.DeepEqual(fromPage.rows, m.dialog.rows) {
 		t.Fatal("two policy interfaces")
 	}
-	if evaluationAreaTitle("runs") != "Results" {
+	if evaluationAreaTitle("runs") != "Runs" {
 		t.Fatal("old saved route not renamed")
 	}
 }

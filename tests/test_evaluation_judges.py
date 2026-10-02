@@ -43,9 +43,15 @@ def config(mode="separate", kind="llm", name="Reader"):
 
 async def execute(lab, judges):
     policies.save(lab.project, dict(name="Quality", judges=judges))
+    await lab.execute(
+        "evaluation.collection.save", {"name": "Explicit test data"}, "data"
+    )
+    dataset = data.resolve(lab.project)
     node = lab.project.add("Exact source text")
     await lab.execute(
-        "evaluation.collection.run", {"targets": [{"node": node["id"]}]}, "test"
+        "evaluation.collection.run",
+        {"collection": dataset["id"], "targets": [{"node": node["id"]}]},
+        "test",
     )
     await lab.job
     return lab.project.data["evaluations"]

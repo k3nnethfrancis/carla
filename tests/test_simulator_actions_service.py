@@ -169,8 +169,8 @@ async def test_continue_evaluates_only_changed_heads_preserving_prior_evidence(
     )
     await s.job
     group = s.project.data["evaluation_sets"][-1]
-    assert len(group["items"]) == 2
-    before_items = copy.deepcopy(group["items"])
+    assert group["items"] == []
+    before_items = copy.deepcopy(s.project.data["evaluations"])
     before_evals = copy.deepcopy(s.project.data["evaluations"])
     run = s.project.data["simulation_runs"][0]
     await s.execute(
@@ -186,12 +186,12 @@ async def test_continue_evaluates_only_changed_heads_preserving_prior_evidence(
     )
     await s.job
     assert len(s.project.data["simulation_runs"]) == 1
-    assert len(group["items"]) == 3
-    assert group["items"][:2] == before_items
+    assert group["items"] == []
+    assert len(s.project.data["evaluations"]) == 3
     assert s.project.data["evaluations"][:2] == before_evals
-    new = group["items"][-1]
+    new = s.project.data["evaluations"][-1]
     assert new["target"] == before_items[1]["target"]
-    assert new["snapshot_hash"] != before_items[1]["snapshot_hash"]
+    assert new["content_hash"] != before_items[1]["content_hash"]
     assert "My chosen question" in new["text"]
     assert len(new["source"]["conversation"]["turns"]) == 4
     assert new["source"]["revision"] == 1

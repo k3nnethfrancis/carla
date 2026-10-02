@@ -417,8 +417,8 @@ async def test_loom_evaluation_chain_and_preflight(lab, monkeypatch):
         "continue", {"node": node["id"], "count": 2, "eval": "Voice"}, "chain"
     )
     await s.job
-    assert len(group["items"]) == 2
-    assert all(i["judgments"] for i in group["items"])
+    assert group["items"] == []
+    assert len(s.project.data["evaluations"]) == 2
     assert all(r["passed"] for r in s.project.data["evaluations"])
     assert not s.busy
 
@@ -428,8 +428,6 @@ async def test_simulator_chain_freezes_conversations_and_runs_all_judges(
     lab, monkeypatch
 ):
     from test_service import FakeRuntime
-
-    from character_lab import evaluation_sets as sets
 
     s = lab
     monkeypatch.setattr(Judge, "stream", FakeRuntime.stream, raising=False)
@@ -459,11 +457,9 @@ async def test_simulator_chain_freezes_conversations_and_runs_all_judges(
     )
     await s.execute("simulator.run", {"count": 2, "eval": group["name"]}, "chain")
     await s.job
-    assert len(group["items"]) == 2
-    assert all(len(item["judgments"]) == 4 for item in group["items"])
-    assert all(
-        sets.item_summary(s.project, group, item)["passed"] for item in group["items"]
-    )
+    assert group["items"] == []
+    assert len(s.project.data["evaluations"]) == 8
+    assert all(r["passed"] for r in s.project.data["evaluations"])
     statuses = [data["busy"] for kind, data, _ in s.events if kind == "state"]
     # Once generation starts, ownership stays held through judging until final snapshot.
     first_busy = statuses.index(True)

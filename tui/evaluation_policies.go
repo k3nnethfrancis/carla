@@ -18,7 +18,14 @@ type evaluationPolicy struct {
 type evaluationActions struct {
 	TrainOnPass bool `json:"train_on_pass"`
 }
+type evaluationProgress struct {
+	Run, Record, Title, Judge, Stage, Text string
+	Call, Total                            int
+}
+
 type evaluationRun struct {
+	Opened, Live                    bool
+	Progress                        evaluationProgress `json:"progress"`
 	ID, Created, Collection, Status string
 	CollectionName                  string `json:"collection_name"`
 	Policy                          struct {
@@ -66,7 +73,7 @@ func (m *model) evaluationAreaRows() []row {
 			rows = append(rows, row{id: r.ID, kind: "eval-run", label: fmt.Sprintf("%d · %s · %s", i+1, r.Policy.Name, evaluationStatus(evaluationSummary{Status: r.Status, Passed: r.Passed})), preview: fmt.Sprintf("%s · %d/%d assessed · policy revision %d", r.Created, r.Completed, r.Count, r.Policy.Revision)})
 		}
 	default:
-		return []row{{id: "data", kind: "eval-area", label: "Data", preview: "Documents and conversation traces to assess."}, {id: "policies", kind: "eval-area", label: "Policies", preview: "Configure behaviors and judges for complete traces. Active: " + m.activePolicyName()}, {id: "runs", kind: "eval-area", label: "Results", preview: "Results of applying policies to data, with frozen inputs and configuration."}, {id: "new-run", kind: "eval-new-run", label: "+ New run", preview: "Choose a dataset, policy and options for one evaluation run."}}
+		return []row{{id: "data", kind: "eval-area", label: "Data", preview: "Documents and conversation traces to assess."}, {id: "policies", kind: "eval-area", label: "Policies", preview: "Configure behaviors and judges for complete traces. Active: " + m.activePolicyName()}, {id: "runs", kind: "eval-area", label: "Runs", preview: "Results of applying policies to data, with frozen inputs and configuration."}, {id: "new-run", kind: "eval-new-run", label: "+ New run", preview: "Choose a dataset, policy and options for one evaluation run."}}
 	}
 	return rows
 }
@@ -203,10 +210,23 @@ func (m *model) evaluatorModelName(e evaluator) string {
 }
 func (m *model) evaluationRunView(width int) string {
 	if m.evalRun == nil || m.evalRun.ID != m.targetRow().id {
-		return "Results\n\nChoose a run and press ENTER to read its results.\nEach run preserves the exact data and policy used."
+		return "Runs\n\nChoose a run and press ENTER to read its results.\nEach run preserves the exact data and policy used."
 	}
 	r := m.evalRun
-	text := fmt.Sprintf("%s · %s\n%s · policy revision %d\n%d/%d assessed\n", r.Policy.Name, r.Status, r.Created, r.Policy.Revision, r.Completed, r.Count)
+	text := fmt.Sprintf("%s · %s · %d/%d assessed\n", r.Policy.Name, r.Status, r.Completed, r.Count)
+	if r.Status == "running" {
+		p := r.Progress
+		text += p.Stage
+		if p.Total > 0 {
+			text += fmt.Sprintf(" · call %d/%d", p.Call, p.Total)
+		}
+		text += " · " + p.Judge + "\n"
+		if p.Text != "" {
+			text += p.Text + "\n"
+		}
+		text += "\nItem · " + p.Title + "\n"
+	}
+	text += fmt.Sprintf("%s · policy revision %d\n", r.Created, r.Policy.Revision)
 	if r.CollectionName != "" {
 		text += "Dataset · " + r.CollectionName + "\n"
 	}
@@ -227,7 +247,8 @@ func (m *model) evaluationRunView(width int) string {
 			groups = append(groups, item)
 		}
 		groups[i].Judgments = append(groups[i].Judgments, result)
-		if result.Status == "failed" || (result.Status != "complete" && groups[i].Status != "failed") {
+		priority := map[string]int{"complete": 0, "queued": 1, "running": 2, "stopped": 3, "interrupted": 3, "failed": 4}
+		if priority[result.Status] > priority[groups[i].Status] {
 			groups[i].Status = result.Status
 		}
 		if !result.Result.Passed {

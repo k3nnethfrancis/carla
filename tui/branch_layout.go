@@ -7,7 +7,7 @@ import (
 )
 
 func (m *model) adaptiveBranches() bool {
-	return m.section == 1 && !m.notesOpen && m.editing == "" && !m.gridVisible()
+	return m.editing == "" && ((m.section == 1 && !m.notesOpen && !m.gridVisible()) || (m.section == 3 && !m.conversationOpen && (m.width >= 90 || m.focus == 0)))
 }
 
 // Measure all expanded rows, not the hovered row: navigation cannot resize the

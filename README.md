@@ -145,7 +145,7 @@ or downloaded automatically. A missing model does not prevent source browsing.
   an existing conversation resumes its frozen document context and history.
   Use `/clear` to start fresh; hovering over a conversation or batch does not select it. Multi-output runs stream into a selectable grid.
 - **Evaluate:** add documents or conversations in Data, configure behaviors in
-  Policies, and inspect assessments in Results. Review evidence, add notes and mark items for
+  Policies, and inspect assessments in Runs. Review evidence, add notes and mark items for
   training. Existing judgments can be attached without another model call.
   `/export` saves selected evaluation items or the collection, including evidence and training marks.
 
@@ -187,12 +187,12 @@ use On/Off: enabling one switches the previous policy in that category Off.
 `/behaviors` is a reusable workspace library of specs; adding a spec to a policy
 keeps its settings local.
 
-**Evaluate** separates **Data**, **Policies** and **Results**. Data is the saved
+**Evaluate** separates **Data**, **Policies** and **Runs**. Data is the saved
 documents and conversation traces. Policies contain behaviors and judge settings
 as separate sections. Each configured judge assesses the same enabled behaviors.
 The Policies view edits the same policies as `/policy` → Evals.
 **+ New run** configures a dataset, policy, data scope and On pass setting for one
-execution; **Results** preserves its assessments. In Evaluate, `/eval` opens that
+execution; **Runs** preserves its assessments. In Evaluate, `/eval` opens that
 setup for the focused dataset or selected items. Outside Evaluate, it runs the
 active policy on selected material. `/eval "Voice"` chooses a named policy.
 Adding data does not invoke a model. You can mark training items manually or use

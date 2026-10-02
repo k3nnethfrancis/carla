@@ -189,7 +189,7 @@ type model struct {
 	evalArea                    string
 	evalRun                     *evaluationRun
 	evalCollection              string
-	evalCreating                bool
+	evalCreating                string
 	evalPolicyCreating          bool
 	behaviorDraft               *loomDimension
 	behaviorEditID              string
@@ -587,6 +587,19 @@ func (m *model) branch() tea.Cmd {
 }
 func (m *model) apply(e event) tea.Cmd {
 	switch e.Type {
+	case "evaluation_progress":
+		var progress evaluationProgress
+		if err := json.Unmarshal(e.Data, &progress); err != nil {
+			return nil
+		}
+		if m.evalRun != nil && m.evalRun.ID == progress.Run {
+			if m.evalRun.Progress.Record == progress.Record {
+				progress.Text = m.evalRun.Progress.Text + progress.Text
+			}
+			m.evalRun.Progress = progress
+			m.reflow()
+		}
+		return nil
 	case "evaluation_run":
 		var run evaluationRun
 		if err := json.Unmarshal(e.Data, &run); err != nil {
@@ -594,6 +607,35 @@ func (m *model) apply(e event) tea.Cmd {
 		}
 		if m.evalRun == nil || m.evalRun.ID != run.ID {
 			m.document.GotoTop()
+		}
+		if m.evalRun != nil && m.evalRun.ID == run.ID && run.Status == "running" {
+			run.Progress = m.evalRun.Progress
+		}
+		found := false
+		for i := range m.data.EvaluationRuns {
+			if m.data.EvaluationRuns[i].ID == run.ID {
+				m.data.EvaluationRuns[i] = run
+				found = true
+				break
+			}
+		}
+		if !found {
+			m.data.EvaluationRuns = append(m.data.EvaluationRuns, run)
+		}
+		if run.Opened {
+			m.section, m.evalArea, m.evalCollection = 4, "runs", ""
+			m.filter, m.evalFilter = "", ""
+			m.focus = 1
+			for i, r := range m.rows() {
+				if r.id == run.ID {
+					m.selected = i
+					break
+				}
+			}
+		}
+		// Background updates must not replace a different run the user opened.
+		if run.Live && !run.Opened && m.evalRun != nil && m.evalRun.ID != run.ID {
+			return nil
 		}
 		m.evalRun = &run
 		m.pending = false
@@ -830,7 +872,7 @@ func (m *model) apply(e event) tea.Cmd {
 					m.dialog = nil
 					m.evalArea = "data"
 					m.enterCollection("")
-					m.status = "Collection removed · sources and Results retained"
+					m.status = "Collection removed · sources and Runs retained"
 				} else {
 					m.dialog = m.savingDialog.parent
 				}
@@ -883,9 +925,10 @@ func (m *model) apply(e event) tea.Cmd {
 			m.openEvaluationPolicy(m.data.ActiveEvaluationPolicy)
 			m.dialog.parent = parent
 		}
-		if m.evalCreating {
-			m.evalCreating = false
+		if m.evalCreating != "" && m.evalCreating == e.ID {
+			m.evalCreating = ""
 			m.enterCollection(m.data.ActiveEvaluation)
+			m.openCollectionItems()
 		}
 		if createdBehavior != "" && m.dialog != nil && m.dialog.kind == "loom-policy-behaviors" {
 			for i, r := range m.dialog.rows {

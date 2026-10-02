@@ -238,6 +238,36 @@ def run_summaries(project):
     return [run_summary(project, r) for r in project.data.get("evaluation_runs", [])]
 
 
+def run_view(project, run):
+    result = run_summary(project, run)
+    result["results"] = [
+        copy.deepcopy(evaluation.find(project.data.get("evaluations", []), k))
+        for k in run["records"]
+    ]
+    active = next((r for r in result["results"] if r["status"] == "running"), None)
+    if active:
+        result["progress"] = dict(
+            run=run["id"],
+            record=active["id"],
+            title=active["title"],
+            judge=active["definition"]["name"],
+            stage="Assessing",
+            text=active.get("trace", {}).get("raw_response", ""),
+        )
+    return result
+
+
+async def publish_run(session, batch, *, opened=False):
+    if not batch:
+        return
+    run = evaluation.find(session.project.data.get("evaluation_runs", []), batch)
+    await session.emit(
+        "evaluation_run",
+        run_view(session.project, run) | {"opened": opened, "live": True},
+        session.job_id,
+    )
+
+
 async def dispatch(session, command, args, request_id):
     p = session.project
     if command == "evaluation.policy.save":
@@ -252,11 +282,7 @@ async def dispatch(session, command, args, request_id):
             p.data["active_evaluation_policy"] = remaining[0]["id"] if remaining else ""
     elif command == "evaluation.run.open":
         run = evaluation.find(p.data.get("evaluation_runs", []), args["id"])
-        result = run_summary(p, run)
-        result["results"] = [
-            copy.deepcopy(evaluation.find(p.data.get("evaluations", []), k))
-            for k in run["records"]
-        ]
+        result = run_view(p, run)
         await session.emit("evaluation_run", result, request_id)
         return
     else:

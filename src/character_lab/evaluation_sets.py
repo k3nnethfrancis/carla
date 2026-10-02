@@ -164,15 +164,7 @@ def summaries(project):
 def data_collection(project, key=None):
     if key:
         return resolve(project, key)
-    if collections(project):
-        current = project.data.get("active_evaluation")
-        if not any(g["id"] == current for g in collections(project)):
-            project.data["active_evaluation"] = collections(project)[0]["id"]
-        return resolve(project)
-    group = dict(id=uid(), name="Data", items=[], created=now())
-    project.data.setdefault("evaluation_sets", []).append(group)
-    project.data["active_evaluation"] = group["id"]
-    return group
+    raise ValueError("Choose a data collection explicitly")
 
 
 def plan(session, name=None, collection=None):
@@ -188,7 +180,12 @@ def plan(session, name=None, collection=None):
             definition["resolved_model"] = evaluation.resolve_model(
                 session, definition["model"]
             )
-    return data_collection(session.project, collection), definitions
+    group = (
+        data_collection(session.project, collection)
+        if collection
+        else dict(id="", name="", items=[])
+    )
+    return group, definitions
 
 
 def prepare(session, group, definitions, items):
@@ -240,6 +237,7 @@ async def run(session, group, definitions, items, auto=None, *, nested=False):
     records = prepare(session, group, definitions, items)
     session.runtime.close()
     try:
+        await evaluation_policies.publish_run(session, records[0]["batch"], opened=True)
         await evaluation.evaluate(session, records, manage_job=False)
         if auto:
             for item in items:
@@ -248,6 +246,8 @@ async def run(session, group, definitions, items, auto=None, *, nested=False):
                     r.get("passed") is True and r["status"] == "complete" for r in own
                 ):
                     item["training"] = True
+                    for record in own:
+                        record["training"] = True
                     item.setdefault("metadata_history", []).append(
                         dict(at=now(), training=True, origin="train_on_pass")
                     )
@@ -256,6 +256,7 @@ async def run(session, group, definitions, items, auto=None, *, nested=False):
         if not nested:
             session.job = None
         await session.snapshot()
+        await evaluation_policies.publish_run(session, records[0]["batch"])
 
 
 def attach_policy_evidence(project, item):

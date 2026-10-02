@@ -33,6 +33,7 @@ class Runtime:
         self._loading = asyncio.Lock()
         self.admission = Admission()
         self.on_schedule = None
+        self.on_judge_token = None
 
     async def ensure(self):
         # Concurrent requests share one startup and one model process.
@@ -264,7 +265,7 @@ class Runtime:
             "messages": messages,
             "temperature": 0,
             "max_tokens": 1536,
-            "stream": False,
+            "stream": self.on_judge_token is not None,
             "response_format": {"type": "json_object"},
             "chat_template_kwargs": {"enable_thinking": False},
         }
@@ -292,6 +293,40 @@ class Runtime:
                 raise ValueError(
                     "Policy context overflow; reduce branch count or length. Nothing was truncated."
                 )
+            if self.on_judge_token is not None:
+                output, finished = "", None
+                trace["response_chunks"] = []
+                async with client.stream(
+                    "POST", self.model["url"] + "/v1/chat/completions", json=request
+                ) as response:
+                    trace["http_status"] = response.status_code
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        data = line[5:].strip()
+                        if data == "[DONE]":
+                            break
+                        chunk = json.loads(data)
+                        trace["response_chunks"].append(chunk)
+                        for choice in chunk.get("choices", []):
+                            text = choice.get("delta", {}).get("content") or ""
+                            if text:
+                                output += text
+                                trace["raw_response"] = output
+                                await self.on_judge_token(text)
+                            if choice.get("finish_reason"):
+                                finished = choice["finish_reason"]
+                trace["response"] = {
+                    "choices": [
+                        {"finish_reason": finished, "message": {"content": output}}
+                    ]
+                }
+                if finished != "stop":
+                    raise ValueError(
+                        "Judge response did not finish; partial output retained"
+                    )
+                return json.loads(output)
             response = await client.post(
                 self.model["url"] + "/v1/chat/completions", json=request
             )

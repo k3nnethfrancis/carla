@@ -165,3 +165,31 @@ func TestRenameDescendantsToggle(t *testing.T) {
 		t.Fatal("left should toggle child names")
 	}
 }
+
+func TestSimulatorUsesAdaptiveTreeForNestedRuns(t *testing.T) {
+	m := simulatorFixture()
+	m.focus = 0
+	m.data.SimulationRuns = []runSummary{{ID: "batch", Title: strings.Repeat("parent-", 12), Count: 2, Conversations: m.simulation.Conversations}}
+	parent := "batch"
+	for i := 0; i < 16; i++ {
+		id := strings.Repeat("x", i+1)
+		m.data.SimulationRuns = append(m.data.SimulationRuns, runSummary{ID: id, Title: strings.Repeat("loom-", 20), Count: 2, Parent: &conversationParent{Run: parent, Conversation: 0}})
+		parent = id
+	}
+	expanded := m.layout().panels[0].box.w
+	if !m.adaptiveBranches() || expanded <= 28 {
+		t.Fatal("nested simulator tree must grow", expanded)
+	}
+	m.selected = len(m.rows()) - 1
+	if m.layout().panels[0].box.w != expanded {
+		t.Fatal("hover resized tree")
+	}
+	m.collapsed["batch"] = true
+	if m.layout().panels[0].box.w >= expanded {
+		t.Fatal("collapsed tree must shrink")
+	}
+	m.conversationOpen = true
+	if m.adaptiveBranches() {
+		t.Fatal("opened conversation must retain document layout")
+	}
+}

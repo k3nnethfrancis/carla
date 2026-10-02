@@ -326,3 +326,62 @@ async def test_native_context_does_not_silently_shrink(runtime_server, monkeypat
     with pytest.raises(ValueError, match="server loaded 8192"):
         await runtime.preflight("prompt", dict(n_predict=512))
     assert "/completion" not in requests
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("finish", ["stop", "length", None])
+async def test_judge_stream_reports_real_deltas_and_retains_partial_output(
+    tmp_path, monkeypatch, finish
+):
+    chunks = ['{"passed":', 'true,"reason":"clear","evidence":"text"}']
+    received = []
+    real_client = httpx.AsyncClient
+
+    def handle(request):
+        if request.url.path == "/apply-template":
+            return httpx.Response(200, json={"prompt": "text"})
+        if request.url.path == "/tokenize":
+            return httpx.Response(200, json={"tokens": [1]})
+        if request.url.path == "/props":
+            return httpx.Response(
+                200, json={"default_generation_settings": {"n_ctx": 4096}}
+            )
+        assert json.loads(request.content)["stream"] is True
+        events = [
+            {"choices": [{"delta": {"content": t}, "finish_reason": None}]}
+            for t in chunks
+        ]
+        if finish:
+            events.append({"choices": [{"delta": {}, "finish_reason": finish}]})
+        return httpx.Response(
+            200,
+            text="".join("data: " + json.dumps(e) + "\n\n" for e in events)
+            + "data: [DONE]\n\n",
+        )
+
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kw: real_client(transport=httpx.MockTransport(handle), **kw),
+    )
+    runtime = Runtime(tmp_path)
+    runtime.process = object()
+
+    async def ready():
+        pass
+
+    async def progress(text):
+        received.append(text)
+
+    monkeypatch.setattr(runtime, "ensure", ready)
+    runtime.on_judge_token = progress
+    trace = {}
+    if finish == "stop":
+        result = await runtime.judge([{"role": "user", "content": "text"}], trace)
+        assert result["passed"] is True
+    else:
+        with pytest.raises(ValueError, match="partial output retained"):
+            await runtime.judge([], trace)
+    assert received == chunks
+    assert trace["raw_response"] == "".join(chunks)
+    assert len(trace["response_chunks"]) >= 2
