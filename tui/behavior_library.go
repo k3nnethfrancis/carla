@@ -27,14 +27,14 @@ func (m *model) openBehaviorLibrary() tea.Cmd {
 	for _, b := range m.data.BehaviorLibrary {
 		d.rows = append(d.rows, row{id: b.ID, label: b.Name, preview: b.Spec})
 	}
-	d.rows = append(d.rows, row{id: "new", label: "+ New behavior", preview: "Write a reusable spec. Add copies to judges in Monitoring, Selection or Evals."})
+	d.rows = append(d.rows, row{id: "new", label: "+ New behavior", preview: "Write a reusable spec. Add copies to policies in Monitoring, Selection or Evals."})
 	m.dialog = d
 	return nil
 }
 func (m *model) openBehaviorLibraryPicker(parent *dialog, kind string, args map[string]any) tea.Cmd {
 	d := &dialog{kind: kind, title: "From library", parent: parent, args: args}
 	for _, b := range m.data.BehaviorLibrary {
-		d.rows = append(d.rows, row{id: b.ID, label: b.Name, preview: b.Spec})
+		d.rows = append(d.rows, row{id: b.ID, label: b.Name, preview: libraryImportHelp(kind) + b.Spec})
 	}
 	if len(d.rows) == 0 {
 		m.status = "No saved specs. Create one with /behaviors first"
@@ -130,4 +130,11 @@ func (m *model) saveLibraryEditor(text string) tea.Cmd {
 		args["name"] = b.Name
 	}
 	return m.submitEditor("behavior.save", args)
+}
+
+func libraryImportHelp(kind string) string {
+	if kind == "eval-policy-behavior-library" || kind == "operational-policy-library-selection" {
+		return "Imports Off. Review complete-trace wording and Pass when, then enable.\n"
+	}
+	return ""
 }

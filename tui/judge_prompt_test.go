@@ -150,7 +150,11 @@ func TestJudgeTemplateEditorHeadings(t *testing.T) {
 	for _, m := range []*model{selection, evaluation} {
 		m.width, m.height = 120, 36
 		m.reflow()
-		if !strings.Contains(ansi.Strip(m.View().Content), m.editReturn.title+" · Prompt template") {
+		heading := "Prompt template"
+		if m.editing == "policy_prompt" {
+			heading = "Choice template"
+		}
+		if !strings.Contains(ansi.Strip(m.View().Content), m.editReturn.title+" · "+heading) {
 			t.Fatal("missing judge template heading", ansi.Strip(m.View().Content))
 		}
 	}

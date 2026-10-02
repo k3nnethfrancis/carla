@@ -131,6 +131,24 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 			}
 			return m.saveSelectionBehavior(id, map[string]any{"enabled": !enabled})
 
+		case "behavior-expected":
+			id := m.operationalBehaviorID()
+			for _, b := range m.selectionBehaviors() {
+				if b["id"] == id {
+					value, _ := b["expected"].(string)
+					return m.saveSelectionBehavior(id, map[string]any{"expected": nextExpected(value)})
+				}
+			}
+			return nil
+		case "selection_call_mode":
+			m.dialog = &dialog{kind: "selection-call-mode", title: "Call mode", parent: d, rows: []row{{id: "separate", label: "Separate", preview: "One independent request per enabled behavior."}, {id: "bundled", label: "Bundled", preview: "One request for all behaviors; opens a warning before changing."}}}
+			return nil
+		case "assessment-prompt":
+			cmd := m.beginEdit("selection_assessment_prompt")
+			if m.editing == "selection_assessment_prompt" {
+				m.dialog = nil
+			}
+			return cmd
 		case "judge":
 			m.openSelectionJudge()
 			m.dialog.parent = d

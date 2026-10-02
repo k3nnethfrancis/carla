@@ -134,6 +134,8 @@ type state struct {
 	Settings                  settings
 	PolicySpec                string `json:"policy_spec"`
 	PolicyPrompt              string `json:"policy_prompt"`
+	SelectionAssessmentPrompt string `json:"selection_assessment_prompt"`
+	SelectionCallMode         string `json:"selection_call_mode"`
 	PolicyModel               string `json:"policy_model"`
 	Annotations               []annotation
 	SimulatorConfig           map[string]any    `json:"simulator_config"`
@@ -487,8 +489,8 @@ func (m *model) beginEdit(kind string) tea.Cmd {
 		text = m.dimension(m.behaviorEditID).Spec
 	} else if kind == "policy_spec" {
 		text = m.selectionSpec()
-	} else if kind == "policy_prompt" {
-		text = m.selectionString("policy_prompt")
+	} else if kind == "policy_prompt" || kind == "selection_assessment_prompt" {
+		text = m.selectionString(kind)
 	} else if m.data.Current == nil {
 		return nil
 	}

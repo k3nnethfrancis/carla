@@ -54,7 +54,9 @@ const evaluationJudgesHelp = "Criteria + model used by named evaluations.\nChoos
 func (m *model) openSelectionJudge() tea.Cmd {
 	m.dialog = &dialog{kind: "grow-config", title: "Selection judge", rows: []row{
 		{id: "selector", label: "Model · " + m.selectionModelName() + " (LLM)", preview: "The local instruction-following model used to assess alternatives."},
-		{id: "prompt", label: "Prompt template", preview: "Judges candidates together in one request. The prompt defines the required JSON selection response; separate behavior calls are not used."},
+		{id: "prompt", label: "Choice template", preview: "Chooses among qualified candidates after behavior assessment. Saving changes requires confirmation."},
+		{id: "assessment-prompt", label: "Assessment template", preview: "Assesses behavior presence on each complete candidate. Saving changes requires confirmation."},
+		{id: "selection_call_mode", label: "Call mode · " + selectionCallModeLabel(m.selectionString("selection_call_mode")), preview: "Separate assesses each behavior independently. Bundled shares one request; changing to it shows a warning."},
 	}}
 	return nil
 }
@@ -64,9 +66,9 @@ func (m *model) openSelectionBehaviors() tea.Cmd {
 		id, _ := b["id"].(string)
 		name, _ := b["name"].(string)
 		spec, _ := b["spec"].(string)
-		d.rows = append(d.rows, row{id: id, label: name, preview: "Criteria applied to candidates. " + spec})
+		d.rows = append(d.rows, row{id: id, label: name + behaviorEnabledSuffix(b), preview: "Criteria applied to complete candidates. " + spec})
 	}
-	d.rows = append(d.rows, row{id: "new-behavior", label: "+ New behavior", preview: "Add another named criterion to this policy."}, row{id: "library-behavior", label: "From library", preview: "Copy a saved behavior definition into this policy."})
+	d.rows = append(d.rows, row{id: "new-behavior", label: "+ New behavior", preview: "Add another named criterion to this policy."}, row{id: "library-behavior", label: "From library", preview: "Import Off. Review whole-trace wording and Pass when before enabling."})
 	m.dialog = d
 	return nil
 }
@@ -75,11 +77,12 @@ func (m *model) openSelectionBehavior() tea.Cmd {
 	if id == "" {
 		id = "criteria"
 	}
-	name, spec, enabled := "Selection criteria", "", false
+	name, spec, expected, enabled := "Selection criteria", "", "present", false
 	for _, b := range m.selectionBehaviors() {
 		if b["id"] == id {
 			name, _ = b["name"].(string)
 			spec, _ = b["spec"].(string)
+			expected, _ = b["expected"].(string)
 			enabled, _ = b["enabled"].(bool)
 		}
 	}
@@ -89,7 +92,84 @@ func (m *model) openSelectionBehavior() tea.Cmd {
 	}
 	m.dialog = &dialog{kind: "grow-config", title: "Selection behavior", args: map[string]any{"selection_behavior": id}, rows: []row{
 		{id: "behavior-enabled", label: "Enabled · " + state, preview: "Include this criterion in the selection judge’s candidate assessment."},
-		{id: "spec", label: "Behavior spec · " + name, preview: "Defines which candidates qualify. " + spec},
+		{id: "spec", label: "Behavior spec · " + name, preview: "Describe behavior presence in the complete candidate. " + spec},
+		{id: "behavior-expected", label: "Pass when · " + expectedLabel(expected), preview: expectedHelp},
 	}}
 	return nil
+}
+
+const expectedHelp = "Judges detect whether the behavior is present. Choose Present to require it, or Absent to reject it. This changes pass/fail, not the recorded detection."
+
+func expectedLabel(value string) string {
+	if value == "absent" {
+		return "Absent"
+	}
+	return "Present"
+}
+func nextExpected(value string) string {
+	if value == "absent" {
+		return "present"
+	}
+	return "absent"
+}
+func selectionCallModeLabel(value string) string {
+	if value == "bundled" {
+		return "Bundled"
+	}
+	return "Separate"
+}
+func behaviorEnabledSuffix(b map[string]any) string {
+	if b["enabled"] == false {
+		return " · off"
+	}
+	return ""
+}
+
+func (m *model) submitSelectionCallMode(d *dialog) tea.Cmd {
+	if len(d.rows) == 0 {
+		return nil
+	}
+	id := d.rows[d.index].id
+	if d.kind == "selection-call-mode" && id == "bundled" {
+		m.dialog = &dialog{kind: "selection-call-bundled", title: "Use bundled calls?", parent: d.parent, rows: []row{{id: "cancel", label: "Keep Separate", preview: "One independent assessment per behavior."}, {id: "confirm", label: "Use Bundled", preview: "Fewer requests, but behaviors share one response and can affect each other’s scores. Compare results before relying on them."}}}
+		return nil
+	}
+	if id == "cancel" {
+		m.dialog = d.parent
+		return nil
+	}
+	mode := "separate"
+	if id == "confirm" {
+		mode = "bundled"
+	}
+	return m.saveDialog(d, "configure", map[string]any{"selection_call_mode": mode})
+}
+
+// Quick changes and Enter's picker share the same warning and save path.
+func (m *model) quickJudgeCallMode(d *dialog) (tea.Cmd, bool) {
+	if len(d.rows) == 0 || m.pending {
+		return nil, false
+	}
+	id := d.rows[d.index].id
+	if d.kind == "grow-config" && id == "selection_call_mode" {
+		mode := "bundled"
+		if m.selectionString("selection_call_mode") == "bundled" {
+			mode = "separate"
+		}
+		return m.submitSelectionCallMode(&dialog{kind: "selection-call-mode", parent: d, rows: []row{{id: mode}}}), true
+	}
+	if d.kind == "eval-policy-judge" && id == "call_mode" {
+		pid, _ := d.args["id"].(string)
+		p := m.findEvaluationPolicy(pid)
+		j, ok := d.args["judge"].(int)
+		if p == nil || !ok || j < 0 || j >= len(p.Judges) {
+			return nil, true
+		}
+		mode := "bundled"
+		if p.Judges[j].CallMode == "bundled" {
+			mode = "separate"
+		}
+		return m.submitPolicyJudge(&dialog{kind: "eval-policy-judge-call", parent: d, args: d.args, rows: []row{{id: mode}}}), true
+	}
+	return nil, false
 }

@@ -236,8 +236,25 @@ func (m *model) collectionItemView(e *evaluationRecord, width int) string {
 			}
 		}
 		text += fmt.Sprintf("\n%s · %s · revision %d\nJudge: %s\nCriteria: %s\n", status, j.Definition.Name, j.Definition.Revision, j.Definition.Model, j.Definition.Spec)
+		if j.Result.Expected != "" {
+			text += "Pass when: " + expectedLabel(j.Result.Expected) + "\n"
+		}
+		if j.Result.Observed != nil {
+			observed := "Absent"
+			if *j.Result.Observed {
+				observed = "Present"
+			}
+			text += "Observed: " + observed + "\n"
+		}
 		if j.Result.Probability != nil {
-			text += fmt.Sprintf("Probability: %.1f%%\n", *j.Result.Probability*100)
+			label := "Probability"
+			if j.Result.Expected != "" {
+				label = "Presence probability"
+			}
+			text += fmt.Sprintf("%s: %.1f%%\n", label, *j.Result.Probability*100)
+		}
+		if j.Result.DesiredProbability != nil {
+			text += fmt.Sprintf("Desired outcome probability: %.1f%%\n", *j.Result.DesiredProbability*100)
 		}
 		text += j.Result.Reason + "\n" + j.Result.Evidence + "\n" + j.Error
 	}

@@ -45,7 +45,7 @@ async def start(session, args, request_id, eval_plan):
         p.data.get("selection_enabled", False),
         action,
         count,
-        session.policy_model,
+        session.selection_model(),
         behaviors=p.data.get("selection_behaviors"),
     )
     policy_config = policy_overrides.monitoring(simulator.configuration(p, alias), args)
@@ -194,7 +194,7 @@ async def run(
             await explore(
                 p,
                 loops,
-                session.policy_model,
+                session.selection_model(),
                 session.runtime_factory,
                 batch,
                 advance,

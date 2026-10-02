@@ -495,10 +495,16 @@ func (m *model) View() tea.View {
 				body = m.document.View()
 			}
 			if m.editing != "" {
-				if (strings.HasPrefix(m.editing, "policy-") || m.editing == "policy_prompt" || m.editing == "library-spec") && m.editReturn != nil {
+				if (strings.HasPrefix(m.editing, "policy-") || m.editing == "policy_prompt" || m.editing == "selection_assessment_prompt" || m.editing == "library-spec") && m.editReturn != nil {
 					title = m.editReturn.title + " · Spec"
-					if m.editing == "policy-judge-prompt" || m.editing == "policy_prompt" {
+					if m.editing == "policy-judge-prompt" || m.editing == "policy_prompt" || m.editing == "selection_assessment_prompt" {
 						title = m.editReturn.title + " · Prompt template"
+						if m.editing == "selection_assessment_prompt" {
+							title = m.editReturn.title + " · Assessment template"
+						}
+						if m.editing == "policy_prompt" {
+							title = m.editReturn.title + " · Choice template"
+						}
 					}
 					if (m.editing == "policy-behavior-new" || m.editing == "library-spec") && len(m.editReturn.fields) > 0 {
 						title = m.editReturn.fields[0].input.Value() + " · Spec"

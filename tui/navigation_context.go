@@ -114,8 +114,6 @@ func (m *model) refreshConfig() {
 		m.openLibraryBehavior(d.args["id"].(string))
 	case "operational-policy-list":
 		m.openOperationalPolicies(d.args["purpose"].(string))
-	case "eval-policy-actions":
-		m.openEvaluationActions(d.args["id"].(string))
 	case "eval-policy-list":
 		m.openEvaluationPolicies()
 	case "eval-policy-config":

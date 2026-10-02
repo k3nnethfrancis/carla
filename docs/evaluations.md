@@ -17,9 +17,10 @@ a selected branch is not automatically an anthology or training member.
 
 `/policy` has the same entry point in every tab: **Monitoring**, **Selection**,
 and **Evals**. Each category holds named policies. A policy owns **Behaviors**,
-**Judge** settings and **Actions**; monitoring also has a **Heartbeat**. These are
-siblings: behaviors define what to assess, the judge defines how to assess it,
-and actions determine what Carla does with the result.
+**Judge** settings and the role’s result handling. Monitoring also has a
+**Heartbeat** and Warn/Stop actions; Evals has **On pass**. Behaviors define what
+to assess, the judge defines how to assess it, and the role determines how results
+are used.
 
 On the Monitoring or Selection policy list, **Space** or **Left/Right** toggles
 the focused policy’s **On/Off** setting. **Enter** opens it. Turning a policy On
@@ -35,6 +36,8 @@ through either route affect the same policy. Data collections remain independent
 spec into a policy to copy its current revision, then configure the enabled state
 and detection or passing rules for that use. Editing a library spec does not
 silently change policies already using a copy, or any historical results.
+Imports into Selection and Evals start Off. Review the wording and **Pass when**
+before enabling them, especially specs originally written for a monitoring heartbeat.
 
 ## Monitoring
 
@@ -61,14 +64,19 @@ and fail open. Scores are model estimates, not calibrated guarantees.
 
 ## Selection
 
-Open `/policy` → Selection → a policy → **Judge** to configure the local instruct
-evaluator and its **Prompt template**. Saving a changed template asks for
-confirmation because the instructions and response contract affect judging.
-Cancel preserves the editable draft. Open **Behaviors** beside Judge to create or import criteria and enable
-the ones to use. Enabled specs are combined in one candidate-set judgment.
-Selection still uses one configured local LLM, with one candidate-set call rather
-than monitoring’s separate/bundled call switch. The generator's raw prompt never receives these
-instructions. The selector receives candidate text and criteria separately.
+Open `/policy` → Selection → a policy → **Judge** to choose a registered local
+instruct model, **Call mode**, **Assessment template**, and **Choice template**.
+Saving a changed template requires confirmation; cancelling preserves the draft.
+
+Each enabled behavior is first assessed against each complete candidate. **Pass
+when · Present/Absent** determines whether that observation is wanted. Separate
+makes one assessment call per candidate and behavior; Bundled assesses all enabled
+behaviors in one call per candidate. Only candidates passing every behavior reach
+the final choice call, which uses the existing choice template to compare them.
+This adds assessment calls before selection. Both assessment and choice records
+retain exact inputs, outputs and evidence. Failed assessments exclude that candidate;
+if errors leave none eligible, the run reports failure rather than a criteria result.
+The generator’s raw prompt never receives either judge template.
 
 Selection triggers only when it is **On**, the Loom has **2 or more alternatives**,
 and `--loops` is **explicitly supplied**. Bare `/loom`, `/continue`, and `/loom 4`
@@ -78,7 +86,7 @@ Use `--selection on|off` to override the saved setting for one run. Explicit On
 requires at least two alternatives and `--loops`; invalid combinations fail early.
 
 With Selection On, `/loom 3 --tokens 512 --loops 4` creates three candidates per loop, classifies them
-and advances one eligible path. The classifier must review every candidate with
+and advances one eligible path. The final chooser must review every eligible candidate with
 `explore` or `pass`, a reason and matching evidence; `selected` identifies one
 eligible candidate or null. Here `pass` means skip this candidate, not a passing
 evaluation grade. No eligible candidate means no further expansion. On the last
@@ -87,7 +95,7 @@ The same loop mechanism operates on Simulator conversation extensions.
 
 The generator unloads before local selection judging. Exact candidate context,
 criteria, prompt and response are retained. Preserve the JSON contract if editing
-the classifier prompt; malformed responses remain errors.
+the choice prompt; malformed responses remain errors.
 
 ## Data, Policies and Runs
 
@@ -96,7 +104,7 @@ Evaluate has three views:
 - **Data** contains saved document versions and conversation traces. Collections
   organize those inputs; adding data does not call a model.
 - **Policies** contains assessment definitions: a shared set of behaviors, judge
-  settings and actions. Each judge owns its model and call settings and assesses
+  settings and an On pass setting. Each judge owns its model and call settings and assesses
   the same enabled policy behaviors. A policy is independent of its input data.
 - **Runs** contains the results of applying a policy to data. Each run preserves
   the input revisions and behavior configurations actually used.
@@ -110,7 +118,11 @@ Open **Policies → a policy** to configure assessment:
 - **Judge:** choose the model, call mode and, for an LLM, the assessment prompt
   template. Changed templates require confirmation before saving.
 - **Behavior:** give it a name and spec, enable or disable it, and configure its
-  passing threshold for classifier output. All configured judges assess it.
+  **Pass when · Present/Absent** setting. All configured judges assess it. For
+  classifiers, the threshold applies to the probability of the desired outcome:
+  with Absent selected, `P(absent) = 1 - P(present)`. The original observed
+  probability is retained. LLMs report a boolean observation plus reason/evidence;
+  Carla compares it with Pass when without inventing confidence probabilities.
 
 **Separate** calls assess one enabled behavior per request. **Bundled** calls
 assess the policy’s enabled behaviors together for each judge. Bundling reduces request count,
@@ -122,9 +134,8 @@ Set the active policy to choose what bare `/eval` runs. Monitoring and Selection
 remain separately enabled operational policies. They each use one supported
 operational judge, configured directly in **Judge** beside **Behaviors**. Evals
 opens one judge directly; with multiple judges, **Judges** lists their settings.
-Monitoring retains heartbeat and warn/stop actions. Selection retains its
-candidate-set review and choice contract; it does not expose a bundled/separate
-switch for a different algorithm.
+Monitoring retains heartbeat and warn/stop actions. Selection uses the shared
+whole-item assessment engine, then its own candidate-set choice contract.
 
 Select data and run `/eval`, or choose a policy explicitly:
 
@@ -138,6 +149,8 @@ Select data and run `/eval`, or choose a policy explicitly:
 The name identifies a **policy**, not a data collection. Each judge assesses all
 enabled policy behaviors on the targeted items. Judges run sequentially; Call
 mode determines whether each judge assesses the behaviors separately or together.
+Each local LLM judge resolves its own registered model. Model switches unload the
+previous local LLM before loading the next; an unavailable model fails visibly.
 Generation `--eval`
 freezes the chosen configuration before generation and evaluates completed outputs
 without altering generation prompts. Cancellation does not start an evaluation
@@ -159,7 +172,14 @@ not changes to the file behind an alias. Execution traces retain the actual mode
 configuration. Editing source text
 requires capturing the new version; it never rewrites a previously evaluated item.
 Whole-item judging includes inherited document text or the saved conversation,
-without silent truncation. Inputs exceeding model context fail visibly.
+without shortening the input in Carla. Scope is explicitly the whole supplied
+item for Evals and Selection, including when a reused spec mentions the latest
+message. Review imported wording so it expresses the intended full-trace criterion.
+Local LLMs check the rendered prompt against their context capacity before inference.
+Classifier context enforcement belongs to their service; Carla preserves service
+failures as incomplete assessments. LLM judge calls currently use temperature 0,
+1536 output tokens and thinking disabled; these runtime defaults are not yet
+per-judge controls.
 
 Existing named evaluations migrate into data collections and policies. Their
 saved judgments remain intact and available in run history. Older policies with
@@ -186,8 +206,8 @@ examples too. `/eval --train-on-pass true` marks only items whose judges all pas
 in that run; it does not undo an earlier manual training selection.
 
 `/notes` records item notes. Notes/training changes have metadata histories.
-The Evals policy’s Actions can enable marking passing items for training by
-default. An explicit `--train-on-pass true|false` overrides that default for `/eval`.
+The Evals policy’s **On pass** setting chooses **Record only** or **Mark for training**
+by default. An explicit `--train-on-pass true|false` overrides that default for `/eval`.
 Generation `--eval` uses the named policy’s saved default.
 
 `/export` saves explicitly selected items, or the entire open collection, under

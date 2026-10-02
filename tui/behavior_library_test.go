@@ -34,7 +34,7 @@ func TestImportBehaviorLibraryKeepsLocalSettings(t *testing.T) {
 	var behaviors []evaluationBehavior
 	json.Unmarshal(req.Args["behaviors"], &behaviors)
 	b := behaviors[len(behaviors)-1]
-	if b.SourceID != "lib" || b.SourceRevision != 3 || b.Spec != "Stable voice" || !b.Enabled || b.Threshold != .8 {
+	if b.SourceID != "lib" || b.SourceRevision != 3 || b.Spec != "Stable voice" || b.Enabled || b.Expected != "present" || b.Threshold != .8 {
 		t.Fatal(b)
 	}
 	if m.dialog.kind != "eval-policy-behaviors" {
@@ -64,7 +64,8 @@ func TestLibraryCreateUsesMultilineAndCorrelatedSave(t *testing.T) {
 func TestEvalActionDefaultAndExplicitOverride(t *testing.T) {
 	m := evalFixture()
 	m.data.EvaluationPolicies[0].Actions.TrainOnPass = true
-	m.openEvaluationActions("policy")
+	m.openEvaluationPolicy("policy")
+	m.dialog.index = 3
 	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
 	var actions evaluationActions
 	json.Unmarshal(req.Args["actions"], &actions)

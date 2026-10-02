@@ -51,7 +51,7 @@ func (m *model) evaluationAreaRows() []row {
 	rows := []row{{id: "back", kind: "eval-back", label: "← Evaluate"}}
 	switch m.evalArea {
 	case "policies":
-		rows = append(rows, row{id: "new", kind: "eval-policy-new", label: "+ New policy", preview: "Choose behaviors, judges and actions."})
+		rows = append(rows, row{id: "new", kind: "eval-policy-new", label: "+ New policy", preview: "Choose behaviors and judges to assess complete documents or conversations."})
 		for _, p := range m.data.EvaluationPolicies {
 			label := p.Name
 			if p.ID == m.data.ActiveEvaluationPolicy {
@@ -65,7 +65,7 @@ func (m *model) evaluationAreaRows() []row {
 			rows = append(rows, row{id: r.ID, kind: "eval-run", label: fmt.Sprintf("%d · %s · %s", i+1, r.Policy.Name, evaluationStatus(evaluationSummary{Status: r.Status, Passed: r.Passed})), preview: fmt.Sprintf("%s · %d/%d assessed · policy revision %d", r.Created, r.Completed, r.Count, r.Policy.Revision)})
 		}
 	default:
-		return []row{{id: "data", kind: "eval-area", label: "Data", preview: "Documents and conversation traces to assess."}, {id: "policies", kind: "eval-area", label: "Policies", preview: "Configure behaviors, judges and actions. Active: " + m.activePolicyName()}, {id: "runs", kind: "eval-area", label: "Runs", preview: "Results of applying policies to data, with frozen inputs and configuration."}}
+		return []row{{id: "data", kind: "eval-area", label: "Data", preview: "Documents and conversation traces to assess."}, {id: "policies", kind: "eval-area", label: "Policies", preview: "Configure behaviors and judges for complete traces. Active: " + m.activePolicyName()}, {id: "runs", kind: "eval-area", label: "Runs", preview: "Results of applying policies to data, with frozen inputs and configuration."}}
 	}
 	return rows
 }
@@ -100,11 +100,15 @@ func (m *model) openEvaluationPolicy(id string) tea.Cmd {
 	if len(p.Judges) == 1 {
 		judgeLabel = "Judge · " + m.evaluatorModelName(evaluator{Kind: p.Judges[0].Kind, Model: p.Judges[0].Model})
 	}
+	onPass := "Record only"
+	if p.Actions.TrainOnPass {
+		onPass = "Mark for training"
+	}
 	m.dialog = &dialog{kind: "eval-policy-config", title: p.Name, args: map[string]any{"id": p.ID}, rows: []row{
 		{id: "name", label: "Name · " + p.Name, preview: "Name used by /eval and /loom --eval."},
-		{id: "behaviors", label: fmt.Sprintf("Behaviors · %d", len(p.Behaviors)), preview: "Criteria assessed by every judge in this policy. All enabled behaviors must pass with every judge."},
+		{id: "behaviors", label: fmt.Sprintf("Behaviors · %d", len(p.Behaviors)), preview: "Every judge receives the complete saved document or conversation. All enabled behaviors must pass with every judge. Inputs that exceed context must fail visibly."},
 		{id: "judges", label: judgeLabel, preview: "Configure the models, prompts and call settings used to assess this policy’s behaviors."},
-		{id: "actions", label: "Actions", preview: "Choose what happens when data passes this policy."},
+		{id: "on-pass", label: "On pass · " + onPass, preview: "Always record results. Optionally mark passing items for training. /eval --train-on-pass true|false overrides this for one run."},
 		{id: "active", label: active, preview: "Use this policy when /eval has no explicit policy name."},
 		{id: "delete", label: "Remove policy…", preview: "Remove this configuration; historical results remain."}}}
 	return nil
@@ -130,11 +134,6 @@ func (m *model) submitEvaluationPolicy(d *dialog) tea.Cmd {
 	if p == nil && d.kind != "eval-policy-list" {
 		return nil
 	}
-	if d.kind == "eval-policy-actions" {
-		draft := *p
-		draft.Actions.TrainOnPass = !draft.Actions.TrainOnPass
-		return m.savePolicyDraft(&dialog{parent: d}, draft)
-	}
 	if d.kind == "eval-policy-name" {
 		return m.saveDialog(d, "evaluation.policy.save", map[string]any{"id": p.ID, "name": d.fields[0].input.Value(), "judges": p.Judges, "behaviors": p.Behaviors, "actions": p.Actions})
 	}
@@ -159,9 +158,10 @@ func (m *model) submitEvaluationPolicy(d *dialog) tea.Cmd {
 		return nil
 	}
 	switch r.id {
-	case "actions":
-		m.openEvaluationActions(p.ID)
-		m.dialog.parent = d
+	case "on-pass":
+		draft := *p
+		draft.Actions.TrainOnPass = !draft.Actions.TrainOnPass
+		return m.savePolicyDraft(&dialog{parent: d}, draft)
 	case "name":
 		m.dialog = &dialog{kind: "eval-policy-name", title: "Policy name", parent: d, args: d.args}
 		m.dialog.add("Name", p.Name)
@@ -248,17 +248,4 @@ func (m *model) evaluationRunStale(id string) bool {
 		}
 	}
 	return false
-}
-
-func (m *model) openEvaluationActions(id string) tea.Cmd {
-	p := m.findEvaluationPolicy(id)
-	if p == nil {
-		return nil
-	}
-	value := "Off"
-	if p.Actions.TrainOnPass {
-		value = "On"
-	}
-	m.dialog = &dialog{kind: "eval-policy-actions", title: p.Name + " · Actions", args: map[string]any{"id": id}, rows: []row{{id: "train", label: "Train on pass · " + value, preview: "Mark passing items for training. /eval --train-on-pass true|false overrides this default for one run."}}}
-	return nil
 }

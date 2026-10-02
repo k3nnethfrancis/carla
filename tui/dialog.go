@@ -95,6 +95,9 @@ func (d *dialog) add(label, value string) {
 	d.fields = append(d.fields, field{label, i})
 }
 func (m *model) submitDialog() tea.Cmd {
+	if m.dialog != nil && (m.dialog.kind == "selection-call-mode" || m.dialog.kind == "selection-call-bundled") {
+		return m.submitSelectionCallMode(m.dialog)
+	}
 	if m.dialog != nil && m.dialog.kind == "judge-prompt-confirm" {
 		return m.submitJudgePromptConfirmation()
 	}
@@ -294,10 +297,18 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.helpKey(msg)
 	}
 	d := m.dialog
-	if d.kind == "eval-policy-actions" && (msg.Code == tea.KeySpace || msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight) {
+	if msg.Code == tea.KeySpace || msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight {
+		if cmd, ok := m.quickJudgeCallMode(d); ok {
+			return cmd
+		}
+	}
+	if d.kind == "grow-config" && len(d.rows) > 0 && (d.rows[d.index].id == "behavior-enabled" || d.rows[d.index].id == "behavior-expected") && (msg.Code == tea.KeySpace || msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight) {
+		return m.configureChoice(d, d.rows[d.index])
+	}
+	if d.kind == "eval-policy-config" && len(d.rows) > 0 && d.rows[d.index].id == "on-pass" && (msg.Code == tea.KeySpace || msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight) {
 		return m.submitEvaluationPolicy(d)
 	}
-	if d.kind == "eval-policy-behavior" && len(d.rows) > 0 && d.rows[d.index].id == "enabled" && (msg.Code == tea.KeySpace || msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight) {
+	if d.kind == "eval-policy-behavior" && len(d.rows) > 0 && (d.rows[d.index].id == "enabled" || d.rows[d.index].id == "expected") && (msg.Code == tea.KeySpace || msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight) {
 		return m.submitPolicyJudge(d)
 	}
 	if d.kind == "config-number" {

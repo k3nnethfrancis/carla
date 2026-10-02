@@ -12,7 +12,7 @@ func (m *model) saveEditor() tea.Cmd {
 	if m.pending || m.data.Busy {
 		return nil
 	}
-	if m.editing != "policy_prompt" && m.editing != "policy-judge-prompt" {
+	if m.editing != "policy_prompt" && m.editing != "selection_assessment_prompt" && m.editing != "policy-judge-prompt" {
 		return m.persistEditor()
 	}
 	previous, ok := m.currentJudgePrompt()
@@ -29,16 +29,23 @@ func (m *model) saveEditor() tea.Cmd {
 		return m.persistEditor()
 	}
 	warning := "Changing this template affects how the judge assesses behaviors and its required response format. Invalid output can make judging fail."
-	m.dialog = &dialog{kind: "judge-prompt-confirm", title: "Replace judge prompt template?", rows: []row{{id: "cancel", label: "Keep editing", preview: warning}, {id: "confirm", label: "Replace template", preview: warning + " Save this template for future runs."}}}
+	title := "Replace judge prompt template?"
+	if m.editing == "policy_prompt" {
+		title = "Replace choice template?"
+	}
+	if m.editing == "selection_assessment_prompt" {
+		title = "Replace assessment template?"
+	}
+	m.dialog = &dialog{kind: "judge-prompt-confirm", title: title, rows: []row{{id: "cancel", label: "Keep editing", preview: warning}, {id: "confirm", label: "Replace template", preview: warning + " Save this template for future runs."}}}
 	return nil
 }
 func (m *model) currentJudgePrompt() (string, bool) {
-	if m.editing == "policy_prompt" {
+	if m.editing == "policy_prompt" || m.editing == "selection_assessment_prompt" {
 		purpose, id := m.operationalContext()
 		if purpose == "selection" && id != "" && m.operationalPolicy(purpose, id).ID == "" {
 			return "", false
 		}
-		return m.selectionString("policy_prompt"), true
+		return m.selectionString(m.editing), true
 	}
 	d := m.editReturn
 	if d == nil {

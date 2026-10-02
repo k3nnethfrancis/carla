@@ -75,6 +75,10 @@ func (m *model) selectionValue(key string) any {
 		return m.data.PolicySpec
 	case "policy_prompt":
 		return m.data.PolicyPrompt
+	case "selection_assessment_prompt":
+		return m.data.SelectionAssessmentPrompt
+	case "selection_call_mode":
+		return m.data.SelectionCallMode
 	case "model_alias":
 		return m.data.PolicyModel
 	}
@@ -181,6 +185,7 @@ func (m *model) submitOperationalPolicy(d *dialog) tea.Cmd {
 		m.dialog = d.parent
 		values := map[string]any{"name": b.Name, "spec": b.Spec, "source_id": b.ID, "source_revision": b.Revision, "enabled": true}
 		if d.kind == "operational-policy-library-selection" {
+			values["enabled"], values["expected"] = false, "present"
 			return m.saveSelectionBehavior("", values)
 		}
 		values["action"], values["color"], values["decision"], values["threshold"] = "warn", "amber", "most_likely", .8
@@ -236,7 +241,7 @@ func (m *model) routeOperationalMutation(command string, args map[string]any) (s
 			return command, args
 		}
 		for key := range args {
-			if key != "selection_enabled" && key != "policy_spec" && key != "policy_prompt" && key != "selection_behaviors" && key != "model_alias" {
+			if key != "selection_enabled" && key != "policy_spec" && key != "policy_prompt" && key != "selection_behaviors" && key != "model_alias" && key != "selection_assessment_prompt" && key != "selection_call_mode" {
 				return command, args
 			}
 		}
@@ -307,7 +312,7 @@ func (m *model) selectionBehaviors() []map[string]any {
 	var out []map[string]any
 	b, _ := json.Marshal(m.operationalConfig()["selection_behaviors"])
 	json.Unmarshal(b, &out)
-	if len(out) == 0 {
+	if out == nil {
 		out = []map[string]any{{"id": "criteria", "name": "Selection criteria", "spec": m.selectionString("policy_spec"), "enabled": true}}
 	}
 	return out

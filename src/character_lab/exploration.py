@@ -10,6 +10,7 @@ import json
 import uuid
 from pathlib import Path
 
+from . import assessments
 from .domain import now
 from .policy import DEFAULT_PROMPT, DEFAULT_SPEC, validate
 
@@ -19,14 +20,76 @@ def require_selector(model):
         raise ValueError("Configure a selection model in /policy before using --loops")
 
 
+async def assess_candidate(project, candidate, run, judge, assessment):
+    """Persist each attempted behavior call, including failures and cancellation."""
+    judge_config = run["assessment_judge"]
+    records = assessment["records"]
+    records.extend(
+        dict(
+            text=candidate["text"],
+            definition={
+                **b,
+                **judge_config,
+                "scope": "whole",
+                "expected": b.get("expected", "present"),
+                "threshold": b.get("threshold", 0.8),
+            },
+            status="queued",
+        )
+        for b in run["behaviors"]
+    )
+    groups = (
+        [records] if judge_config["call_mode"] == "bundled" else [[r] for r in records]
+    )
+    for group in groups:
+        for record in group:
+            record["status"] = "running"
+        project.save()
+        try:
+            results = await assessments.assess_group(group, judge)
+            for record, result in zip(group, results):
+                record.update(status="complete", result=result)
+        except asyncio.CancelledError:
+            for record in group:
+                record["status"] = "stopped"
+            raise
+        except Exception as exc:
+            # A failed call is unknown, never evidence that a criterion failed.
+            for record in group:
+                record.update(status="failed", error=str(exc))
+        finally:
+            project.save()
+    assessment["eligible"] = all(
+        r["status"] == "complete" and r["result"]["passed"] for r in records
+    )
+
+
 async def explore(project, loops, model, runtime_factory, batch, advance, emit):
     """batch() returns immutable candidate views; advance() changes the next seed."""
     require_selector(model)
-    behaviors = project.data.get("selection_behaviors")
+    behaviors = copy.deepcopy(project.data.get("selection_behaviors"))
     if behaviors is not None and not any(b.get("enabled", True) for b in behaviors):
         raise ValueError(
             "Enable at least one selection behavior before using selection"
         )
+    if behaviors is None:
+        behaviors = [
+            dict(
+                id="criteria",
+                name="Selection criteria",
+                spec=project.data.get("policy_spec", DEFAULT_SPEC),
+                enabled=True,
+            )
+        ]
+    behaviors = [b for b in behaviors if b.get("enabled", True)]
+    assessment_judge = dict(
+        kind="llm",
+        model=model.get("alias") or model.get("name", ""),
+        prompt=project.data.get(
+            "selection_assessment_prompt", assessments.DEFAULT_PROMPT
+        ),
+        call_mode=project.data.get("selection_call_mode", "separate"),
+    )
     run = dict(
         id=uuid.uuid4().hex[:12],
         created=now(),
@@ -34,7 +97,9 @@ async def explore(project, loops, model, runtime_factory, batch, advance, emit):
         loops=loops,
         steps=[],
         selected=None,
-        policy_model=model.copy(),
+        policy_model=copy.deepcopy(model),
+        behaviors=behaviors,
+        assessment_judge=assessment_judge,
         spec=project.data.get("policy_spec", DEFAULT_SPEC),
         prompt=project.data.get("policy_prompt", DEFAULT_PROMPT),
     )
@@ -53,7 +118,7 @@ async def explore(project, loops, model, runtime_factory, batch, advance, emit):
         raise ValueError("Selection criteria and prompt are required in /policy")
     project.data.setdefault("policy_runs", []).append(run)
     project.save()
-    judge = runtime_factory(project.folder, model)
+    judge = runtime_factory(project.folder, run["policy_model"])
     try:
         for index in range(loops):
             step = dict(
@@ -66,17 +131,64 @@ async def explore(project, loops, model, runtime_factory, batch, advance, emit):
                 raise ValueError(
                     "No completed candidates to select; partial outputs are retained"
                 )
+            candidates = copy.deepcopy(candidates)
             step["candidates"] = [c["id"] for c in candidates]
+            step["inputs"] = candidates
+            step["assessments"] = []
+            eligible = []
+            step["status"] = "assessing"
+            await emit(
+                "operation", dict(stage="assessing", loop=index + 1, loops=loops)
+            )
+            for candidate in candidates:
+                assessment = dict(candidate=candidate["id"], records=[])
+                step["assessments"].append(assessment)
+                await assess_candidate(project, candidate, run, judge, assessment)
+                if assessment["eligible"]:
+                    eligible.append(candidate)
+            step["eligible"] = [c["id"] for c in eligible]
+            if not eligible:
+                errors = any(
+                    r["status"] == "failed"
+                    for a in step["assessments"]
+                    for r in a["records"]
+                )
+                if errors:
+                    raise ValueError(
+                        "No eligible candidate; some behavior assessments failed"
+                    )
+                step.update(
+                    status="complete",
+                    decision=dict(
+                        selected=None,
+                        reviews=[],
+                        reason="No candidate met every enabled behavior",
+                    ),
+                )
+                run.update(status="no_selection", selected=None)
+                break
             step["status"] = "selecting"
             state = dict(
                 spec=run["spec"],
+                behaviors=copy.deepcopy(run["behaviors"]),
                 candidates=[
                     dict(
                         node=c["id"],
                         parent=c["prompt"],
                         continuation=c["text"][len(c["prompt"]) :],
                     )
-                    for c in candidates
+                    for c in eligible
+                ],
+                assessments=[
+                    dict(
+                        candidate=a["candidate"],
+                        results=[
+                            dict(behavior=r["definition"]["id"], result=r["result"])
+                            for r in a["records"]
+                        ],
+                    )
+                    for a in step["assessments"]
+                    if a["eligible"]
                 ],
             )
             step["messages"] = [
@@ -89,7 +201,7 @@ async def explore(project, loops, model, runtime_factory, batch, advance, emit):
             )
             result = await judge.judge(step["messages"], step["trace"])
             step["raw_decision"] = result
-            step["decision"] = validate(result, candidates)
+            step["decision"] = validate(result, eligible)
             step["status"] = "complete"
             run["selected"] = result["selected"]
             project.save()
@@ -107,6 +219,12 @@ async def explore(project, loops, model, runtime_factory, batch, advance, emit):
         )
         if run["steps"]:
             run["steps"][-1]["status"] = run["status"]
+        if isinstance(exc, asyncio.CancelledError):
+            for step in run["steps"]:
+                for assessment in step.get("assessments", []):
+                    for record in assessment["records"]:
+                        if record["status"] in {"queued", "running"}:
+                            record["status"] = "stopped"
         raise
     finally:
         judge.close()

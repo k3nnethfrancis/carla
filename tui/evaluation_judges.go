@@ -26,6 +26,7 @@ type evaluationBehavior struct {
 	Name           string  `json:"name"`
 	Spec           string  `json:"spec"`
 	Threshold      float64 `json:"threshold"`
+	Expected       string  `json:"expected,omitempty"`
 	Enabled        bool    `json:"enabled"`
 	Revision       int     `json:"revision"`
 	SourceID       string  `json:"source_id,omitempty"`
@@ -110,7 +111,7 @@ func (m *model) openPolicyBehaviors(id string) tea.Cmd {
 		}
 		d.rows = append(d.rows, row{id: strconv.Itoa(k), label: label, preview: b.Spec})
 	}
-	d.rows = append(d.rows, row{id: "library", label: "From library", preview: "Copy a reusable behavior into this policy. Every judge assesses enabled behaviors."}, row{id: "new", label: "+ New behavior", preview: "Write criteria for every judge in this policy."})
+	d.rows = append(d.rows, row{id: "library", label: "From library", preview: "Import Off. Review its wording for the complete trace and choose Pass when before enabling."}, row{id: "new", label: "+ New behavior", preview: "Write criteria for every judge in this policy."})
 	m.dialog = d
 	return nil
 }
@@ -127,7 +128,15 @@ func (m *model) openPolicyBehavior(id string, k int) tea.Cmd {
 	if b.Enabled {
 		enabled = "On"
 	}
-	rows := []row{{id: "enabled", label: "Enabled · " + enabled, preview: "Off skips this behavior for all judges while preserving its settings."}, {id: "name", label: "Name · " + b.Name, preview: "Short name shown beside this behavior’s results."}, {id: "spec", label: "Behavior spec", preview: "Criteria every judge assesses. " + b.Spec}, {id: "threshold", label: fmt.Sprintf("Pass threshold · %.0f%%", b.Threshold*100), preview: "Classifier judges pass when P(criteria met) reaches this threshold. LLM judges return their own pass/fail judgment."}, {id: "library-save", label: "Save spec to library", preview: "Create a reusable spec. Threshold and enabled state stay in this policy."}, {id: "delete", label: "Remove behavior…", preview: "Remove from this policy. Past results retain the exact spec."}}
+	rows := []row{
+		{id: "enabled", label: "Enabled · " + enabled, preview: "Off skips this behavior for all judges while preserving its settings."},
+		{id: "name", label: "Name · " + b.Name, preview: "Short name shown beside this behavior’s results."},
+		{id: "spec", label: "Behavior spec", preview: "Describe what counts as this behavior in the complete document or conversation. " + b.Spec},
+		{id: "expected", label: "Pass when · " + expectedLabel(b.Expected), preview: expectedHelp},
+		{id: "threshold", label: fmt.Sprintf("Pass threshold · %.0f%%", b.Threshold*100), preview: "Classifier judges pass when confidence in the desired outcome reaches this threshold. LLM judges report presence; Pass when determines the outcome."},
+		{id: "library-save", label: "Save spec to library", preview: "Create a reusable spec. Threshold, Pass when and enabled state stay in this policy."},
+		{id: "delete", label: "Remove behavior…", preview: "Remove from this policy. Past results retain the exact spec."},
+	}
 	m.dialog = &dialog{kind: "eval-policy-behavior", title: b.Name, args: policyBehaviorArgs(id, k), rows: rows}
 	return nil
 }
@@ -278,7 +287,7 @@ func (m *model) submitPolicyJudge(d *dialog) tea.Cmd {
 		if b == nil {
 			return nil
 		}
-		p.Behaviors = append(p.Behaviors, evaluationBehavior{Name: b.Name, Spec: b.Spec, Enabled: true, Threshold: .8, SourceID: b.ID, SourceRevision: b.Revision})
+		p.Behaviors = append(p.Behaviors, evaluationBehavior{Name: b.Name, Spec: b.Spec, Enabled: false, Expected: "present", Threshold: .8, SourceID: b.ID, SourceRevision: b.Revision})
 		return m.savePolicyDraft(d, p)
 	case "eval-policy-behaviors":
 		if r.id == "library" {
@@ -295,6 +304,10 @@ func (m *model) submitPolicyJudge(d *dialog) tea.Cmd {
 		if r.id == "library-save" {
 			b := p.Behaviors[k]
 			return m.send("behavior.save", map[string]any{"name": b.Name, "spec": b.Spec})
+		}
+		if r.id == "expected" {
+			p.Behaviors[k].Expected = nextExpected(p.Behaviors[k].Expected)
+			return m.savePolicyDraft(&dialog{parent: d}, p)
 		}
 		if r.id == "enabled" {
 			p.Behaviors[k].Enabled = !p.Behaviors[k].Enabled

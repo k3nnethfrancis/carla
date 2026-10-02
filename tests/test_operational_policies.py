@@ -43,7 +43,10 @@ async def test_named_selection_roundtrip_and_legacy_sync(lab):
         "activate",
     )
     assert lab.project.data["selection_enabled"] is True
-    assert lab.project.data["policy_spec"] == "Keep a consistent voice"
+    assert (
+        lab.project.data["policy_spec"]
+        == "Voice (expected present): Keep a consistent voice"
+    )
     await lab.execute("policy.configure", {"selection_enabled": False}, "edit")
     assert saved["config"]["selection_enabled"] is False
     await lab.execute(
@@ -53,7 +56,8 @@ async def test_named_selection_roundtrip_and_legacy_sync(lab):
     )
     assert (
         lab.project.data["policy_spec"]
-        == initial["selection"][0]["config"]["policy_spec"]
+        == "Selection criteria (expected present): "
+        + initial["selection"][0]["config"]["policy_spec"]
     )
     await lab.execute(
         "operational.policy.delete",
@@ -188,7 +192,7 @@ async def test_invalid_policy_edits_atomic_and_server_ids(lab):
         "save",
     )
     assert all(b["id"] for b in saved["config"]["selection_behaviors"])
-    assert lab.project.data["policy_spec"] == "First"
+    assert lab.project.data["policy_spec"] == "One (expected present): First"
     with pytest.raises(ValueError, match="boolean"):
         evals.save(
             lab.project,
@@ -197,7 +201,7 @@ async def test_invalid_policy_edits_atomic_and_server_ids(lab):
 
 
 @pytest.mark.asyncio
-async def test_setup_and_reopen_reconcile_only_active_selection_model(
+async def test_setup_and_reopen_preserve_existing_named_selection_model(
     lab, monkeypatch, tmp_path
 ):
     from character_lab import setup_service
@@ -219,10 +223,10 @@ async def test_setup_and_reopen_reconcile_only_active_selection_model(
         for p in lab.project.data["operational_policies"]["selection"]
         if p["id"] == active_id
     )
-    assert active["config"]["model_alias"] == "new-selector"
+    assert active["config"]["model_alias"] == before["config"]["model_alias"]
     assert inactive == before
     revision = active["revision"]
-    # A different externally configured selector on startup updates only active.
+    # Reopening with another default model must not rewrite a named judge.
     assert ops.model_key({"alias": "alias-only"}) == "alias-only"
     lab.policy_model = {
         "alias": "external-selector",
@@ -236,15 +240,15 @@ async def test_setup_and_reopen_reconcile_only_active_selection_model(
         for p in lab.project.data["operational_policies"]["selection"]
         if p["id"] == active_id
     )
-    assert active["config"]["model_alias"] == "external-selector"
-    assert active["revision"] == revision + 1
+    assert active["config"]["model_alias"] == before["config"]["model_alias"]
+    assert active["revision"] == revision
     assert lab.project.data["operational_policies"]["selection"][-1] == before
-    with pytest.raises(ValueError, match="configured selection model"):
-        await lab.execute(
-            "operational.policy.activate",
-            dict(purpose="selection", id=inactive["id"]),
-            "old",
-        )
+    await lab.execute(
+        "operational.policy.activate",
+        dict(purpose="selection", id=inactive["id"]),
+        "old",
+    )
+    assert lab.selection_model()["alias"] == before["config"]["model_alias"]
 
 
 @pytest.mark.asyncio
@@ -647,3 +651,108 @@ async def test_legacy_sync_recreates_default_policy_name_after_empty_catalog(lab
     await lab.execute("policy.configure", {"selection_enabled": True}, "legacy")
     assert len(items) == 1 and items[0]["name"] == "Default policy"
     assert items[0]["config"]["selection_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_selection_assessment_settings_are_independent_of_choice_template(lab):
+    saved = lab.project.data["operational_policies"]["selection"][0]
+    chooser = saved["config"]["policy_prompt"]
+    await lab.execute(
+        "operational.policy.save",
+        dict(
+            purpose="selection",
+            id=saved["id"],
+            name=saved["name"],
+            config={
+                "selection_assessment_prompt": "Observe the behavior across the full input.",
+                "selection_call_mode": "bundled",
+                "selection_behaviors": [
+                    dict(
+                        id="harm",
+                        name="Harm",
+                        spec="Harmful speech",
+                        expected="absent",
+                        enabled=True,
+                    )
+                ],
+            },
+        ),
+        "save",
+    )
+    assert saved["config"]["policy_prompt"] == chooser
+    assert saved["config"]["selection_call_mode"] == "bundled"
+    assert saved["config"]["selection_behaviors"][0]["expected"] == "absent"
+    assert (
+        lab.project.data["selection_assessment_prompt"]
+        == saved["config"]["selection_assessment_prompt"]
+    )
+    before = copy.deepcopy(saved)
+    with pytest.raises(ValueError, match="Separate or Bundled"):
+        await lab.execute(
+            "operational.policy.save",
+            dict(
+                purpose="selection",
+                id=saved["id"],
+                name=saved["name"],
+                config={"selection_call_mode": "random"},
+            ),
+            "bad",
+        )
+    assert saved == before
+
+
+@pytest.mark.asyncio
+async def test_legacy_selection_projection_exposes_defaults_without_revision_change(
+    lab,
+):
+    from character_lab.assessments import DEFAULT_PROMPT
+
+    item = lab.project.data["operational_policies"]["selection"][0]
+    item["config"].pop("selection_assessment_prompt")
+    item["config"].pop("selection_call_mode")
+    before = copy.deepcopy(item)
+    for _ in range(2):
+        config = ops.summaries(lab.project)["selection"][0]["config"]
+        assert config["selection_assessment_prompt"] == DEFAULT_PROMPT
+        assert config["selection_call_mode"] == "separate"
+        assert item == before
+
+
+@pytest.mark.asyncio
+async def test_delete_custom_selection_resets_legacy_fallback_assessment_defaults(lab):
+    from character_lab.assessments import DEFAULT_PROMPT
+
+    items = lab.project.data["operational_policies"]["selection"]
+    fallback = items[0]
+    fallback["config"].pop("selection_assessment_prompt")
+    fallback["config"].pop("selection_call_mode")
+    await lab.execute(
+        "operational.policy.save",
+        dict(
+            purpose="selection",
+            name="Custom",
+            config={
+                "selection_assessment_prompt": "Custom observation instructions",
+                "selection_call_mode": "bundled",
+            },
+        ),
+        "create",
+    )
+    custom = items[-1]
+    await lab.execute(
+        "operational.policy.activate",
+        dict(purpose="selection", id=custom["id"]),
+        "activate",
+    )
+    assert lab.project.data["selection_call_mode"] == "bundled"
+    await lab.execute(
+        "operational.policy.delete",
+        dict(purpose="selection", id=custom["id"]),
+        "delete",
+    )
+    assert (
+        lab.project.data["active_operational_policies"]["selection"] == fallback["id"]
+    )
+    assert lab.project.data["selection_assessment_prompt"] == DEFAULT_PROMPT
+    assert lab.project.data["selection_call_mode"] == "separate"
+    assert lab.project.data["selection_enabled"] is False

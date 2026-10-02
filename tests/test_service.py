@@ -27,6 +27,11 @@ class FakeRuntime:
     async def judge(self, messages, trace):
         trace["messages"] = messages
         data = json.loads(messages[1]["content"])
+        if "text" in data:
+            result = dict(passed=True, reason="Criteria met", evidence=data["text"])
+            if "behaviors" in data:
+                return {"results": {b["id"]: result.copy() for b in data["behaviors"]}}
+            return result
         candidates = data["candidates"]
         return {
             "reviews": [
@@ -879,6 +884,8 @@ async def test_loops_validate_selector_before_generating(session):
 async def test_no_selection_does_not_start_an_extra_loop(session, monkeypatch):
     async def none(self, messages, trace):
         data = json.loads(messages[1]["content"])
+        if "text" in data:
+            return dict(passed=True, reason="Criteria met", evidence=data["text"])
         return dict(
             reviews=[
                 dict(
@@ -914,7 +921,7 @@ async def test_cancel_during_selection_preserves_batch_and_trace(session, monkey
     loaded = Project(session.project.folder)
     run = loaded.data["policy_runs"][-1]
     assert run["status"] == "stopped" and len(run["steps"]) == 1
-    assert len(run["steps"][0]["trace"]["request"]) == 2
+    assert len(run["steps"][0]["assessments"][0]["records"][0]["trace"]["request"]) == 2
     assert all(n["status"] == "complete" for n in loaded.data["nodes"])
     assert not session.busy
 

@@ -163,19 +163,19 @@ These use criteria to judge text, but serve different purposes:
 | Mechanism | When it runs | What the result does |
 | --- | --- | --- |
 | Monitoring | During generation and/or after replies | Flags conditions such as looping; warns or stops only as configured. Off by default. |
-| Selection | During multi-loop Loom runs | Reviews candidates and chooses one path to develop. Does not automatically keep or mark it for training. |
+| Selection | Split Loom runs with explicit `--loops` | Reviews candidates and chooses one path to develop. Does not automatically keep or mark it for training. |
 | Evaluation | On saved items, or after `/loom --eval "name"` | Records whole-item judgments in a named collection for review and dataset curation. |
 
 Use `/policy` to configure monitoring, selection and reusable judges. Selection
 uses a local instruct model. Monitoring can use local DiffusionGemma through OpenJev, or optional Jev through
-OpenRouter. Evaluation judges also support the configured local instruct model.
+OpenRouter. Evaluation judges also support registered local instruct models, selected per judge.
 After [one-time setup](docs/local-judge.md), Carla starts and stops the Apple Silicon
 classifier automatically on an available local port.
 Hosted classification sends the assessed text to an external service and can
 incur charges. Local generation itself uses llama.cpp.
 
 `/policy` always opens Monitoring, Selection and Evals. Each category holds named
-policies with behaviors, judge settings and actions. Monitoring and Selection
+policies with behaviors, judge settings and role-specific result handling. Monitoring and Selection
 use On/Off: enabling one switches the previous policy in that category Off.
 `/behaviors` is a reusable workspace library of specs; adding a spec to a policy
 keeps its settings local.
@@ -188,6 +188,11 @@ Runs preserve the results. `/eval` uses the active policy;
 `/eval "Voice"` chooses a named policy, independently of the data collection.
 Adding data does not invoke a model. You can mark training items manually or use
 `/eval --train-on-pass true` to mark items that pass every behavior in that run.
+
+Selection and Evals separate observed behavior from **Pass when · Present/Absent**.
+Selection assesses each candidate before choosing among those that pass; Evals
+records whole-trace results and can mark passing data for training with **On pass**.
+Imported specs start Off for review.
 
 Changing a prompt, model or setting can be evaluated with the same collection
 and criteria; evaluation is not limited to training decisions. Saved source
@@ -206,7 +211,7 @@ Configuration exposes these authoring surfaces:
 | Character and Visitor templates | Simulator → `/config` → Character prompt / Visitor prompt |
 | Visitor brief | Simulator → `/config` → Visitor brief |
 | Fixed or generated opening | Simulator → `/config` → Opening; generated mode has its own prompt, model and sampling. |
-| Selection criteria and routing prompt | `/policy` → Selection |
+| Selection behaviors, assessment and choice templates | `/policy` → Selection |
 | Monitoring behavior specs | `/policy` → Monitoring → a policy → Behaviors |
 | Evaluation criteria | Evaluate → Policies → a policy → Behaviors |
 | Evaluation judge prompt and Call mode | Evaluate → Policies → a policy → Judge (or Judges) |

@@ -126,10 +126,6 @@ def register(path, name, kind, source):
             return next(
                 m for m in existing if Path(m["path"]).resolve() == path.resolve()
             )
-        if kind == "instruct" and existing:
-            raise ValueError(
-                "A Grow policy model is already configured; edit policy-model.json to replace it"
-            )
         used = set()
         for config, role in [
             (HOME / "models.json", "base"),
@@ -151,9 +147,7 @@ def register(path, name, kind, source):
             source=source,
         )
         temp = registry.with_suffix(".tmp")
-        temp.write_text(
-            json.dumps([*existing, model] if kind == "base" else model, indent=2) + "\n"
-        )
+        temp.write_text(json.dumps([*existing, model], indent=2) + "\n")
         temp.replace(registry)
     return model
 

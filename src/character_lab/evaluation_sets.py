@@ -12,7 +12,6 @@ import uuid
 
 from . import evaluation, evaluation_judges, evaluation_policies
 from .domain import now
-from .exploration import require_selector
 
 
 def uid():
@@ -100,8 +99,23 @@ def item_summary(project, group, item):
         if policy and not any(j.get("missing") for j in policy["judges"])
         else []
     )
+
+    def effective(definition):
+        # Resolved model details are execution provenance, not editable policy
+        # settings. Older results implicitly expected their criteria present.
+        return {k: v for k, v in definition.items() if k != "resolved_model"} | {
+            "expected": definition.get("expected", "present")
+        }
+
     relevant = [
-        next((r for r in reversed(records) if r["definition"] == definition), None)
+        next(
+            (
+                r
+                for r in reversed(records)
+                if effective(r["definition"]) == effective(definition)
+            ),
+            None,
+        )
         for definition in definitions
     ]
     status, passed = "unjudged", None
@@ -155,11 +169,9 @@ def plan(session, name=None, collection=None):
         raise ValueError("Add at least one behavior to this policy first")
     for definition in definitions:
         if definition["kind"] == "llm":
-            require_selector(session.policy_model)
-            if definition["model"] != session.policy_model.get("alias"):
-                raise ValueError(
-                    "Choose the configured local policy model for this behavior"
-                )
+            definition["resolved_model"] = evaluation.resolve_model(
+                session, definition["model"]
+            )
     return data_collection(session.project, collection), definitions
 
 

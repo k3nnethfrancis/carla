@@ -720,8 +720,11 @@ func (m *model) nodeTitle() string {
 	if m.editing == "policy_spec" {
 		return "Selection spec"
 	}
+	if m.editing == "selection_assessment_prompt" {
+		return "Assessment template"
+	}
 	if m.editing == "policy_prompt" {
-		return "Selector prompt"
+		return "Choice template"
 	}
 	if m.section == 0 && m.editing == "" {
 		return "Source preview"

@@ -176,7 +176,12 @@ offline after setup. See [local judge setup](local-judge.md).
 ## Evaluation data, policies and runs
 
 `evaluation_judges.py` owns policy-level judge and behavior definitions, validation
-and legacy definition conversion. `evaluation.py` owns assessment execution.
+and legacy definition conversion. `assessments.py` owns whole-input model calls,
+response validation and the deterministic observation → expected outcome mapping.
+`evaluation.py` owns evaluation execution and sequential per-judge model resolution.
+Selection calls the same assessment engine for each candidate, saves those records,
+then submits only eligible candidates to its separate choice call. Monitoring keeps
+its heartbeat owner and classifier execution, sharing the classifier transport.
 Local LLM assessment reuses `Runtime.judge`; DiffusionGemma/Jev assessment shares
 `monitor.classify`, retaining exact requests and provider results. Assessment
 prompts never enter generation context. Monitoring and selection retain their
@@ -204,8 +209,10 @@ groups and run envelopes. The workspace stores:
   internal routing reference, retained to remember settings while all are Off;
   it is not a separate user-visible activation state.
 - `evaluation_policies`: sibling actions, judges (model, prompt, call mode) and
-  versioned behaviors (spec, enabled state, threshold). Execution expands each
+  versioned behaviors (spec, enabled state, expected Present/Absent, threshold). Execution expands each
   judge against every enabled behavior, retaining both identities in the result.
+  Exact resolved LLM configurations are frozen for execution; model changes unload
+  the previous runtime before the next starts.
 - `evaluations`: individual assessment records with frozen inputs and definitions.
 - `evaluation_runs`: execution envelopes referencing those records and preserving
   the policy used. Historical run status comes from its records, not current policy.

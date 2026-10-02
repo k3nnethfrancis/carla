@@ -32,9 +32,12 @@ type evaluationRecord struct {
 	Training                                   bool
 	Definition                                 evaluator
 	Result                                     struct {
-		Passed           bool
-		Reason, Evidence string
-		Probability      *float64
+		Passed             bool
+		Reason, Evidence   string
+		Probability        *float64
+		Observed           *bool
+		Expected           string
+		DesiredProbability *float64 `json:"desired_probability"`
 	}
 	Source json.RawMessage
 	Trace  json.RawMessage

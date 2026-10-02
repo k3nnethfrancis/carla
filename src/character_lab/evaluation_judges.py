@@ -3,6 +3,7 @@
 import copy
 import uuid
 
+from .assessments import expected_state
 from .monitor import LOCAL_URL, local_url
 
 
@@ -25,6 +26,11 @@ def legacy(definition):
                 for k in ("id", "name", "spec", "threshold", "revision")
             }
             | {"enabled": True}
+            | (
+                {"expected": expected_state(definition)}
+                if "expected" in definition
+                else {}
+            )
         ],
     }
 
@@ -116,7 +122,13 @@ def normalize_behaviors(behaviors, previous=()):
         if not isinstance(b, dict):
             raise ValueError("Invalid behavior")
         value = {k: copy.deepcopy(b.get(k)) for k in ("name", "spec", "threshold")}
-        value.update(id=b.get("id") or uid(), enabled=b.get("enabled", True))
+        value.update(
+            id=b.get("id") or uid(),
+            enabled=b.get("enabled", True),
+        )
+        expected = expected_state(b)
+        if "expected" in b:
+            value["expected"] = expected
         if "source_id" in b:
             if (
                 not isinstance(b["source_id"], str)

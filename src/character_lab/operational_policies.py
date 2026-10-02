@@ -7,7 +7,7 @@ routing pointer remembers the last configuration when all policies are Off.
 import copy
 import uuid
 
-from . import credentials, monitor, policy_overrides, simulator
+from . import assessments, credentials, monitor, policy_overrides, simulator
 from .policy import DEFAULT_PROMPT, DEFAULT_SPEC
 
 PURPOSES = {"monitoring", "selection"}
@@ -67,6 +67,7 @@ def reconcile_model(project, model):
         config = expanded(selected)
         config["model_alias"] = model_key(model)
         store(selected, config)
+        project.data["selection_model_alias"] = model_key(model)
 
 
 def current(project, purpose, alias, policy_model):
@@ -78,6 +79,10 @@ def current(project, purpose, alias, policy_model):
         }
     return dict(
         selection_enabled=project.data.get("selection_enabled", False),
+        selection_assessment_prompt=project.data.get(
+            "selection_assessment_prompt", assessments.DEFAULT_PROMPT
+        ),
+        selection_call_mode=project.data.get("selection_call_mode", "separate"),
         policy_spec=project.data.get("policy_spec", DEFAULT_SPEC),
         policy_prompt=project.data.get("policy_prompt", DEFAULT_PROMPT),
         selection_behaviors=copy.deepcopy(
@@ -93,7 +98,7 @@ def current(project, purpose, alias, policy_model):
                 ],
             )
         ),
-        model_alias=model_key(policy_model),
+        model_alias=project.data.get("selection_model_alias", model_key(policy_model)),
     )
 
 
@@ -113,7 +118,11 @@ def store(item, config):
 
 
 def expanded(item):
+    """Materialize execution/editor defaults without rewriting saved revisions."""
     value = copy.deepcopy(item["config"])
+    if "selection_enabled" in value:
+        value.setdefault("selection_assessment_prompt", assessments.DEFAULT_PROMPT)
+        value.setdefault("selection_call_mode", "separate")
     for behavior in value.get("monitor_dimensions", []):
         behavior.update(item.get("actions", {}).get(behavior["id"], {}))
     return value
@@ -160,7 +169,6 @@ def migrate(project, alias, policy_model):
             )
             project_values(project, purpose, disabled(purpose, config))
         turn_off_peers(project, purpose, active.get(purpose))
-    reconcile_model(project, policy_model)
     if "behavior_library" not in project.data:
         project.data["behavior_library"] = []
         seen = set()
@@ -242,8 +250,12 @@ def validate(session, purpose, config, *, activating=False):
             for k, v in merged.items()
             if k.startswith("monitor_") and k != "monitor_policy"
         }
+    config.setdefault("selection_assessment_prompt", assessments.DEFAULT_PROMPT)
+    config.setdefault("selection_call_mode", "separate")
     if set(config) != {
         "selection_enabled",
+        "selection_assessment_prompt",
+        "selection_call_mode",
         "policy_spec",
         "policy_prompt",
         "model_alias",
@@ -263,21 +275,41 @@ def validate(session, purpose, config, *, activating=False):
         raise ValueError("Selection behaviors need names, specs and enabled states")
     if len({b["id"] for b in behaviors}) != len(behaviors):
         raise ValueError("Selection behavior IDs must be unique")
+    for behavior in behaviors:
+        behavior.setdefault("expected", "present")
+        behavior.setdefault("threshold", 0.8)
+        if behavior["expected"] not in {"present", "absent"}:
+            raise ValueError(
+                "Choose whether the selection behavior should be present or absent"
+            )
+        if (
+            type(behavior["threshold"]) not in (int, float)
+            or not 0 < behavior["threshold"] <= 1
+        ):
+            raise ValueError("Behavior threshold must be greater than 0 and at most 1")
+    if config["selection_call_mode"] not in {"separate", "bundled"}:
+        raise ValueError("Choose Separate or Bundled call mode")
     enabled = [b for b in behaviors if b.get("enabled", True)]
     if config["selection_enabled"] and not enabled:
         raise ValueError("Enable at least one selection behavior")
     config["policy_spec"] = (
-        "\n\n".join(b["spec"] for b in enabled) or config["policy_spec"]
+        "\n\n".join(
+            f"{b['name']} (expected {b['expected']}): {b['spec']}" for b in enabled
+        )
+        or config["policy_spec"]
     )
     if type(config["selection_enabled"]) is not bool:
         raise ValueError("Selection enabled must be boolean")
     if any(
         not isinstance(config[k], str) or not config[k].strip()
-        for k in ("policy_spec", "policy_prompt")
+        for k in ("policy_spec", "policy_prompt", "selection_assessment_prompt")
     ):
         raise ValueError("Selection instructions cannot be empty")
-    if config["model_alias"] != model_key(session.policy_model):
-        raise ValueError("Choose the configured selection model")
+    model = session.judge_model(config["model_alias"])
+    if config["selection_enabled"]:
+        from .exploration import require_selector
+
+        require_selector(model)
     return copy.deepcopy(config)
 
 
@@ -292,6 +324,7 @@ def project_values(project, purpose, config):
         project.data.update(
             {k: copy.deepcopy(v) for k, v in config.items() if k != "model_alias"}
         )
+        project.data["selection_model_alias"] = config["model_alias"]
 
 
 async def dispatch(session, command, args, request_id):
@@ -397,8 +430,6 @@ async def dispatch(session, command, args, request_id):
                     store(fallback, config)
                 active[purpose] = fallback["id"] if fallback else ""
                 project_config(session, purpose, config)
-                if purpose == "selection":
-                    reconcile_model(p, session.policy_model)
         else:
             raise ValueError("Unknown policy command")
     p.save()

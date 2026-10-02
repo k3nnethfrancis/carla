@@ -13,6 +13,7 @@ from contextlib import aclosing
 from pathlib import Path
 
 from . import (
+    assessments,
     credentials,
     document_actions,
     evaluation,
@@ -25,7 +26,7 @@ from . import (
 from .domain import Project, display_title, generation_status, library, now
 from .exploration import explore, require_selector
 from .model_metadata import native_context
-from .models import available_models
+from .models import available_judges, available_models
 from .policy import DEFAULT_PROMPT, DEFAULT_SPEC, default_model
 from .runtime import Runtime
 from .scheduling import parallel_map
@@ -48,7 +49,14 @@ class Session:
         self.emit = emit
         self.workspaces = workspaces or Workspaces()
         self.runtime_factory = runtime_factory
-        self.policy_model = policy_model or default_model()
+        self.judge_models = copy.deepcopy(
+            policy_model
+            if isinstance(policy_model, list)
+            else [policy_model]
+            if policy_model
+            else available_judges() or [default_model()]
+        )
+        self.policy_model = self.judge_models[0]
         self.sources = library()
         self.job = None
         self.job_id = None
@@ -100,6 +108,47 @@ class Session:
     def read_bindings(self):
         path = self.workspaces.home / "keybindings.json"
         return json.loads(path.read_text()) if path.exists() else {}
+
+    def judge_model(self, alias):
+        """Resolve the exact judge model; a missing alias must never run another."""
+        model = next(
+            (
+                m
+                for m in self.judge_models
+                if operational_policies.model_key(m) == alias
+            ),
+            None,
+        )
+        if model is None:
+            raise ValueError(
+                f"Judge model {alias!r} is unavailable; choose a configured model"
+            )
+        return copy.deepcopy(model)
+
+    def selection_model(self):
+        """Resolve the remembered selection policy, including while it is Off."""
+        key = self.project.data.get("active_operational_policies", {}).get("selection")
+        item = next(
+            (
+                p
+                for p in self.project.data.get("operational_policies", {}).get(
+                    "selection", []
+                )
+                if p["id"] == key
+            ),
+            None,
+        )
+        alias = (
+            item["config"].get("model_alias")
+            if item
+            else operational_policies.model_key(self.policy_model)
+        )
+        try:
+            return self.judge_model(alias)
+        except ValueError:
+            # An unavailable, disabled policy must not block ordinary generation.
+            # Selection preflight rejects this explicit unconfigured model if used.
+            return dict(name=alias or "Unconfigured judge", alias=alias, path="")
 
     @property
     def busy(self):
@@ -193,7 +242,11 @@ class Session:
             selection_enabled=p.data.get("selection_enabled", False),
             policy_spec=p.data.get("policy_spec", DEFAULT_SPEC),
             policy_prompt=p.data.get("policy_prompt", DEFAULT_PROMPT),
-            policy_model=self.policy_model["name"],
+            selection_assessment_prompt=p.data.get(
+                "selection_assessment_prompt", assessments.DEFAULT_PROMPT
+            ),
+            selection_call_mode=p.data.get("selection_call_mode", "separate"),
+            policy_model=self.selection_model()["name"],
             annotations=p.data.get("annotations", []),
             policy_runs=[
                 {k: r.get(k) for k in ("id", "status", "selected", "created")}
@@ -209,7 +262,7 @@ class Session:
                 **p.data.get("settings", {}),
                 **p.data.get("grow_settings", {}),
             },
-            selector_models=[self.policy_model],
+            selector_models=copy.deepcopy(self.judge_models),
             bindings=self.read_bindings(),
             busy=self.busy,
             active_node=self.active_node,
@@ -282,8 +335,10 @@ class Session:
             evaluation_sets.plan(self, args["eval"]) if args.get("eval") else None
         )
         if command == "grow.selector":
-            if args["alias"] != self.policy_model["alias"]:
-                raise ValueError("Selector model is not configured")
+            self.policy_model = self.judge_model(args["alias"])
+            p.data["selection_model_alias"] = args["alias"]
+            operational_policies.reconcile_model(p, self.policy_model)
+            p.save()
             await self.snapshot(request_id)
             return
         if command == "grow.configure":
@@ -449,6 +504,11 @@ class Session:
         elif command == "snapshot":
             await self.emit("result", {"path": str(p.snapshot())}, request_id)
         elif command == "configure":
+            if "selection_call_mode" in args and args["selection_call_mode"] not in {
+                "separate",
+                "bundled",
+            }:
+                raise ValueError("Choose Separate or Bundled call mode")
             settings = {
                 **DEFAULT_SETTINGS,
                 **p.data.get("settings", {}),
@@ -469,7 +529,11 @@ class Session:
                 model["context"] = context
                 self.runtime = self.runtime_factory(p.folder, model)
             p.data.update(settings=settings, model_alias=alias)
-            for field in ("policy_spec", "policy_prompt"):
+            for field in (
+                "policy_spec",
+                "policy_prompt",
+                "selection_assessment_prompt",
+            ):
                 if field in args:
                     if not args[field].strip():
                         raise ValueError("Policy instructions cannot be empty")
@@ -483,6 +547,8 @@ class Session:
                                 enabled=True,
                             )
                         ]
+            if "selection_call_mode" in args:
+                p.data["selection_call_mode"] = args["selection_call_mode"]
             operational_policies.sync(self, "selection")
             p.save()
         elif command == "policy.configure":
@@ -549,7 +615,7 @@ class Session:
             if type(loops) is not int or loops < 1:
                 raise ValueError("Loops must be a positive integer")
             if loops > 1:
-                require_selector(self.policy_model)
+                require_selector(self.selection_model())
             override = args.get("count")
             if override is not None and (type(override) is not int or override < 1):
                 raise ValueError("Generation count must be a positive integer")
@@ -894,7 +960,7 @@ class Session:
                 await explore(
                     self.project,
                     loops,
-                    self.policy_model,
+                    self.selection_model(),
                     self.runtime_factory,
                     batch,
                     advance,
@@ -1004,7 +1070,7 @@ class Session:
                 await explore(
                     p,
                     loops,
-                    self.policy_model,
+                    self.selection_model(),
                     self.runtime_factory,
                     batch,
                     advance,
@@ -1078,7 +1144,7 @@ class Session:
                 await explore(
                     p,
                     config["loops"],
-                    self.policy_model,
+                    self.selection_model(),
                     self.runtime_factory,
                     batch,
                     advance,

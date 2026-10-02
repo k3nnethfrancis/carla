@@ -61,8 +61,10 @@ For persistent defaults, place the array at `$CARLA_DATA_DIR/models.json`.
 Saved workspace model entries override matching registry entries; an explicit
 `--models FILE` replaces the workspace catalog. The model picker in `/config` selects from that catalog.
 
-Optional policy-guided split loops need a separate instruct selection model. `--policy-model FILE` accepts one object
-with the same fields and `kind: "instruct"`. Setup saves the persistent default at `$CARLA_DATA_DIR/policy-model.json`. Selection unloads
+Optional policy-guided split loops need a separate instruct selection model. `--policy-model FILE` accepts an object or a nonempty array
+with the same fields and `kind: "instruct"`. Setup appends registered judge models
+to `$CARLA_DATA_DIR/policy-model.json`; existing single-object files still work.
+Each Selection policy and Evals judge chooses its own model from this catalog. Selection unloads
 the generator before loading the selector. Selection instructions never enter
 raw generation context. Selection defaults to Off. Ordinary loops continue each output without a judge;
 Selection On requires a configured policy model for split loops.
@@ -150,7 +152,10 @@ added. Configuration changes do not alter saved traces.
 
 The selection prompt must preserve its JSON contract: review each candidate once,
 include valid evidence, and return an eligible candidate ID or null. The local
-evaluation prompt must return `passed` (boolean), `reason` and `evidence`. Full
+assessment prompt must return `passed` (boolean observation of the criteria),
+`reason` and `evidence`. Carla then applies the behavior’s Present/Absent expectation.
+Selection has an Assessment template for this step and a Choice template for
+comparing eligible candidates. Full
 contracts/defaults are visible in their editors and in saved judge requests.
 Monitoring allows behavior specs, thresholds and actions; its transport envelope
 is not a free-form prompt editor. See [policies and evaluations](evaluations.md).
@@ -296,7 +301,7 @@ opens the same Evals policy list; there is no separate evaluation configuration.
 Policies own behaviors separately from their judge settings. The judge owns the
 model, prompt and Call mode. Behaviors own specs, enabled states and passing
 rules. Every judge in an evaluation policy assesses the same enabled behaviors.
-Models can be the configured local LLM, local DiffusionGemma or hosted Jev.
+Models can be registered local LLMs, local DiffusionGemma or hosted Jev.
 Classifiers use probability thresholds; local LLM judges expose the full system
 prompt and return a boolean judgment with evidence for each behavior. DiffusionGemma uses the
 managed local OpenJev worker after [one-time setup](local-judge.md).
@@ -305,7 +310,9 @@ Data collections and policies are independent. Choose an active policy for bare
 `/eval`, or use `/eval "policy name"`. `/config` handles the current view's
 settings. `/behaviors` opens the workspace spec library. Importing into a policy copies the
 spec with its library revision; enabled states, detection rules and actions remain
-local to the policy. Saved runs
+local to the policy. Selection/Evals imports start Off for review of the spec and
+**Pass when · Present/Absent**. Evals **On pass** chooses whether passing data is
+only recorded or also marked for training. Saved runs
 retain the configurations used at execution. Adding data never invokes a model.
 See [evaluations](evaluations.md) for the Data / Policies / Runs workflow.
 
@@ -328,7 +335,8 @@ Open a policy’s **Behaviors** panel to edit specs, enabled states and detectio
 rules. Each monitoring behavior also exposes its **Action** (Warn or Stop) and
 warning color. **Judge** is a sibling panel for the model and Call mode;
 **Heartbeat** controls when monitoring runs. Selection has the same direct
-Behaviors / Judge layout, with its candidate-selection **Prompt template** in Judge.
+Behaviors / Judge layout, with separate **Assessment template** and **Choice template**
+rows in Judge. Evals LLM judges expose **Prompt template**.
 LLM judge templates open the full multiline editor. Saving a changed template
 asks for confirmation: changing its instructions or required response format
 can change judge behavior. Cancel returns to the draft; confirm saves a workspace

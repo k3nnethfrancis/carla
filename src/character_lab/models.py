@@ -14,8 +14,6 @@ def load_models(path, kind="base"):
     entries = data if isinstance(data, list) else [data]
     if not entries:
         raise ValueError("Model configuration must contain at least one model")
-    if kind == "instruct" and len(entries) != 1:
-        raise ValueError("Configure exactly one policy model")
     aliases = set()
     for model in entries:
         if not isinstance(model, dict):
@@ -70,3 +68,9 @@ def available_models(saved=()):
     catalog = {m["alias"]: m for m in configured}
     catalog.update({m["alias"]: m for m in saved if m.get("path") or not configured})
     return list(catalog.values()) or [DEFAULT_MODEL.copy()]
+
+
+def available_judges():
+    """Judge aliases identify individual local models, independent of policy roles."""
+    path = HOME / "policy-model.json"
+    return load_models(path, "instruct") if path.exists() else []

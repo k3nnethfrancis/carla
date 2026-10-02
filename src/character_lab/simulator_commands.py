@@ -274,12 +274,12 @@ async def dispatch(session, command, args, request_id):
             p.data.get("selection_enabled", False),
             action or "loom",
             config.get("alternatives", config["conversations"]),
-            session.policy_model,
+            session.selection_model(),
             behaviors=p.data.get("selection_behaviors"),
         )
         config = policy_overrides.monitoring(config, args)
         if action is None and config["loops"] > 1:
-            require_selector(session.policy_model)
+            require_selector(session.selection_model())
         simulator.validate(config, p, session.validate_settings)
         if not config["documents"] and not config.get("preview") and not seed:
             raise ValueError("Select at least one anthology document in Simulator")
