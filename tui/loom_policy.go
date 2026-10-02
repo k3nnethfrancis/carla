@@ -36,17 +36,17 @@ func (m *model) dimension(id string) loomDimension {
 }
 func (m *model) openLoomPolicy() tea.Cmd {
 	provider := m.monitorString("monitor_mode")
-	mode := "Off"
+	mode := "Inactive"
 	if provider == "diffusion" || provider == "jev" {
-		mode = "On"
+		mode = "Active"
 	}
 	d := &dialog{kind: "loom-policy", title: "Monitoring policy", rows: []row{
-		{id: "mode", label: "Monitoring · " + mode, preview: "Enable or disable monitoring. The judge and its behaviors stay saved when Off. First-time setup asks you to choose a model."},
+		{id: "status", label: "Status · " + mode, preview: operationalStatusHelp},
 	}}
 	defer orderOperationalRows(d)
 	m.appendOperationalControls(d)
 	m.dialog = d
-	if mode == "Off" {
+	if mode == "Inactive" {
 		provider = m.monitorString("monitor_provider")
 	}
 	if provider != "jev" && provider != "diffusion" {
@@ -247,9 +247,6 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 			m.openMonitorTiming()
 			m.dialog.parent = d
 		case "mode":
-			if d.kind == "loom-policy" {
-				return m.toggleMonitoring(d)
-			}
 			m.policyPicker(d, "", "monitor_mode", []string{"diffusion", "jev"})
 		case "monitor_call_mode":
 			m.policyPicker(d, "", r.id, []string{"separate", "bundled"})

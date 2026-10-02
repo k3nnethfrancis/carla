@@ -95,6 +95,9 @@ func (d *dialog) add(label, value string) {
 	d.fields = append(d.fields, field{label, i})
 }
 func (m *model) submitDialog() tea.Cmd {
+	if m.dialog != nil && m.dialog.kind == "judge-prompt-confirm" {
+		return m.submitJudgePromptConfirmation()
+	}
 	if m.dialog != nil && strings.HasPrefix(m.dialog.kind, "operational-policy") {
 		return m.submitOperationalPolicy(m.dialog)
 	}

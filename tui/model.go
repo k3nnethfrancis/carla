@@ -500,7 +500,7 @@ func (m *model) beginEdit(kind string) tea.Cmd {
 	m.reflow()
 	return m.editor.Focus()
 }
-func (m *model) saveEditor() tea.Cmd {
+func (m *model) persistEditor() tea.Cmd {
 	if m.pending || m.data.Busy {
 		return nil
 	}

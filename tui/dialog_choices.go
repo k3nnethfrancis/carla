@@ -21,12 +21,6 @@ func (m *model) dialogChoice() (dialogChoice, bool) {
 	case "operational-policy-list":
 		purpose, _ := d.args["purpose"].(string)
 		return c, m.operationalPolicy(purpose, id).ID != ""
-	case "grow-config":
-		c.toggle = id == "selection_enabled"
-		return c, c.toggle
-	case "loom-policy":
-		c.toggle = id == "mode"
-		return c, c.toggle
 	case "loom-policy-judge":
 		if id == "monitor_call_mode" {
 			c.field, c.current, c.values = id, m.monitorCallMode(), []string{"separate", "bundled"}
@@ -78,9 +72,6 @@ func (m *model) cycleDialogChoice(step int) tea.Cmd {
 		return m.toggleOperationalPolicy()
 	}
 	if c.toggle {
-		if d.kind == "grow-config" {
-			return m.send("policy.configure", map[string]any{"selection_enabled": !m.selectionEnabled()})
-		}
 		return m.submitLoomPolicy(d)
 	}
 	index := 0

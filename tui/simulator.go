@@ -150,7 +150,11 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 		case "spec":
 			return m.beginEdit("policy_spec")
 		case "prompt":
-			return m.beginEdit("policy_prompt")
+			cmd := m.beginEdit("policy_prompt")
+			if m.editing == "policy_prompt" {
+				m.dialog = nil
+			}
+			return cmd
 		case "selector":
 			next := &dialog{kind: "selector-pick", title: "Grow selector"}
 			for _, model := range m.data.SelectorModels {

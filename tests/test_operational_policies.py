@@ -595,3 +595,55 @@ async def test_missing_legacy_route_cannot_leave_unrepresented_monitor_on(lab):
     assert first["config"]["monitor_mode"] == "off"
     assert lab.project.data["simulator_config"]["monitor_mode"] == "off"
     assert lab.project.data["active_operational_policies"]["monitoring"] == first["id"]
+
+
+@pytest.mark.asyncio
+async def test_default_policy_name_migration_preserves_identity_config_and_history(lab):
+    catalog = lab.project.data["operational_policies"]
+    assert all(items[0]["name"] == "Default policy" for items in catalog.values())
+    original = catalog["monitoring"][0]
+    original["name"] = "Default"
+    prior = copy.deepcopy(original)
+    lab.project.data["policy_runs"] = [
+        {"id": "historic", "policy": copy.deepcopy(original)}
+    ]
+    history = copy.deepcopy(lab.project.data["policy_runs"])
+    custom = catalog["selection"][0]
+    custom["name"] = "My custom policy"
+    custom_before = copy.deepcopy(custom)
+    ops.migrate(lab.project, lab.runtime.model["alias"], lab.policy_model)
+    assert original == {
+        **prior,
+        "name": "Default policy",
+        "revision": prior["revision"] + 1,
+    }
+    assert custom == custom_before
+    assert lab.project.data["policy_runs"] == history
+    frozen = copy.deepcopy(lab.project.data)
+    ops.migrate(lab.project, lab.runtime.model["alias"], lab.policy_model)
+    assert lab.project.data == frozen
+
+
+@pytest.mark.asyncio
+async def test_default_policy_name_collision_keeps_both_saved_entries(lab):
+    items = lab.project.data["operational_policies"]["monitoring"]
+    original = items[0]
+    legacy = copy.deepcopy(original)
+    legacy.update(id="legacy", name="Default")
+    items.append(legacy)
+    before = copy.deepcopy(items)
+    ops.migrate(lab.project, lab.runtime.model["alias"], lab.policy_model)
+    assert items == before
+
+
+@pytest.mark.asyncio
+async def test_legacy_sync_recreates_default_policy_name_after_empty_catalog(lab):
+    items = lab.project.data["operational_policies"]["selection"]
+    await lab.execute(
+        "operational.policy.delete",
+        dict(purpose="selection", id=items[0]["id"]),
+        "delete",
+    )
+    await lab.execute("policy.configure", {"selection_enabled": True}, "legacy")
+    assert len(items) == 1 and items[0]["name"] == "Default policy"
+    assert items[0]["config"]["selection_enabled"] is True

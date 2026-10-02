@@ -24,8 +24,9 @@ and actions determine what Carla does with the result.
 On the Monitoring or Selection policy list, **Space** or **Left/Right** toggles
 the focused policy’s **On/Off** setting. **Enter** opens it. Turning a policy On
 uses it for future runs and switches the previous policy in that category Off.
-All policies can be Off. New policies start Off; editing their settings leaves
-them Off until enabled.
+All policies can be Off. The built-in policy is named **Default policy**.
+Inside the policy editor, **Status · Active/Inactive** is a read-only reflection
+of On/Off. New policies start Off; editing their settings leaves them Off until enabled.
 
 Evaluate → Policies is the same collection as `/policy` → Evals. Changes made
 through either route affect the same policy. Data collections remain independent.
@@ -61,7 +62,9 @@ and fail open. Scores are model estimates, not calibrated guarantees.
 ## Selection
 
 Open `/policy` → Selection → a policy → **Judge** to configure the local instruct
-evaluator and its prompt. Open **Behaviors** beside Judge to create or import criteria and enable
+evaluator and its **Prompt template**. Saving a changed template asks for
+confirmation because the instructions and response contract affect judging.
+Cancel preserves the editable draft. Open **Behaviors** beside Judge to create or import criteria and enable
 the ones to use. Enabled specs are combined in one candidate-set judgment.
 Selection still uses one configured local LLM, with one candidate-set call rather
 than monitoring’s separate/bundled call switch. The generator's raw prompt never receives these
@@ -104,7 +107,8 @@ collection or make it the default destination for data assessed from other tabs.
 
 Open **Policies → a policy** to configure assessment:
 
-- **Judge:** choose the model, call mode and, for an LLM, the assessment prompt.
+- **Judge:** choose the model, call mode and, for an LLM, the assessment prompt
+  template. Changed templates require confirmation before saving.
 - **Behavior:** give it a name and spec, enable or disable it, and configure its
   passing threshold for classifier output. All configured judges assess it.
 

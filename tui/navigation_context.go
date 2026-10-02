@@ -339,7 +339,7 @@ func filterRows(rows []row, query string) []row {
 }
 func (m *model) filterDialog(msg tea.KeyPressMsg) bool {
 	d := m.dialog
-	if len(d.fields) > 0 || d.kind == "keys" || d.kind == "delete" || (strings.HasPrefix(d.kind, "setup-") && d.kind != "setup-files") {
+	if len(d.fields) > 0 || d.kind == "judge-prompt-confirm" || d.kind == "keys" || d.kind == "delete" || (strings.HasPrefix(d.kind, "setup-") && d.kind != "setup-files") {
 		return false
 	}
 	if msg.Code != tea.KeyBackspace && (msg.Text == "" || msg.Mod != 0) {
@@ -364,6 +364,9 @@ func (m *model) filterDialog(msg tea.KeyPressMsg) bool {
 // Closing an auxiliary command such as Help restores a suspended picker/editor.
 func (m *model) closeDialog() tea.Cmd {
 	d := m.dialog
+	if d != nil && d.kind == "judge-prompt-confirm" {
+		return m.resumeJudgePromptDraft()
+	}
 	if d != nil && d.kind == "loom-policy-dimension" && d.args["id"] == "draft" {
 		m.behaviorDraft = nil
 	}

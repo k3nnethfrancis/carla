@@ -53,14 +53,9 @@ func TestMonitoringBackRefreshesCountsAndEnabledList(t *testing.T) {
 	if !strings.Contains(m.dialog.rows[m.dialog.index].label, "2 warn · 1 stop") {
 		t.Fatal("stale counts", m.dialog.rows)
 	}
-	for i, r := range m.dialog.rows {
-		if r.id == "mode" {
-			m.dialog.index = i
-		}
-	}
+	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	req = captureCommand(t, m, func() tea.Cmd { return m.dialogKey(tea.KeyPressMsg{Code: tea.KeySpace}) })
 	applyOperationalTestSave(t, m, req, "monitoring", 1)
-	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.dialog.kind != "operational-policy-list" || !strings.Contains(m.dialog.rows[m.dialog.index].label, "Draft · Off") {
 		t.Fatal("stale policy enabled state", m.dialog)
 	}
@@ -80,14 +75,9 @@ func TestSelectionBackRefreshesBehaviorCountAndList(t *testing.T) {
 	if m.dialog != root || m.dialog.rows[m.dialog.index].label != "Behaviors · 2" {
 		t.Fatal("stale selection count", m.dialog)
 	}
-	for i, r := range m.dialog.rows {
-		if r.id == "selection_enabled" {
-			m.dialog.index = i
-		}
-	}
+	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	req := captureCommand(t, m, func() tea.Cmd { return m.dialogKey(tea.KeyPressMsg{Code: tea.KeySpace}) })
 	applyOperationalTestSave(t, m, req, "selection", 0)
-	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if !strings.Contains(m.dialog.rows[m.dialog.index].label, "Select coherent · On") {
 		t.Fatal("stale selection enabled state", m.dialog)
 	}

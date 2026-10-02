@@ -187,7 +187,7 @@ func TestMonitoringSetupGatesSettingsAndMasksKey(t *testing.T) {
 	if len(root.rows) != 1 {
 		t.Fatal("Off exposed monitoring configuration")
 	}
-	m.submitDialog() // choose a provider
+	m.toggleMonitoring(root) // Setup is normally entered from the policy-list toggle.
 	m.dialog.index = 1
 	m.submitDialog() // Jev needs a key first
 	if m.dialog.kind != "loom-policy-key" || m.simString("monitor_mode") != "off" {
@@ -226,7 +226,7 @@ func TestLocalMonitorHasNoKeyGateAndRetainsNavigation(t *testing.T) {
 			t.Fatal("local mode requested infrastructure configuration")
 		}
 	}
-	if !strings.Contains(root.rows[0].label, "On") {
+	if !strings.Contains(root.rows[0].label, "Active") {
 		t.Fatal(root.rows)
 	}
 	chooseBehaviorRow(t, m, "judge")
@@ -280,7 +280,7 @@ func TestMonitoringLayoutAndBehaviorCounts(t *testing.T) {
 		{Enabled: true, Action: "stop"}, {Enabled: false, Action: "stop"},
 	}
 	m.openLoomPolicy()
-	for i, id := range []string{"mode", "timing", "behaviors", "judge"} {
+	for i, id := range []string{"status", "timing", "behaviors", "judge"} {
 		if m.dialog.rows[i].id != id {
 			t.Fatal(m.dialog.rows)
 		}

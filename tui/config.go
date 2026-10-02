@@ -32,12 +32,12 @@ func (m *model) openConfig() tea.Cmd {
 	return nil
 }
 func (m *model) openSelectionConfig() tea.Cmd {
-	label := "Selection · Off"
+	label := "Status · Inactive"
 	if m.selectionEnabled() {
-		label = "Selection · On"
+		label = "Status · Active"
 	}
 	d := &dialog{kind: "grow-config", title: "Selection policy", rows: []row{
-		{id: "selection_enabled", label: label, preview: selectionTriggerHelp},
+		{id: "status", label: label, preview: operationalStatusHelp + "\n" + selectionTriggerHelp},
 		{id: "behaviors", label: fmt.Sprintf("Behaviors · %d", len(m.selectionBehaviors())), preview: "Define criteria used to qualify alternatives and choose what continues."},
 		{id: "judge", label: "Judge · " + m.selectionModelName() + " (LLM)", preview: "Choose the model and prompt used to compare candidates against these behaviors."},
 	}}
@@ -54,7 +54,7 @@ const evaluationJudgesHelp = "Criteria + model used by named evaluations.\nChoos
 func (m *model) openSelectionJudge() tea.Cmd {
 	m.dialog = &dialog{kind: "grow-config", title: "Selection judge", rows: []row{
 		{id: "selector", label: "Model · " + m.selectionModelName() + " (LLM)", preview: "The local instruction-following model used to assess alternatives."},
-		{id: "prompt", label: "Prompt", preview: "Judges candidates together in one request. The prompt defines the required JSON selection response; separate behavior calls are not used."},
+		{id: "prompt", label: "Prompt template", preview: "Judges candidates together in one request. The prompt defines the required JSON selection response; separate behavior calls are not used."},
 	}}
 	return nil
 }

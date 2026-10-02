@@ -132,7 +132,7 @@ func TestOperationalRootsOfferOnOffAndDeleteWithoutActivation(t *testing.T) {
 		m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 		foundDelete := false
 		for _, r := range m.dialog.rows {
-			if r.id == "activate-policy" || strings.Contains(r.label, "active") {
+			if r.id == "activate-policy" || r.label == "Make active" {
 				t.Fatal("separate activation remained", r)
 			}
 			if r.id == "delete-policy" {
@@ -148,5 +148,27 @@ func TestOperationalRootsOfferOnOffAndDeleteWithoutActivation(t *testing.T) {
 		if m.dialog != root || m.pending {
 			t.Fatal("delete cancel changed state")
 		}
+	}
+}
+
+func TestOperationalStatusDerivedOnlyFromEnabledConfig(t *testing.T) {
+	m := namedOperationalFixture()
+	// The old routing pointer must not create a second user-visible status.
+	m.data.ActiveOperationalPolicies["monitoring"] = "draft"
+	m.openOperationalPolicies("monitoring")
+	m.submitDialog()
+	if m.dialog.rows[0].label != "Status · Active" {
+		t.Fatal(m.dialog.rows[0])
+	}
+	m.closeDialog()
+	m.dialog.index = 1
+	m.submitDialog()
+	if m.dialog.rows[0].label != "Status · Inactive" {
+		t.Fatal(m.dialog.rows[0])
+	}
+	m.openOperationalPolicies("selection")
+	m.submitDialog()
+	if m.dialog.rows[0].label != "Status · Inactive" {
+		t.Fatal(m.dialog.rows[0])
 	}
 }

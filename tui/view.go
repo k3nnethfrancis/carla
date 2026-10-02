@@ -360,13 +360,16 @@ func (m *model) renderDialog() string {
 		if d.kind == "loom-policy-bundle-confirm" {
 			footer = "↑↓ choose · ENTER select · ESC back"
 		}
+		if d.kind == "judge-prompt-confirm" {
+			footer = "↑↓ choose · " + m.keyLabel("nav.enter") + " select · " + m.keyLabel("nav.back") + " keep editing"
+		}
 		if d.kind == "sim-documents" || d.kind == "eval-add-items" {
 			footer = "SPACE select · CTRL+S save · ESC cancel"
 		}
 		if d.query != "" {
 			footer = "Filter: " + d.query + " · " + footer
 		} else if d.kind != "keys" && d.kind != "delete" && d.kind != "loom-policy-bundle-confirm" && d.kind != "loom-policy-timing" && !strings.HasPrefix(d.kind, "setup-") {
-			if d.kind != "help" && ansi.StringWidth("Type to filter · "+footer) <= r.w-4 {
+			if d.kind != "help" && d.kind != "judge-prompt-confirm" && ansi.StringWidth("Type to filter · "+footer) <= r.w-4 {
 				footer = "Type to filter · " + footer
 			}
 		}
@@ -492,10 +495,10 @@ func (m *model) View() tea.View {
 				body = m.document.View()
 			}
 			if m.editing != "" {
-				if (strings.HasPrefix(m.editing, "policy-") || m.editing == "library-spec") && m.editReturn != nil {
+				if (strings.HasPrefix(m.editing, "policy-") || m.editing == "policy_prompt" || m.editing == "library-spec") && m.editReturn != nil {
 					title = m.editReturn.title + " · Spec"
-					if m.editing == "policy-judge-prompt" {
-						title = m.editReturn.title + " · Prompt"
+					if m.editing == "policy-judge-prompt" || m.editing == "policy_prompt" {
+						title = m.editReturn.title + " · Prompt template"
 					}
 					if (m.editing == "policy-behavior-new" || m.editing == "library-spec") && len(m.editReturn.fields) > 0 {
 						title = m.editReturn.fields[0].input.Value() + " · Spec"

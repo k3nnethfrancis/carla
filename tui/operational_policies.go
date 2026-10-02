@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+const operationalStatusHelp = "Read-only: Active means On; Inactive means Off. Return to the policy list and use SPACE or Left/Right to change it."
+
 type operationalPolicy struct {
 	ID     string         `json:"id"`
 	Name   string         `json:"name"`
@@ -195,6 +197,8 @@ func (m *model) submitOperationalPolicy(d *dialog) tea.Cmd {
 func (m *model) operationalControl(d *dialog, id string) (tea.Cmd, bool) {
 	purpose, pid := m.operationalContext()
 	switch id {
+	case "status":
+		return nil, true
 	case "delete-policy":
 		m.dialog = &dialog{kind: "operational-policy-delete", title: "Delete policy?", parent: d, rows: []row{{id: "cancel", label: "Cancel", preview: "Keep this policy."}, {id: "confirm", label: "Delete", preview: "Remove this policy and turn it off if needed. Existing run results remain saved."}}}
 		return nil, true
@@ -356,7 +360,7 @@ func orderOperationalRows(d *dialog) {
 	if d.args["operational_id"] == nil {
 		return
 	}
-	order := map[string]int{"rename-policy": 0, "mode": 1, "selection_enabled": 1, "key": 2, "behaviors": 2, "judge": 3, "timing": 4, "delete-policy": 6}
+	order := map[string]int{"status": 0, "rename-policy": 1, "key": 2, "behaviors": 2, "judge": 3, "timing": 4, "delete-policy": 6}
 	sort.SliceStable(d.rows, func(i, j int) bool { return order[d.rows[i].id] < order[d.rows[j].id] })
 }
 

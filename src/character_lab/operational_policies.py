@@ -134,13 +134,21 @@ def migrate(project, alias, policy_model):
         if purpose not in catalog:
             item = dict(
                 id=uuid.uuid4().hex[:12],
-                name="Default",
+                name="Default policy",
                 config=current(project, purpose, alias, policy_model),
             )
             store(item, item["config"])
             catalog[purpose] = [item]
             active[purpose] = item["id"]
     for purpose in PURPOSES:
+        # Rename only the former built-in label, never a user name or a collision.
+        if not any(item["name"] == "Default policy" for item in catalog[purpose]):
+            legacy = next(
+                (item for item in catalog[purpose] if item["name"] == "Default"), None
+            )
+            if legacy:
+                legacy["name"] = "Default policy"
+                legacy["revision"] += 1
         if not any(item["id"] == active.get(purpose) for item in catalog[purpose]):
             turn_off_peers(project, purpose)
             fallback = catalog[purpose][0] if catalog[purpose] else None
@@ -189,7 +197,7 @@ def sync(session, purpose):
         (x for x in p.data["operational_policies"][purpose] if x["id"] == key), None
     )
     if item is None:
-        item = dict(id=uuid.uuid4().hex[:12], name="Default")
+        item = dict(id=uuid.uuid4().hex[:12], name="Default policy")
         p.data["operational_policies"][purpose].append(item)
         p.data["active_operational_policies"][purpose] = item["id"]
         store(

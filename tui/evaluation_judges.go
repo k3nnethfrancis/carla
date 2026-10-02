@@ -89,11 +89,12 @@ func (m *model) openPolicyJudge(id string, i int) tea.Cmd {
 	rows := []row{{id: "name", label: "Name · " + j.Name, preview: "Name this judge within the policy."}, {id: "model", label: "Model · " + m.evaluatorModelName(evaluator{Kind: j.Kind, Model: j.Model}), preview: "Classifiers return probabilities; LLMs return structured judgments."}, {id: "call_mode", label: "Call mode · " + mode, preview: "Separate assesses each behavior in its own request. Bundled assesses them together."}}
 
 	if j.Kind == "llm" {
-		rows = append(rows, row{id: "prompt", label: "Prompt", preview: "Instructions used by this judge to assess behaviors. Open to read or edit the full prompt."})
+		rows = append(rows, row{id: "prompt", label: "Prompt template", preview: "Full instructions and response contract used by this judge. Saving changes requires confirmation."})
 	}
 	rows = append(rows, row{id: "all-judges", label: "All judges", preview: "Manage additional models that assess the same policy behaviors."})
 	rows = append(rows, row{id: "delete", label: "Remove judge…", preview: "Remove this judge. Policy behaviors and past results remain."})
 	m.dialog = &dialog{kind: "eval-policy-judge", title: j.Name, args: policyJudgeArgs(id, i), rows: rows}
+	m.dialog.args["judge_id"] = j.ID
 	return nil
 }
 func (m *model) openPolicyBehaviors(id string) tea.Cmd {
@@ -391,7 +392,7 @@ func (m *model) savePolicyEditor(text string) tea.Cmd {
 		m.status = "Write the criteria or prompt before saving"
 		return nil
 	}
-	if m.editing == "policy-judge-prompt" && (i < 0 || i >= len(draft.Judges)) {
+	if m.editing == "policy-judge-prompt" && (i < 0 || i >= len(draft.Judges) || (d.args["judge_id"] != nil && d.args["judge_id"] != draft.Judges[i].ID)) {
 		m.status = "Judge no longer exists; cancel this draft"
 		return nil
 	}

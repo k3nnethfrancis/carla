@@ -310,7 +310,9 @@ retain the configurations used at execution. Adding data never invokes a model.
 See [evaluations](evaluations.md) for the Data / Policies / Runs workflow.
 
 Named Monitoring and Selection policy rows show only **On/Off**. Space or
-Left/Right toggles the focused policy; Enter opens its configuration. Turning
+Left/Right toggles the focused policy; Enter opens its configuration. Inside,
+**Status · Active/Inactive** reports that same On/Off state; use the policy list
+to change it. It is not a separate activation setting. Turning
 one On switches the previous policy in that category Off and uses the newly
 enabled policy for future runs. All policies can be Off. New policies start
 Off; their judge and behavior settings remain saved when disabled. Enabling
@@ -326,7 +328,12 @@ Open a policy’s **Behaviors** panel to edit specs, enabled states and detectio
 rules. Each monitoring behavior also exposes its **Action** (Warn or Stop) and
 warning color. **Judge** is a sibling panel for the model and Call mode;
 **Heartbeat** controls when monitoring runs. Selection has the same direct
-Behaviors / Judge layout, with its candidate-selection prompt in Judge.
+Behaviors / Judge layout, with its candidate-selection **Prompt template** in Judge.
+LLM judge templates open the full multiline editor. Saving a changed template
+asks for confirmation: changing its instructions or required response format
+can change judge behavior. Cancel returns to the draft; confirm saves a workspace
+override without changing Carla’s built-in defaults. Classifier judges use their
+behavior specs and do not expose an LLM prompt template.
 **New behavior** shows the complete configuration before creation; edits stay in
 an unsaved draft until **Create behavior**. Specs use the multiline document
 editor (`/save` or the configured save binding; Escape cancels the text edit).
