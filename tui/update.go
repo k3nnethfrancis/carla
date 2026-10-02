@@ -564,6 +564,14 @@ func (m *model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 						r := m.rows()[index]
 						rowX := m.treeRowX(r, panel.box)
 						m.selected = index
+						if m.section == 4 {
+							switch r.kind {
+							case "eval-area", "eval-policy", "eval-policy-new", "eval-collection", "eval-create", "eval-back", "eval-config", "eval-add", "eval-execute", "eval-filter":
+								m.sectionFocus = false
+								m.reflow()
+								return m, m.activate()
+							}
+						}
 						if m.section == 1 || m.section == 2 {
 							checkX := rowX
 							if m.section == 1 {

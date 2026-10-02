@@ -464,3 +464,59 @@ func TestCollectionRemovalConfirmationAndReply(t *testing.T) {
 		}
 	}
 }
+
+func TestEvaluateMouseControlsAndDataFocus(t *testing.T) {
+	for _, width := range []int{60, 120} {
+		click := func(m *model, index int) tea.Cmd {
+			m.selected = index
+			m.reflow()
+			r := m.layout().panels[0].box
+			_, cmd := m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: r.x + 4, Y: r.y + 3 + index - m.navStart(m.navigationRows(r))})
+			return cmd
+		}
+		for _, tc := range []struct {
+			index int
+			kind  string
+		}{{1, "eval-collection-config"}, {2, "eval-add-items"}, {4, "eval-filter"}} {
+			m := evalFixture()
+			m.width, m.height = width, 36
+			m.section, m.focus = 4, 0
+			m.evalArea = "data"
+			m.enterCollection("set")
+			click(m, tc.index)
+			if m.dialog == nil || m.dialog.kind != tc.kind {
+				t.Fatalf("width %d: click did not open %s", width, tc.kind)
+			}
+		}
+		m := evalFixture()
+		m.width, m.height = width, 36
+		m.section, m.focus = 4, 0
+		m.evalArea = "data"
+		click(m, 2)
+		if m.evalCollection != "set" {
+			t.Fatal("collection click did not open")
+		}
+		click(m, 3)
+		if !strings.Contains(m.status, "Add data") {
+			t.Fatal(m.status)
+		}
+		m.data.EvaluationSets[0].Items = []evaluationSummary{{ID: "done", Status: "complete"}}
+		click(m, 3)
+		if !strings.Contains(m.status, "No pending items") {
+			t.Fatal(m.status)
+		}
+		m.evaluation = &evaluationRecord{ID: "done"}
+		click(m, 5)
+		if m.focus != 0 || m.dialog != nil {
+			t.Fatal("data click should focus and preview")
+		}
+		m.evalSelection = map[string]bool{"done": true}
+		req := captureCommand(t, m, func() tea.Cmd { return click(m, 3) })
+		if req.Command != "evaluation.collection.run" || string(req.Args["items"]) != `["done"]` {
+			t.Fatal(req)
+		}
+		if m.evalArea != "runs" {
+			t.Fatal("did not navigate to Runs")
+		}
+	}
+}

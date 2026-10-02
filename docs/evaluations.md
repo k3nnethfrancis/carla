@@ -113,6 +113,10 @@ Evaluate has three views:
 Create or open a data collection and use **Add data** to add saved documents,
 conversations or existing judgments. **Collection settings** lets you rename the
 collection or make it the default destination for data assessed from other tabs.
+**▶ Run evaluation** is an action, not a data item: click it or press Enter to
+assess selected items (or pending items when none are selected) with the active
+policy. Select completed items with Space to run them again. Results appear in
+**Runs**; focusing the action previews which policy will run.
 To remove a collection, use **Collection settings → Remove collection**, or focus
 it in the Data list and use `/remove` (`/delete` is an alias). Confirmation removes
 the collection and its membership from Data. Source documents, conversations,

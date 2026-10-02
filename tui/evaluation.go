@@ -147,7 +147,11 @@ func (m *model) openEval(input string) tea.Cmd {
 			}
 		}
 		if len(ids) == 0 {
-			m.status = "Select data or add items to this collection first"
+			if len(m.collectionItems()) == 0 {
+				m.status = "Add data before running an evaluation"
+			} else {
+				m.status = "No pending items · SPACE selects data to rerun"
+			}
 			return nil
 		}
 		args["items"] = ids
@@ -192,6 +196,9 @@ func (m *model) evaluationView(width int) (text string) {
 	}
 	if m.evaluation == nil || m.evaluation.ID != m.targetRow().id {
 		if c := m.currentEvaluation(); c != nil {
+			if m.targetRow().kind == "eval-execute" {
+				return "Run evaluation\n\nPolicy · " + m.activePolicyName() + "\n\nAssess selected data, or pending items when nothing is selected.\nSelect completed items with SPACE to evaluate them again.\n\nClick or press ENTER to run. Results appear in Runs.\n/policy changes the assessment policy."
+			}
 			return c.Name + "\n\nAdd data · saved documents, conversations or existing judgments.\nCollection settings · name and default destination.\nRun · assess selected or pending items with the active policy.\n\n/policy chooses the behaviors used for assessment.\nSPACE selects · ENTER opens · /keep marks for training"
 		}
 		return "Evaluate\n\nData · saved documents and conversation traces.\nPolicies · judges and the behaviors they assess.\nRuns · results, preserving the exact inputs and policy.\n\nActive policy · " + m.activePolicyName()
