@@ -105,9 +105,6 @@ func (m *model) openEvaluationPolicy(id string) tea.Cmd {
 		active = "Active policy"
 	}
 	judgeLabel := fmt.Sprintf("Judges · %d", len(p.Judges))
-	if len(p.Judges) == 1 {
-		judgeLabel = "Judge · " + m.evaluatorModelName(evaluator{Kind: p.Judges[0].Kind, Model: p.Judges[0].Model})
-	}
 	onPass := "Record only"
 	if p.Actions.TrainOnPass {
 		onPass = "Mark for training"
@@ -180,11 +177,7 @@ func (m *model) submitEvaluationPolicy(d *dialog) tea.Cmd {
 		m.openPolicyBehaviors(p.ID)
 		m.dialog.parent = d
 	case "judges":
-		if len(p.Judges) == 1 {
-			m.openPolicyJudge(p.ID, 0)
-		} else {
-			m.openPolicyJudges(p.ID)
-		}
+		m.openPolicyJudges(p.ID)
 		m.dialog.parent = d
 	case "delete":
 		m.dialog = &dialog{kind: "eval-policy-delete", title: "Remove policy? Results remain", parent: d, args: d.args, rows: []row{{id: "cancel", label: "Cancel"}, {id: "delete", label: "Remove policy"}}}

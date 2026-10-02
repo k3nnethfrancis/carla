@@ -144,7 +144,7 @@ waiting progress followed by returned scores; they do not generate a text stream
 
 Open **Policies → a policy** to configure assessment:
 
-- **Judge:** choose the model, call mode and, for an LLM, the assessment prompt
+- **Judges:** open the list, then choose a judge’s model, call mode and, for an LLM, the assessment prompt
   template. Changed templates require confirmation before saving.
 - **Behavior:** give it a name and spec, enable or disable it, and configure its
   **Pass when · Present/Absent** setting. All configured judges assess it. For
@@ -162,7 +162,10 @@ against other behaviors. LLM judgments retain a boolean result, reason and evide
 Set the active policy to choose what bare `/eval` runs. Monitoring and Selection
 remain separately enabled operational policies. They each use one supported
 operational judge, configured directly in **Judge** beside **Behaviors**. Evals
-opens one judge directly; with multiple judges, **Judges** lists their settings.
+opens the **Judges** list. **From library**, alongside **New judge**, copies a judge
+configuration from another Evals policy: model, prompt template and call mode.
+The copy receives its own identity; later edits are independent. Behaviors stay
+with the destination policy and are not imported with a judge.
 Monitoring retains heartbeat and warn/stop actions. Selection uses the shared
 whole-item assessment engine, then its own candidate-set choice contract.
 

@@ -155,7 +155,7 @@ func TestHistoricalNestedAndFlatPolicyShapes(t *testing.T) {
 	}
 }
 
-func TestAllJudgesDeleteEscapeReturnsPolicy(t *testing.T) {
+func TestJudgesDeleteEscapeReturnsPolicy(t *testing.T) {
 	m := evalFixture()
 	m.openEvaluationPolicy("policy")
 	root := m.dialog
@@ -171,9 +171,8 @@ func TestAllJudgesDeleteEscapeReturnsPolicy(t *testing.T) {
 		t.Fatal("missing", id)
 	}
 	choose("judges")
-	choose("all-judges")
 	if m.dialog.parent != root {
-		t.Fatal("All judges must be a sibling beneath policy")
+		t.Fatal("Judges list must sit directly beneath policy")
 	}
 	choose("0")
 	choose("delete")
@@ -218,5 +217,54 @@ func TestStaleJudgeDialogAndEditorCannotPanic(t *testing.T) {
 	m.data.EvaluationPolicies[0].Judges = nil
 	if cmd := m.savePolicyEditor("draft"); cmd != nil {
 		t.Fatal("saved removed judge")
+	}
+}
+
+func TestJudgeLibraryCopiesConfigurationWithoutBehaviorsOrIdentity(t *testing.T) {
+	m := evalFixture()
+	source := evaluationPolicy{ID: "source", Name: "Other policy", Judges: []evaluationJudge{{ID: "original", Revision: 7, Name: "Careful reader", Kind: "llm", Model: "other-model", Prompt: "Custom {{behaviors}} {{text}}", CallMode: "bundled"}}, Behaviors: []evaluationBehavior{{ID: "source-only", Name: "Other criteria"}}}
+	m.data.EvaluationPolicies = append(m.data.EvaluationPolicies, source)
+	original, _ := json.Marshal(m.data.EvaluationPolicies)
+	m.openPolicyJudges("policy")
+	parent := m.dialog
+	for i, r := range parent.rows {
+		if r.id == "library" {
+			parent.index = i
+		}
+	}
+	m.submitDialog()
+	if m.dialog.kind != "eval-policy-judge-library" || m.dialog.parent != parent {
+		t.Fatal("library belongs beside New judge")
+	}
+	m.closeDialog()
+	if m.dialog != parent {
+		t.Fatal("Escape must return to Judges")
+	}
+	m.openJudgeLibraryPicker(parent)
+	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
+	var judges []evaluationJudge
+	json.Unmarshal(req.Args["judges"], &judges)
+	copy := judges[len(judges)-1]
+	if copy.ID != "" || copy.Revision != 0 || copy.Model != "other-model" || copy.Prompt != source.Judges[0].Prompt || copy.CallMode != "bundled" {
+		t.Fatal("copy lost settings or retained identity", copy)
+	}
+	var behaviors []evaluationBehavior
+	json.Unmarshal(req.Args["behaviors"], &behaviors)
+	if len(behaviors) != len(m.data.EvaluationPolicies[0].Behaviors) || behaviors[0].ID == "source-only" {
+		t.Fatal("import changed policy behaviors")
+	}
+	after, _ := json.Marshal(m.data.EvaluationPolicies)
+	if string(original) != string(after) {
+		t.Fatal("picker mutated saved policies before backend validation")
+	}
+	if m.dialog != parent {
+		t.Fatal("import must return to judge list")
+	}
+	m.pending = false
+	m.openPolicyJudge("policy", 0)
+	for _, r := range m.dialog.rows {
+		if r.id == "all-judges" {
+			t.Fatal("redundant shortcut remains")
+		}
 	}
 }

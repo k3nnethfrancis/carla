@@ -73,10 +73,38 @@ func (m *model) openPolicyJudges(id string) tea.Cmd {
 		}
 		d.rows = append(d.rows, row{id: strconv.Itoa(i), label: label, preview: fmt.Sprintf("%s · %d behaviors. Assesses all enabled policy behaviors. Open model and call settings.", m.evaluatorModelName(evaluator{Kind: j.Kind, Model: j.Model}), len(p.Behaviors))})
 	}
-	d.rows = append(d.rows, row{id: "new", label: "+ New judge", preview: "Add a model to assess the same policy behaviors."})
+	d.rows = append(d.rows, row{id: "library", label: "From library", preview: "Copy a judge configured in another policy. Model, prompt and call settings are copied; policy behaviors stay here."}, row{id: "new", label: "+ New judge", preview: "Add a model to assess the same policy behaviors."})
 	m.dialog = d
 	return nil
 }
+
+// Library choices are existing reusable configurations, copied from other policies.
+// They are not live references: editing either policy cannot change the other.
+func (m *model) openJudgeLibraryPicker(parent *dialog) tea.Cmd {
+	id := parent.args["id"].(string)
+	copies := map[string]evaluationJudge{}
+	d := &dialog{kind: "eval-policy-judge-library", title: "From library", parent: parent, args: map[string]any{"id": id, "judge": -1, "copies": copies}}
+	for _, policy := range m.data.EvaluationPolicies {
+		if policy.ID == id {
+			continue
+		}
+		for i, judge := range policy.Judges {
+			if judge.Missing {
+				continue
+			}
+			key := policy.ID + ":" + strconv.Itoa(i)
+			copies[key] = judge
+			d.rows = append(d.rows, row{id: key, label: judge.Name + " · " + policy.Name, preview: m.evaluatorModelName(evaluator{Kind: judge.Kind, Model: judge.Model}) + " · " + judge.CallMode + ". Copy model, prompt and call settings. Existing behaviors stay unchanged; edits remain independent."})
+		}
+	}
+	if len(d.rows) == 0 {
+		m.status = "No judges in other policies yet. Use New judge to create one."
+		return nil
+	}
+	m.dialog = d
+	return nil
+}
+
 func (m *model) openPolicyJudge(id string, i int) tea.Cmd {
 	p := m.findEvaluationPolicy(id)
 	if p == nil || i < 0 || i >= len(p.Judges) {
@@ -92,7 +120,6 @@ func (m *model) openPolicyJudge(id string, i int) tea.Cmd {
 	if j.Kind == "llm" {
 		rows = append(rows, row{id: "prompt", label: "Prompt template", preview: "Full instructions and response contract used by this judge. Saving changes requires confirmation."})
 	}
-	rows = append(rows, row{id: "all-judges", label: "All judges", preview: "Manage additional models that assess the same policy behaviors."})
 	rows = append(rows, row{id: "delete", label: "Remove judge…", preview: "Remove this judge. Policy behaviors and past results remain."})
 	m.dialog = &dialog{kind: "eval-policy-judge", title: j.Name, args: policyJudgeArgs(id, i), rows: rows}
 	m.dialog.args["judge_id"] = j.ID
@@ -170,7 +197,7 @@ func (m *model) submitPolicyJudge(d *dialog) tea.Cmd {
 	if value, ok := d.args["behavior"].(int); ok {
 		k = value
 	}
-	if i >= len(p.Judges) || (strings.HasPrefix(d.kind, "eval-policy-judge") && d.kind != "eval-policy-judges" && d.kind != "eval-policy-judge-model" && i < 0) {
+	if i >= len(p.Judges) || (strings.HasPrefix(d.kind, "eval-policy-judge") && d.kind != "eval-policy-judges" && d.kind != "eval-policy-judge-model" && d.kind != "eval-policy-judge-library" && i < 0) {
 		parent := policyConfigParent(d)
 		m.openPolicyJudges(id)
 		m.dialog.parent = parent
@@ -231,11 +258,23 @@ func (m *model) submitPolicyJudge(d *dialog) tea.Cmd {
 	}
 	switch d.kind {
 	case "eval-policy-judges":
+		if r.id == "library" {
+			return m.openJudgeLibraryPicker(d)
+		}
 		if r.id == "new" {
 			return m.policyModelPicker(d)
 		}
 		j, _ := strconv.Atoi(r.id)
 		return child(m.openPolicyJudge(id, j))
+	case "eval-policy-judge-library":
+		choice, ok := d.args["copies"].(map[string]evaluationJudge)[r.id]
+		if !ok {
+			return nil
+		}
+		// A library import creates an independent judge; the backend assigns identity.
+		choice.ID, choice.Revision = "", 0
+		p.Judges = append(p.Judges, choice)
+		return m.savePolicyDraft(d, p)
 	case "eval-policy-judge-model":
 		j := evaluationJudge{Kind: r.id, CallMode: "separate", Prompt: m.data.EvaluationPrompt}
 		if i >= 0 {
@@ -262,12 +301,6 @@ func (m *model) submitPolicyJudge(d *dialog) tea.Cmd {
 		return m.savePolicyDraft(d, p)
 	case "eval-policy-judge":
 		switch r.id {
-		case "all-judges":
-			// Judges are siblings under the policy, never descendants of a judge.
-			parent := policyConfigParent(d)
-			cmd := m.openPolicyJudges(id)
-			m.dialog.parent = parent
-			return cmd
 		case "model":
 			return m.policyModelPicker(d)
 		case "call_mode":

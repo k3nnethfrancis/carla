@@ -292,9 +292,10 @@ func TestPolicyBehaviorsAndJudgeAreSiblings(t *testing.T) {
 	m.dialog = root
 	m.dialog.index = 2
 	m.submitDialog()
-	if m.dialog.kind != "eval-policy-judge" {
-		t.Fatal("single judge should open directly")
+	if m.dialog.kind != "eval-policy-judges" {
+		t.Fatal("single judge must use the same list as multiple judges")
 	}
+	m.submitDialog()
 	for _, r := range m.dialog.rows {
 		if r.id == "behaviors" {
 			t.Fatal("judge must not own behaviors")
