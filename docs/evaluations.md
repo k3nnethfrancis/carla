@@ -98,29 +98,41 @@ The generator unloads before local selection judging. Exact candidate context,
 criteria, prompt and response are retained. Preserve the JSON contract if editing
 the choice prompt; malformed responses remain errors.
 
-## Data, Policies and Runs
+## Data, Policies and Results
 
-Evaluate has three views:
+Evaluate has three views and a run setup action:
 
 - **Data** contains saved document versions and conversation traces. Collections
   organize those inputs; adding data does not call a model.
 - **Policies** contains assessment definitions: a shared set of behaviors, judge
   settings and an On pass setting. Each judge owns its model and call settings and assesses
   the same enabled policy behaviors. A policy is independent of its input data.
-- **Runs** contains the results of applying a policy to data. Each run preserves
+- **Results** contains the results of applying a policy to data. Each run preserves
   the input revisions and behavior configurations actually used.
 
 Create or open a data collection and use **Add data** to add saved documents,
-conversations or existing judgments. **Collection settings** lets you rename the
+conversations or existing judgments. **Dataset settings** lets you rename the
 collection or make it the default destination for data assessed from other tabs.
-**▶ Run evaluation** is an action, not a data item: click it or press Enter to
-assess selected items (or pending items when none are selected) with the active
-policy. Select completed items with Space to run them again. Results appear in
-**Runs**; focusing the action previews which policy will run.
-To remove a collection, use **Collection settings → Remove collection**, or focus
+Use **+ New run** on the Evaluate page to configure one evaluation:
+
+1. **Dataset:** choose saved data from Data.
+2. **Policy:** choose an existing Evals policy (the same policies as `/policy` → Evals).
+3. **Data:** assess all dataset items, or the subset selected before opening setup.
+4. **On pass:** inherit the policy default, record only, or mark passing items for training.
+5. **Start run:** execute and open Results. Setup alone does not call a model.
+
+You can also focus a dataset in Data and type `/eval`, or select items inside it
+with Space and type `/eval`. Both open the same setup with that context filled in.
+`/eval "Voice" --train-on-pass true` preselects a policy and run option. Changing
+the dataset resets the item selection to all items in that dataset. Previously
+evaluated items are included; every run records new results. Escape backs out of
+pickers or cancels setup. These choices do not change saved dataset/policy defaults.
+Outside Evaluate, `/eval` still directly assesses selected documents/conversations.
+
+To remove a collection, use **Dataset settings → Remove collection**, or focus
 it in the Data list and use `/remove` (`/delete` is an alias). Confirmation removes
 the collection and its membership from Data. Source documents, conversations,
-policies and historical Runs remain; a recovery copy is retained in the workspace.
+policies and historical results remain; a recovery copy is retained in the workspace.
 Removing the default collection uses the next remaining collection as the default.
 If none remain, the next `/eval` from a document or conversation creates a new Data
 collection.
@@ -170,7 +182,7 @@ phase. Generation and evaluation share the session operation lock.
 
 ## Interpret and preserve results
 
-Open Runs to inspect an execution and its judgments. Every assessment retains
+Open Results to inspect an execution and its judgments. Every assessment retains
 its input text, source lineage, generation-model provenance, behavior revision,
 request/response and result. A passing item requires every assigned behavior to
 complete and pass. Errors and interruptions are incomplete assessments, not

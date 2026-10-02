@@ -566,7 +566,7 @@ func (m *model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 						m.selected = index
 						if m.section == 4 {
 							switch r.kind {
-							case "eval-area", "eval-policy", "eval-policy-new", "eval-collection", "eval-create", "eval-back", "eval-config", "eval-add", "eval-execute", "eval-filter":
+							case "eval-area", "eval-policy", "eval-policy-new", "eval-collection", "eval-create", "eval-back", "eval-config", "eval-add", "eval-new-run", "eval-filter":
 								m.sectionFocus = false
 								m.reflow()
 								return m, m.activate()

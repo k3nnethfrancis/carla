@@ -20,6 +20,7 @@ type evaluationActions struct {
 }
 type evaluationRun struct {
 	ID, Created, Collection, Status string
+	CollectionName                  string `json:"collection_name"`
 	Policy                          struct {
 		ID, Name  string
 		Revision  int
@@ -65,7 +66,7 @@ func (m *model) evaluationAreaRows() []row {
 			rows = append(rows, row{id: r.ID, kind: "eval-run", label: fmt.Sprintf("%d · %s · %s", i+1, r.Policy.Name, evaluationStatus(evaluationSummary{Status: r.Status, Passed: r.Passed})), preview: fmt.Sprintf("%s · %d/%d assessed · policy revision %d", r.Created, r.Completed, r.Count, r.Policy.Revision)})
 		}
 	default:
-		return []row{{id: "data", kind: "eval-area", label: "Data", preview: "Documents and conversation traces to assess."}, {id: "policies", kind: "eval-area", label: "Policies", preview: "Configure behaviors and judges for complete traces. Active: " + m.activePolicyName()}, {id: "runs", kind: "eval-area", label: "Runs", preview: "Results of applying policies to data, with frozen inputs and configuration."}}
+		return []row{{id: "data", kind: "eval-area", label: "Data", preview: "Documents and conversation traces to assess."}, {id: "policies", kind: "eval-area", label: "Policies", preview: "Configure behaviors and judges for complete traces. Active: " + m.activePolicyName()}, {id: "runs", kind: "eval-area", label: "Results", preview: "Results of applying policies to data, with frozen inputs and configuration."}, {id: "new-run", kind: "eval-new-run", label: "+ New run", preview: "Choose a dataset, policy and options for one evaluation run."}}
 	}
 	return rows
 }
@@ -202,10 +203,13 @@ func (m *model) evaluatorModelName(e evaluator) string {
 }
 func (m *model) evaluationRunView(width int) string {
 	if m.evalRun == nil || m.evalRun.ID != m.targetRow().id {
-		return "Runs\n\nChoose a run and press ENTER to read its results.\nEach run preserves the exact data and policy used."
+		return "Results\n\nChoose a run and press ENTER to read its results.\nEach run preserves the exact data and policy used."
 	}
 	r := m.evalRun
 	text := fmt.Sprintf("%s · %s\n%s · policy revision %d\n%d/%d assessed\n", r.Policy.Name, r.Status, r.Created, r.Policy.Revision, r.Completed, r.Count)
+	if r.CollectionName != "" {
+		text += "Dataset · " + r.CollectionName + "\n"
+	}
 	// A run stores one result per behavior. Render all judgments beside one
 	// copy of each frozen input rather than repeating the document for each.
 	groups := []evaluationRecord{}

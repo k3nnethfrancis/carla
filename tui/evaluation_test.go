@@ -98,13 +98,13 @@ func TestEvaluationSelectionFilteringAndNavigation(t *testing.T) {
 	failed := false
 	m.evalCollection = "set"
 	m.data.EvaluationSets[0].Items = []evaluationSummary{{ID: "one", Title: "Document", Status: "complete", Passed: &passed, Training: true}, {ID: "two", Title: "Conversation", Status: "complete", Passed: &failed}}
-	m.selected = 5
+	m.selected = 4
 	m.toggleTarget()
 	if !m.evalSelection["two"] {
 		t.Fatal("space did not select result")
 	}
 	m.evalFilter = "training"
-	m.selected = 5
+	m.selected = 4
 	if m.targetRow().id != "one" {
 		t.Fatal(m.rows())
 	}
@@ -135,7 +135,7 @@ func TestEvaluationSelectionFilteringAndNavigation(t *testing.T) {
 func TestEvaluationNotesSaveDoesNotEditSource(t *testing.T) {
 	m := evalFixture()
 	m.section = 4
-	m.selected = 5
+	m.selected = 4
 	m.evalCollection = "set"
 	m.data.EvaluationSets[0].Items = []evaluationSummary{{ID: "one", Status: "complete"}}
 	m.evaluation = &evaluationRecord{ID: "one", Note: "Original"}
@@ -166,10 +166,12 @@ func TestRerunFromEvaluationTabDoesNotLoseRequestToPreview(t *testing.T) {
 	m := evalFixture()
 	m.section = 4
 	m.evalCollection = "set"
-	m.selected = 5
+	m.selected = 4
 	m.focus = 1
 	m.data.EvaluationSets[0].Items = []evaluationSummary{{ID: "one", Status: "complete"}}
-	req := captureCommand(t, m, func() tea.Cmd { return m.openEval("/eval") })
+	m.openEval("/eval")
+	m.dialog.index = 4
+	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
 	if req.Command != "evaluation.collection.run" {
 		t.Fatal(req)
 	}
@@ -240,11 +242,11 @@ func TestEvaluateDataPoliciesRunsNavigation(t *testing.T) {
 	m.section = 4
 	m.focus = 0
 	rows := m.rows()
-	if len(rows) != 3 || rows[0].label != "Data" || rows[1].label != "Policies" || rows[2].label != "Runs" {
+	if len(rows) != 4 || rows[0].label != "Data" || rows[1].label != "Policies" || rows[2].label != "Results" || rows[3].label != "+ New run" {
 		t.Fatalf("root: %#v", rows)
 	}
 	m.evaluationCollectionAction("eval-area", "data")
-	if m.rows()[1].label != "+ New collection" {
+	if m.rows()[1].label != "+ New dataset" {
 		t.Fatal(m.rows())
 	}
 	m.evaluationCollectionAction("eval-collection", "set")
@@ -336,7 +338,9 @@ func TestExplicitPolicyDoesNotSkipDataCompletedUnderAnotherPolicy(t *testing.T) 
 	m.selected = 0
 	m.data.EvaluationSets[0].Items = []evaluationSummary{{ID: "done", Status: "complete"}}
 	m.data.EvaluationPolicies = append(m.data.EvaluationPolicies, evaluationPolicy{ID: "other", Name: "Other"})
-	req := captureCommand(t, m, func() tea.Cmd { return m.openEval("/eval Other") })
+	m.openEval("/eval Other")
+	m.dialog.index = 4
+	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
 	if string(req.Args["items"]) != `["done"]` || string(req.Args["policy"]) != `"other"` {
 		t.Fatal(req)
 	}
@@ -477,7 +481,7 @@ func TestEvaluateMouseControlsAndDataFocus(t *testing.T) {
 		for _, tc := range []struct {
 			index int
 			kind  string
-		}{{1, "eval-collection-config"}, {2, "eval-add-items"}, {4, "eval-filter"}} {
+		}{{1, "eval-collection-config"}, {2, "eval-add-items"}, {3, "eval-filter"}} {
 			m := evalFixture()
 			m.width, m.height = width, 36
 			m.section, m.focus = 4, 0
@@ -496,27 +500,23 @@ func TestEvaluateMouseControlsAndDataFocus(t *testing.T) {
 		if m.evalCollection != "set" {
 			t.Fatal("collection click did not open")
 		}
-		click(m, 3)
-		if !strings.Contains(m.status, "Add data") {
-			t.Fatal(m.status)
+		for _, r := range m.rows() {
+			if strings.Contains(r.label, "Run evaluation") || r.kind == "eval-new-run" {
+				t.Fatal("execution control leaked into dataset")
+			}
 		}
 		m.data.EvaluationSets[0].Items = []evaluationSummary{{ID: "done", Status: "complete"}}
-		click(m, 3)
-		if !strings.Contains(m.status, "No pending items") {
-			t.Fatal(m.status)
-		}
 		m.evaluation = &evaluationRecord{ID: "done"}
-		click(m, 5)
+		click(m, 4)
 		if m.focus != 0 || m.dialog != nil {
 			t.Fatal("data click should focus and preview")
 		}
-		m.evalSelection = map[string]bool{"done": true}
-		req := captureCommand(t, m, func() tea.Cmd { return click(m, 3) })
-		if req.Command != "evaluation.collection.run" || string(req.Args["items"]) != `["done"]` {
-			t.Fatal(req)
+		m.evaluationCollectionAction("eval-back", "")
+		m.evaluationCollectionAction("eval-back", "")
+		click(m, 3)
+		if m.dialog == nil || m.dialog.kind != "eval-run-config" {
+			t.Fatal("New run click did not configure")
 		}
-		if m.evalArea != "runs" {
-			t.Fatal("did not navigate to Runs")
-		}
+
 	}
 }

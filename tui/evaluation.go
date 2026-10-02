@@ -117,6 +117,16 @@ func (m *model) openEval(input string) tea.Cmd {
 		m.status = err.Error()
 		return nil
 	}
+	if m.section == 4 {
+		var train *bool
+		words, _ := generationWords(input)
+		for _, word := range words {
+			if word == "--train-on-pass" || strings.HasPrefix(word, "--train-on-pass=") {
+				train = &auto
+			}
+		}
+		return m.newEvaluationRun(name, train)
+	}
 	if name == "" {
 		name = m.data.ActiveEvaluationPolicy
 	}
@@ -132,37 +142,12 @@ func (m *model) openEval(input string) tea.Cmd {
 			args["train_on_pass"] = auto
 		}
 	}
-	if m.section == 4 {
-		if m.currentEvaluation() == nil {
-			m.status = "Open Data and select a collection to evaluate"
-			return nil
-		}
-		args["collection"] = m.evalCollection
-		ids := m.evaluationIDs()
-		if len(ids) == 0 {
-			for _, item := range m.collectionItems() {
-				if item.Status != "complete" || policy.ID != m.data.ActiveEvaluationPolicy {
-					ids = append(ids, item.ID)
-				}
-			}
-		}
-		if len(ids) == 0 {
-			if len(m.collectionItems()) == 0 {
-				m.status = "Add data before running an evaluation"
-			} else {
-				m.status = "No pending items · SPACE selects data to rerun"
-			}
-			return nil
-		}
-		args["items"] = ids
-	} else {
-		targets := m.evaluationTargets()
-		if len(targets) == 0 {
-			m.status = "Select a document or conversation first"
-			return nil
-		}
-		args["targets"] = targets
+	targets := m.evaluationTargets()
+	if len(targets) == 0 {
+		m.status = "Select a document or conversation first"
+		return nil
 	}
+	args["targets"] = targets
 
 	cmd := m.send("evaluation.collection.run", args)
 	if cmd != nil {
@@ -196,12 +181,9 @@ func (m *model) evaluationView(width int) (text string) {
 	}
 	if m.evaluation == nil || m.evaluation.ID != m.targetRow().id {
 		if c := m.currentEvaluation(); c != nil {
-			if m.targetRow().kind == "eval-execute" {
-				return "Run evaluation\n\nPolicy · " + m.activePolicyName() + "\n\nAssess selected data, or pending items when nothing is selected.\nSelect completed items with SPACE to evaluate them again.\n\nClick or press ENTER to run. Results appear in Runs.\n/policy changes the assessment policy."
-			}
-			return c.Name + "\n\nAdd data · saved documents, conversations or existing judgments.\nCollection settings · name and default destination.\nRun · assess selected or pending items with the active policy.\n\n/policy chooses the behaviors used for assessment.\nSPACE selects · ENTER opens · /keep marks for training"
+			return c.Name + "\n\nAdd data · saved documents, conversations or existing judgments.\nDataset settings · name and default destination.\n/eval configures a new run for this dataset or selected items.\nSPACE selects · ENTER opens · /keep marks for training"
 		}
-		return "Evaluate\n\nData · saved documents and conversation traces.\nPolicies · judges and the behaviors they assess.\nRuns · results, preserving the exact inputs and policy.\n\nActive policy · " + m.activePolicyName()
+		return "Evaluate\n\nData · saved documents and conversation traces.\nPolicies · judges and the behaviors they assess.\nResults · recorded assessments with exact inputs and policy.\n+ New run · choose a dataset and policy before starting."
 	}
 	return m.collectionItemView(m.evaluation, width)
 }
@@ -256,6 +238,9 @@ func (m *model) evalAction(id string) tea.Cmd {
 
 // All forms reuse Carla's existing parent/back stack and correlated saves.
 func (m *model) submitEvaluation(d *dialog) tea.Cmd {
+	if strings.HasPrefix(d.kind, "eval-run-") {
+		return m.submitEvaluationRun(d)
+	}
 	if strings.HasPrefix(d.kind, "eval-policy") {
 		return m.submitEvaluationPolicy(d)
 	}

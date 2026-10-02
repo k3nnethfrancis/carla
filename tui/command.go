@@ -49,7 +49,7 @@ func (m *model) commandChoices() []action {
 	actions := m.contextualActions()
 	actions = append(actions, action{id: "add", label: "Add to this collection"})
 	for _, a := range allActions {
-		if a.id == "eval" && len(m.evaluationTargets()) == 0 && !(m.section == 4 && len(m.collectionItems()) > 0) {
+		if a.id == "eval" && len(m.evaluationTargets()) == 0 && m.section != 4 {
 			continue
 		}
 		if m.section == 4 {
@@ -95,7 +95,7 @@ func (m *model) commandChoices() []action {
 		actions = append(actions, action{id: "keep", label: "Mark selected items for training"}, action{id: "remove", label: "Remove selected items from this collection"}, action{id: "notes", label: "Edit evaluation note"}, action{id: "inspect", label: "Exact evaluated input and judge result"})
 	}
 	if m.section == 4 && m.targetRow().kind == "eval-collection" {
-		actions = append(actions, action{id: "remove", label: "Remove this data collection · sources and Runs remain"})
+		actions = append(actions, action{id: "remove", label: "Remove this data collection · sources and Results remain"})
 	}
 	actions = append(actions, action{id: "help", label: "All commands and navigation"}, action{id: "keys", label: "Edit keybindings"}, action{id: "quit", label: "Quit Carla"}, action{id: "exit", label: "Exit Carla"}, action{id: "restart", label: "Restart Carla in this workspace"})
 	if m.data.Busy {
@@ -147,6 +147,9 @@ func (m *model) commandChoices() []action {
 			a.label = "Monitoring, selection and evals"
 		case "eval":
 			a.label = "Apply active or named policy to selected data"
+			if m.section == 4 {
+				a.label = "Configure a new run · dataset, policy and training option"
+			}
 		case "evaluations":
 			a.label = "Named collections, judgments and training items"
 		case "snapshot":

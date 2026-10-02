@@ -396,7 +396,7 @@ func (m *model) activate() tea.Cmd {
 	m.selected = min(m.selected, len(rows)-1)
 	r := rows[m.selected]
 	switch r.kind {
-	case "eval-area", "eval-run", "eval-policy", "eval-policy-new", "eval-collection", "eval-create", "eval-back", "eval-config", "eval-add", "eval-execute":
+	case "eval-area", "eval-run", "eval-policy", "eval-policy-new", "eval-collection", "eval-create", "eval-back", "eval-config", "eval-add", "eval-new-run":
 		return m.evaluationCollectionAction(r.kind, r.id)
 	case "evaluation":
 		m.focus = 1
@@ -815,11 +815,16 @@ func (m *model) apply(e event) tea.Cmd {
 		m.pending = false
 		if m.dialogRequest != "" && e.ID == m.dialogRequest {
 			if m.dialog == m.savingDialog {
-				if m.savingDialog.kind == "eval-collection-delete" {
+				if m.savingDialog.kind == "eval-run-config" {
+					m.dialog = nil
+					m.section = 4
+					m.evalArea = "runs"
+					m.enterCollection("")
+				} else if m.savingDialog.kind == "eval-collection-delete" {
 					m.dialog = nil
 					m.evalArea = "data"
 					m.enterCollection("")
-					m.status = "Collection removed · sources and Runs retained"
+					m.status = "Collection removed · sources and Results retained"
 				} else {
 					m.dialog = m.savingDialog.parent
 				}

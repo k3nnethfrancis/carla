@@ -231,7 +231,7 @@ Exports preserve frozen data, judgment history, notes and training marks in a
 workspace-local structured manifest plus text copies; they do not train a model.
 
 The Evaluate TUI uses the existing focus, editor, selection and Escape mechanisms
-for Data, Policies and Runs. Data collection membership and policy selection are
+for Data, Policies and Results. Data collection membership and policy selection are
 independent; no additional named evaluation container is required.
 
 The frontend saves the last tab and document/trace row in each workspace's

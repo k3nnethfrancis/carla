@@ -35,7 +35,7 @@ func (m *model) collectionRows() []row {
 		if filter == "" {
 			filter = "all"
 		}
-		rows := []row{{id: "back", kind: "eval-back", label: "← Data"}, {id: "config", kind: "eval-config", label: "Collection settings", preview: "Rename this data collection or make it the default destination. Assessment behaviors belong in Policies."}, {id: "add", kind: "eval-add", label: "+ Add data", preview: "Choose saved documents, conversations or existing judgments. Adding data does not run a model."}, {id: "run", kind: "eval-execute", label: "▶ Run evaluation", preview: "Assess selected or pending data using this policy. /policy changes the active policy."}, {id: "filter", kind: "eval-filter", label: "Show · " + filter}}
+		rows := []row{{id: "back", kind: "eval-back", label: "← Data"}, {id: "config", kind: "eval-config", label: "Dataset settings", preview: "Rename this data collection or make it the default destination. Assessment behaviors belong in Policies."}, {id: "add", kind: "eval-add", label: "+ Add data", preview: "Choose saved documents, conversations or existing judgments. Adding data does not run a model."}, {id: "filter", kind: "eval-filter", label: "Show · " + filter}}
 		for i := len(c.Items) - 1; i >= 0; i-- {
 			e := c.Items[i]
 			status := evaluationStatus(e)
@@ -57,7 +57,7 @@ func (m *model) collectionRows() []row {
 	if m.evalArea != "data" {
 		return m.evaluationAreaRows()
 	}
-	rows := []row{{id: "back", kind: "eval-back", label: "← Evaluate"}, {id: "new", kind: "eval-create", label: "+ New collection", preview: "Collect saved documents and conversation traces. Adding data does not run a model."}}
+	rows := []row{{id: "back", kind: "eval-back", label: "← Evaluate"}, {id: "new", kind: "eval-create", label: "+ New dataset", preview: "Collect saved documents and conversation traces. Adding data does not run a model."}}
 	for _, c := range m.data.EvaluationSets {
 		pass, fail := 0, 0
 		for _, i := range c.Items {
@@ -71,7 +71,7 @@ func (m *model) collectionRows() []row {
 		}
 		active := ""
 		if c.ID == m.data.ActiveEvaluation {
-			active = " · active"
+			active = " · default"
 		}
 		rows = append(rows, row{id: c.ID, kind: "eval-collection", label: c.Name + active, preview: fmt.Sprintf("%d items · %d pass · %d fail · %d pending/evidence", len(c.Items), pass, fail, len(c.Items)-pass-fail)})
 	}
@@ -87,7 +87,7 @@ func (m *model) openCollectionConfig() tea.Cmd {
 	if c.ID == m.data.ActiveEvaluation {
 		active = "Default collection"
 	}
-	m.dialog = &dialog{kind: "eval-collection-config", title: c.Name, rows: []row{{id: "name", label: "Name · " + c.Name, preview: "Rename this collection of data."}, {id: "active", label: active, preview: "Use this collection for data added by /eval from documents and conversations."}, {id: "remove", label: "Remove collection…", preview: "Remove this collection from Data. Source documents, conversations, policies and Runs remain."}}}
+	m.dialog = &dialog{kind: "eval-collection-config", title: c.Name, rows: []row{{id: "name", label: "Name · " + c.Name, preview: "Rename this collection of data."}, {id: "active", label: active, preview: "Use this collection for data added by /eval from documents and conversations."}, {id: "remove", label: "Remove collection…", preview: "Remove this collection from Data. Source documents, conversations, policies and Results remain."}}}
 	return nil
 }
 
@@ -96,7 +96,7 @@ func (m *model) confirmRemoveCollection(id string) tea.Cmd {
 		if c.ID == id {
 			m.dialog = &dialog{kind: "eval-collection-delete", title: "Remove collection · " + c.Name + "?", parent: m.dialog, args: map[string]any{"collection": c.ID}, rows: []row{
 				{id: "cancel", label: "Cancel", preview: "Keep this collection."},
-				{id: "remove", label: "Remove collection", preview: fmt.Sprintf("Remove %d items from Data. Source documents, conversations, policies and Runs remain; a recovery record is retained.", len(c.Items))},
+				{id: "remove", label: "Remove collection", preview: fmt.Sprintf("Remove %d items from Data. Source documents, conversations, policies and Results remain; a recovery record is retained.", len(c.Items))},
 			}}
 			break
 		}
@@ -118,6 +118,9 @@ func (m *model) evaluationCollectionAction(kind, id string) tea.Cmd {
 	case "eval-collection":
 		m.enterCollection(id)
 	case "eval-area":
+		if id == "policies" {
+			return m.openEvaluationPolicies()
+		}
 		m.evalArea = id
 		m.enterCollection("")
 	case "eval-policy":
@@ -133,14 +136,14 @@ func (m *model) evaluationCollectionAction(kind, id string) tea.Cmd {
 		}
 		m.enterCollection("")
 	case "eval-create":
-		m.dialog = &dialog{kind: "eval-collection-new", title: "New collection"}
+		m.dialog = &dialog{kind: "eval-collection-new", title: "New dataset"}
 		m.dialog.add("Name", "")
 		return m.dialog.fields[0].input.Focus()
 	case "eval-config":
 		return m.openCollectionConfig()
 	case "eval-add":
 		return m.openCollectionItems()
-	case "eval-execute":
+	case "eval-new-run":
 		return m.openEval("/eval")
 	}
 	return nil

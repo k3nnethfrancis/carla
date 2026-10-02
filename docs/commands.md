@@ -133,7 +133,7 @@ only explicitly configured Stop actions terminate flagged work.
 
 ## Evaluation
 
-Evaluate has Data, Policies and Runs. Its Policies view and `/policy` → Evals
+Evaluate has Data, Policies and Results. Its Policies view and `/policy` → Evals
 use the same named policies. `/policy` always shows all three policy categories;
 `/config` configures the current view. Add behaviors and judge settings to a policy,
 add saved documents/conversations to Data, then run the policy on those items.
@@ -147,7 +147,9 @@ Adding existing evidence does not run another judge.
 ```
 
 `/eval` on selected Branches/Anthology/Simulator material runs the active policy
-or the named policy. In Evaluate, select collection items to judge. If configuration
+or the named policy. In Evaluate, `/eval` opens the same setup as **+ New run**,
+with the focused dataset or selected items preselected. Start runs it; previously
+evaluated items can be assessed again. If configuration
 is missing, Carla explains what to set up. `--train-on-pass true` marks an item only
 when every enabled behavior completes and passes. The policy’s Actions set the
 default (initially off); an explicit true or false overrides it for that run. Manual training marks

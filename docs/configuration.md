@@ -314,7 +314,7 @@ local to the policy. Selection/Evals imports start Off for review of the spec an
 **Pass when · Present/Absent**. Evals **On pass** chooses whether passing data is
 only recorded or also marked for training. Saved runs
 retain the configurations used at execution. Adding data never invokes a model.
-See [evaluations](evaluations.md) for the Data / Policies / Runs workflow.
+See [evaluations](evaluations.md) for the Data / Policies / Results workflow.
 
 Named Monitoring and Selection policy rows show only **On/Off**. Space or
 Left/Right toggles the focused policy; Enter opens its configuration. Inside,

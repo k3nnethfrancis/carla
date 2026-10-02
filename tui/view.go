@@ -458,7 +458,7 @@ func (m *model) View() tea.View {
 		case 0:
 			title = sections[m.section]
 			if m.section == 4 && m.evalArea != "" {
-				title = strings.Title(m.evalArea)
+				title = evaluationAreaTitle(m.evalArea)
 			}
 			if m.notesOpen {
 				title = "Notes"
@@ -473,7 +473,7 @@ func (m *model) View() tea.View {
 			if m.section == 4 {
 				title = "Evaluate"
 				if m.evalArea != "" {
-					title += " / " + strings.Title(m.evalArea)
+					title += " / " + evaluationAreaTitle(m.evalArea)
 				}
 				if c := m.currentEvaluation(); c != nil {
 					title += " / " + c.Name
@@ -562,7 +562,7 @@ func (m *model) View() tea.View {
 				}
 			}
 		}
-		modelName = fmt.Sprintf("%d items · %d training · policy: %s", items, training, m.activePolicyName())
+		modelName = fmt.Sprintf("%d items · %d training", items, training)
 	}
 
 	activeDocuments := 0
