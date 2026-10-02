@@ -227,8 +227,7 @@ func TestDiffusionJudgeEndpointSurvivesEditing(t *testing.T) {
 			t.Fatal("managed server leaked into configuration")
 		}
 	}
-	m.submitDialog()
-	m.dialog.fields[0].input.SetValue("Renamed")
+	chooseBehaviorRow(t, m, "call_mode")
 	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
 	var judges []evaluationJudge
 	json.Unmarshal(req.Args["judges"], &judges)

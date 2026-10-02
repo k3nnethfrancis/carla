@@ -93,3 +93,45 @@ func TestBehaviorsCommandIsPrimary(t *testing.T) {
 		t.Fatal("command did not open library")
 	}
 }
+
+func TestBehaviorLibraryStatesAndConfirmedUpdate(t *testing.T) {
+	m := evalFixture()
+	b := &m.data.EvaluationPolicies[0].Behaviors[0]
+	if m.behaviorLibraryRow(*b).label != "Save to library" {
+		t.Fatal("unsaved")
+	}
+	b.SourceID = "lib"
+	b.SourceRevision = 1
+	m.data.BehaviorLibrary = []libraryBehavior{{ID: "lib", Name: b.Name, Spec: b.Spec, Revision: 1}}
+	if m.behaviorLibraryRow(*b).label != "Saved in library ✓" {
+		t.Fatal("saved")
+	}
+	b.Spec = "Changed locally"
+	if m.behaviorLibraryRow(*b).label != "Modified · Update library…" {
+		t.Fatal("modified")
+	}
+	m.data.BehaviorLibrary[0].Revision = 2
+	if m.behaviorLibraryRow(*b).label != "Library update available…" {
+		t.Fatal("new library revision")
+	}
+	m.openPolicyBehavior("policy", 0)
+	parent := m.dialog
+	m.openPolicyBehaviorLibrary(parent, "policy", *b)
+	m.dialog.index = 1
+	m.submitDialog()
+	if m.dialog.kind != "behavior-library-sync-confirm" || m.dialog.index != 0 {
+		t.Fatal("confirmation required")
+	}
+	m.dialog.index = 1
+	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
+	if req.Command != "behavior.publish" || string(req.Args["action"]) != "\"update\"" || string(req.Args["revision"]) != "2" {
+		t.Fatal(req)
+	}
+	if m.dialog != parent {
+		t.Fatal("return to behavior")
+	}
+	m.data.BehaviorLibrary = nil
+	if m.behaviorLibraryRow(*b).label != "Removed from library · Save again" {
+		t.Fatal("deleted source")
+	}
+}

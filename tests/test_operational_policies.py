@@ -754,3 +754,55 @@ async def test_delete_custom_selection_resets_legacy_fallback_assessment_default
     assert lab.project.data["selection_assessment_prompt"] == DEFAULT_PROMPT
     assert lab.project.data["selection_call_mode"] == "separate"
     assert lab.project.data["selection_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_library_publish_states_and_safe_updates(lab):
+    policy = evals.save(lab.project, dict(name="Coherence", judges=[config()]))
+    behavior = policy["behaviors"][0]
+    args = dict(policy=policy["id"], behavior=behavior["id"], action="save")
+    frozen = copy.deepcopy(policy)
+    await ops.dispatch(lab, "behavior.publish", args, "first")
+    source = next(
+        b
+        for b in lab.project.data["behavior_library"]
+        if b["id"] == behavior["source_id"]
+    )
+    count = len(lab.project.data["behavior_library"])
+    revision = policy["revision"]
+    await ops.dispatch(lab, "behavior.publish", args, "again")
+    assert len(lab.project.data["behavior_library"]) == count
+    assert policy["revision"] == revision
+    other = evals.save(
+        lab.project,
+        dict(
+            name="Other",
+            judges=[config()],
+            behaviors=copy.deepcopy(policy["behaviors"]),
+        ),
+    )
+    other_before = copy.deepcopy(other)
+    behavior["spec"] = "New local wording"
+    await ops.dispatch(
+        lab, "behavior.publish", dict(args, action="update", revision=1), "update"
+    )
+    assert source["spec"] == behavior["spec"] and source["revision"] == 2
+    assert other == other_before
+    with pytest.raises(ValueError, match="changed"):
+        await ops.dispatch(
+            lab, "behavior.publish", dict(args, action="update", revision=1), "stale"
+        )
+    behavior.update(enabled=False, expected="absent", threshold=0.7)
+    source.update(spec="New library wording", revision=3)
+    await ops.dispatch(
+        lab, "behavior.publish", dict(args, action="refresh", revision=3), "refresh"
+    )
+    assert behavior["spec"] == "New library wording"
+    assert (
+        not behavior["enabled"]
+        and behavior["expected"] == "absent"
+        and behavior["threshold"] == 0.7
+    )
+    assert frozen["behaviors"][0]["spec"] == "Criteria 0"
+    assert policy["judges"][0]["name"] == "judge"
+    assert evals.evaluation_judges.flatten(policy)[0]["judge_name"] == "judge"

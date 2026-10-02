@@ -201,3 +201,9 @@ Choose tokenization, loss masks, deduplication and preference objectives during
 training preparation. Export neither uploads data nor trains a model. It is not
 a full workspace backup or an import/restore format. Old snapshot files remain
 untouched; `/snapshot` is a compatibility name for `/export` in the interface.
+
+### Policy and behavior identity
+
+Policies name the overall assessment; behaviors name individual criteria. Each Evals policy has one judge configured by model, call mode and prompt template; judges have no separate editable name or library. Every enabled behavior must meet its own **Pass when** condition for an item to pass. A judge error leaves the assessment incomplete. Historical runs retain their frozen labels and settings.
+
+Inside an Evals behavior, the library row shows **Save to library**, **Saved in library ✓**, **Modified · Update library…**, or **Library update available…**. A removed library definition can be saved again. Repeated unchanged saves reuse the existing definition. Updates and importing a newer spec require confirmation; importing preserves the policy’s enabled state, expected outcome and threshold. Other policies and historical results never update automatically. **Save as separate spec…** creates an independent library identity. The behavior library is local to the workspace.

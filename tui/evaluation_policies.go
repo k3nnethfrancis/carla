@@ -118,6 +118,7 @@ func (m *model) openEvaluationPolicy(id string) tea.Cmd {
 		{id: "judges", label: judgeLabel, preview: "Configure one LLM, its prompt template and call settings for this policy’s behaviors."},
 		{id: "on-pass", label: "On pass · " + onPass, preview: "Always record results. Optionally mark passing items for training. /eval --train-on-pass true|false overrides this for one run."},
 		{id: "active", label: active, preview: "Use this policy when /eval has no explicit policy name."},
+		{id: "pass-rule", label: "Pass rule · All enabled behaviors", preview: "Every enabled behavior must meet its own Pass when condition. Any failed criterion fails the item; a judge error leaves it incomplete."},
 		{id: "delete", label: "Remove policy…", preview: "Remove this configuration; historical results remain."}}}
 	return nil
 }

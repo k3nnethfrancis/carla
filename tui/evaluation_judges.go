@@ -79,13 +79,13 @@ func (m *model) openPolicyJudge(id string, i int) tea.Cmd {
 	if j.CallMode == "bundled" {
 		mode = "Bundled"
 	}
-	rows := []row{{id: "name", label: "Name · " + j.Name, preview: "Name this judge within the policy."}, {id: "model", label: "Model · " + m.evaluatorModelName(evaluator{Kind: j.Kind, Model: j.Model}), preview: "Choose the LLM that assesses every enabled behavior against the complete trace."}, {id: "call_mode", label: "Call mode · " + mode, preview: "Separate assesses each behavior in its own request. Bundled assesses them together."}}
+	rows := []row{{id: "model", label: "Model · " + m.evaluatorModelName(evaluator{Kind: j.Kind, Model: j.Model}), preview: "Choose the LLM that assesses every enabled behavior against the complete trace."}, {id: "call_mode", label: "Call mode · " + mode, preview: "Separate assesses each behavior in its own request. Bundled assesses them together."}}
 
 	if j.Kind == "llm" {
 		rows = append(rows, row{id: "prompt", label: "Prompt template", preview: "Full instructions and response contract used by this judge. Saving changes requires confirmation."})
 	}
 	rows = append(rows, row{id: "delete", label: "Remove judge…", preview: "Remove this judge. Policy behaviors and past results remain."})
-	m.dialog = &dialog{kind: "eval-policy-judge", title: j.Name, args: policyJudgeArgs(id, i), rows: rows}
+	m.dialog = &dialog{kind: "eval-policy-judge", title: p.Name + " · Judge", args: policyJudgeArgs(id, i), rows: rows}
 	m.dialog.args["judge_id"] = j.ID
 	return nil
 }
@@ -124,7 +124,7 @@ func (m *model) openPolicyBehavior(id string, k int) tea.Cmd {
 		{id: "name", label: "Name · " + b.Name, preview: "Short name shown beside this behavior’s results."},
 		{id: "spec", label: "Behavior spec", preview: "Describe what counts as this behavior in the complete document or conversation. " + b.Spec},
 		{id: "expected", label: "Pass when · " + expectedLabel(b.Expected), preview: expectedHelp},
-		{id: "library-save", label: "Save spec to library", preview: "Create a reusable spec. Threshold, Pass when and enabled state stay in this policy."},
+		m.behaviorLibraryRow(b),
 		{id: "delete", label: "Remove behavior…", preview: "Remove from this policy. Past results retain the exact spec."},
 	}
 	if len(p.Judges) == 1 && p.Judges[0].Kind != "llm" {
@@ -177,16 +177,14 @@ func (m *model) submitPolicyJudge(d *dialog) tea.Cmd {
 		m.status = "Behavior no longer exists; choose a behavior"
 		return nil
 	}
-	if d.kind == "eval-policy-judge-field" || d.kind == "eval-policy-behavior-field" {
+	if d.kind == "eval-policy-behavior-field" {
 		value := strings.TrimSpace(d.fields[0].input.Value())
 		if value == "" {
 			m.status = "Enter a value"
 			return nil
 		}
 		field := d.args["field"].(string)
-		if d.kind == "eval-policy-judge-field" {
-			p.Judges[i].Name = value
-		} else if field == "threshold" {
+		if field == "threshold" {
 			v, err := strconv.ParseFloat(value, 64)
 			if err != nil || v <= 0 || v > 100 {
 				m.status = "Enter a percentage greater than 0 and at most 100"
@@ -284,7 +282,7 @@ func (m *model) submitPolicyJudge(d *dialog) tea.Cmd {
 	case "eval-policy-behavior":
 		if r.id == "library-save" {
 			b := p.Behaviors[k]
-			return m.send("behavior.save", map[string]any{"name": b.Name, "spec": b.Spec})
+			return m.openPolicyBehaviorLibrary(d, p.ID, b)
 		}
 		if r.id == "expected" {
 			p.Behaviors[k].Expected = nextExpected(p.Behaviors[k].Expected)
@@ -333,23 +331,13 @@ func (m *model) submitPolicyJudge(d *dialog) tea.Cmd {
 		m.dialog = &dialog{kind: d.kind + "-delete", title: "Remove? Past results remain", parent: d, args: d.args, rows: []row{{id: "cancel", label: "Cancel"}, {id: "confirm", label: "Remove"}}}
 		return nil
 	}
-	if r.id == "name" || r.id == "threshold" {
+	if k >= 0 && (r.id == "name" || r.id == "threshold") {
 		args := policyBehaviorArgs(id, k)
-		if i >= 0 {
-			args = policyJudgeArgs(id, i)
-		}
 		args["field"] = r.id
-		kind := "eval-policy-judge-field"
-		value := ""
-		if i >= 0 {
-			value = p.Judges[i].Name
-		}
-		if k >= 0 {
-			kind = "eval-policy-behavior-field"
-			value = p.Behaviors[k].Name
-			if r.id == "threshold" {
-				value = fmt.Sprint(p.Behaviors[k].Threshold * 100)
-			}
+		kind := "eval-policy-behavior-field"
+		value := p.Behaviors[k].Name
+		if r.id == "threshold" {
+			value = fmt.Sprint(p.Behaviors[k].Threshold * 100)
 		}
 		m.dialog = &dialog{kind: kind, title: r.label, parent: d, args: args}
 		m.dialog.add(r.label, value)

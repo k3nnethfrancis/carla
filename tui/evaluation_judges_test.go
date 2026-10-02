@@ -10,7 +10,7 @@ import (
 func TestJudgeBundledRequiresConfirmation(t *testing.T) {
 	m := evalFixture()
 	m.openPolicyJudge("policy", 0)
-	m.dialog.index = 2
+	m.dialog.index = 1
 	m.submitDialog()
 	m.dialog.index = 1
 	m.submitDialog()
@@ -48,7 +48,7 @@ func TestPolicyJudgeDirectNavigation(t *testing.T) {
 		t.Fatal(m.dialog)
 	}
 	for _, r := range m.dialog.rows {
-		if r.id == "library" || r.id == "new" || r.id == "all-judges" {
+		if r.id == "name" || r.id == "library" || r.id == "new" || r.id == "all-judges" {
 			t.Fatal(r)
 		}
 	}
@@ -178,7 +178,7 @@ func TestJudgesDeleteEscapeReturnsPolicy(t *testing.T) {
 	}
 }
 func TestStaleJudgeDialogAndEditorCannotPanic(t *testing.T) {
-	for _, field := range []string{"name", "model", "call_mode"} {
+	for _, field := range []string{"model", "call_mode"} {
 		m := evalFixture()
 		m.openPolicyJudge("policy", 0)
 		for n, r := range m.dialog.rows {

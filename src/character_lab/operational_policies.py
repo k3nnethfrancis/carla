@@ -341,7 +341,11 @@ async def dispatch(session, command, args, request_id):
         old = next((b for b in items if b["id"] == args.get("id")), None)
         if args.get("id") and old is None:
             raise ValueError("Behavior spec not found")
-        if command == "behavior.delete":
+        if command == "behavior.publish":
+            from .behavior_library import publish
+
+            publish(p, args)
+        elif command == "behavior.delete":
             if old is None:
                 raise ValueError("Choose a behavior spec")
             items.remove(old)
@@ -351,11 +355,29 @@ async def dispatch(session, command, args, request_id):
                 for k in ("name", "spec")
             ):
                 raise ValueError("Behavior needs a name and spec")
+            if old is None:
+                old = next(
+                    (
+                        b
+                        for b in items
+                        if b["name"] == args["name"].strip()
+                        and b["spec"] == args["spec"]
+                    ),
+                    None,
+                )
             value = dict(
                 id=old["id"] if old else uuid.uuid4().hex[:12],
                 name=args["name"].strip(),
                 spec=args["spec"],
-                revision=old["revision"] + 1 if old else 1,
+                revision=(
+                    old["revision"]
+                    + (
+                        old["name"] != args["name"].strip()
+                        or old["spec"] != args["spec"]
+                    )
+                )
+                if old
+                else 1,
             )
             if old:
                 items[items.index(old)] = value

@@ -52,6 +52,9 @@ func (m *model) openLibraryBehavior(id string) tea.Cmd {
 	return nil
 }
 func (m *model) submitBehaviorLibrary(d *dialog) tea.Cmd {
+	if strings.HasPrefix(d.kind, "behavior-library-sync") {
+		return m.submitLibrarySync(d)
+	}
 	id, _ := d.args["id"].(string)
 	b := m.libraryBehavior(id)
 	if d.kind == "behavior-library-new" || d.kind == "behavior-library-name" {
@@ -137,4 +140,63 @@ func libraryImportHelp(kind string) string {
 		return "Imports Off. Review complete-trace wording and Pass when, then enable.\n"
 	}
 	return ""
+}
+
+// Library state compares the definition, not policy-specific detection settings.
+func (m *model) behaviorLibraryRow(b evaluationBehavior) row {
+	label := "Save to library"
+	source := m.libraryBehavior(b.SourceID)
+	if source != nil {
+		switch {
+		case source.Name == b.Name && source.Spec == b.Spec:
+			label = "Saved in library ✓"
+		case source.Revision != b.SourceRevision:
+			label = "Library update available…"
+		default:
+			label = "Modified · Update library…"
+		}
+	} else {
+		for _, candidate := range m.data.BehaviorLibrary {
+			if candidate.Name == b.Name && candidate.Spec == b.Spec {
+				label = "Saved in library ✓"
+				break
+			}
+		}
+		if b.SourceID != "" && label == "Save to library" {
+			label = "Removed from library · Save again"
+		}
+	}
+	return row{id: "library-save", label: label, preview: "Library stores name and spec. Policy settings stay here. Open to review; updates never change other policy copies or past results."}
+}
+
+func (m *model) openPolicyBehaviorLibrary(parent *dialog, policy string, b evaluationBehavior) tea.Cmd {
+	source := m.libraryBehavior(b.SourceID)
+	if source == nil {
+		return m.saveDialog(&dialog{parent: parent}, "behavior.publish", map[string]any{"policy": policy, "behavior": b.ID, "action": "save"})
+	}
+	rows := []row{{id: "cancel", label: "Back", preview: "Keep the policy and library unchanged."}}
+	if source.Name != b.Name || source.Spec != b.Spec {
+		rows = append(rows, row{id: "update", label: "Update library from this policy…", preview: "Replace the library name and spec. Other policy copies remain unchanged."}, row{id: "refresh", label: "Use library version in this policy…", preview: source.Name + "\n" + source.Spec + "\nKeeps this policy’s enabled state, Pass when and threshold."})
+	}
+	rows = append(rows, row{id: "copy", label: "Save as separate spec…", preview: "Create a separate library identity and link this policy to it."})
+	m.dialog = &dialog{kind: "behavior-library-sync", title: m.behaviorLibraryRow(b).label, parent: parent, args: map[string]any{"policy": policy, "behavior": b.ID, "revision": source.Revision}, rows: rows}
+	return nil
+}
+
+func (m *model) submitLibrarySync(d *dialog) tea.Cmd {
+	r := d.rows[d.index]
+	if r.id == "cancel" {
+		m.dialog = d.parent
+		return nil
+	}
+	if d.kind == "behavior-library-sync" {
+		args := map[string]any{}
+		for k, v := range d.args {
+			args[k] = v
+		}
+		args["action"] = r.id
+		m.dialog = &dialog{kind: "behavior-library-sync-confirm", title: r.label, parent: d, args: args, rows: []row{{id: "cancel", label: "Cancel"}, {id: "confirm", label: "Confirm", preview: r.preview}}}
+		return nil
+	}
+	return m.saveDialog(&dialog{parent: d.parent.parent}, "behavior.publish", d.args)
 }

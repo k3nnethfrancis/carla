@@ -91,7 +91,9 @@ def normalize(judges, previous=()):
         if j["id"] in seen:
             raise ValueError("Judge identifiers must be unique within a policy")
         seen.add(j["id"])
-        for key in ("name", "model"):
+        # Name is a compatibility field, derived from model for new saves.
+        j["name"] = j["model"]
+        for key in ("model",):
             if not isinstance(j[key], str) or not j[key].strip():
                 raise ValueError(f"Judge needs {key}")
         if j["kind"] not in {"llm", "jev", "diffusion"}:
@@ -189,7 +191,7 @@ def flatten(policy):
                         "id": judge["id"] + ":" + behavior["id"],
                         "behavior_id": behavior["id"],
                         "judge_id": judge["id"],
-                        "judge_name": judge["name"],
+                        "judge_name": judge["model"],
                         "judge_revision": judge["revision"],
                     }
                 )
