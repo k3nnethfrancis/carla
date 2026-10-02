@@ -847,7 +847,7 @@ func TestWorkspaceChangeClearsDocumentState(t *testing.T) {
 	next.Workspace.Path = "/different-workspace"
 	payload, _ := json.Marshal(next)
 	m.apply(event{Type: "state", Data: payload})
-	if m.editing != "" || m.editNode != "" || m.commandDocument != "" || m.editor.Value() != "" || m.inspection != "" || m.showInspector || len(m.collapsed) != 0 {
+	if m.editing != "" || m.editNode != "" || m.commandDocument != "" || m.editor.Value() != "" || m.inspection != "" || m.showInspector || m.collapsed["old"] {
 		t.Fatal("document state leaked across workspaces")
 	}
 }

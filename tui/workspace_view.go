@@ -48,12 +48,36 @@ func (m *model) restoreWorkspaceView() tea.Cmd {
 	defer m.reflow()
 	m.focus, m.sectionFocus = 3, false
 	m.command.Focus()
+	// Start closed, then reveal only the ancestry needed for the saved document.
+	// Use the real tree projection so Loom wrappers and nested sets count too.
+	tree := *m
+	tree.section, tree.filter, tree.collapsed = 1, "", nil
+	branches := tree.branchRows()
+	m.collapsed = map[string]bool{}
+	for _, row := range branches {
+		m.collapsed[row.id] = true
+	}
 	var saved workspaceView
 	data, err := os.ReadFile(filepath.Join(m.data.Workspace.Path, "view-state.json"))
 	if err != nil || json.Unmarshal(data, &saved) != nil || saved.Section < 0 || saved.Section > 4 {
 		return nil
 	}
 	m.section, m.selected = saved.Section, 0
+	if saved.Section == 1 {
+		for i, row := range branches {
+			if row.id != saved.Row {
+				continue
+			}
+			depth := row.depth
+			for j := i - 1; j >= 0 && depth > 0; j-- {
+				if branches[j].depth < depth {
+					m.collapsed[branches[j].id] = false
+					depth = branches[j].depth
+				}
+			}
+			break
+		}
+	}
 	m.evalCollection = saved.Collection
 	m.evalArea = saved.EvalArea
 	if m.evalCollection != "" {
@@ -67,7 +91,7 @@ func (m *model) restoreWorkspaceView() tea.Cmd {
 			m.expanded[source.Key] = true
 		}
 	}
-	// Trees start expanded; locate by stable identity, never an old row index.
+	// Locate by stable identity, never an old row index.
 	for i, row := range m.rows() {
 		if row.id != saved.Row {
 			continue

@@ -40,7 +40,9 @@ The shared controls are:
 
 Arrows move focus and preview content. Space selects/unselects. Enter opens a
 selected object or its actions. Tab/Shift+Tab move between panes; Escape unwinds
-one level, cancelling an editor draft before leaving its owner. `/config` exposes
+one level, cancelling an editor draft before leaving its owner. On restart,
+Branches opens only the ancestor path to your last focused document; other
+branches stay collapsed. Without a saved location, the tree starts collapsed. `/config` exposes
 keybindings, including selection clearing, editing, save/cancel and session exit.
 Delete invokes Remove in content panels; in text editors it deletes text.
 

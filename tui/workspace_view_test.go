@@ -98,3 +98,42 @@ func TestWorkspaceViewRestoresEvaluation(t *testing.T) {
 		t.Fatal("evaluation was not restored")
 	}
 }
+
+func TestBranchRestoreOpensOnlySavedDocumentAncestry(t *testing.T) {
+	for _, target := range []string{"leaf", "a", "root", "deleted", ""} {
+		m := fixture()
+		m.data.Workspace.Path = t.TempDir()
+		m.section = 1
+		m.data.Nodes = []node{
+			{ID: "root"}, {ID: "a", Parent: "root"}, {ID: "leaf", Parent: "a"},
+			{ID: "sibling", Parent: "root"}, {ID: "other"}, {ID: "other-child", Parent: "other"},
+		}
+		m.data.DocumentSets = []documentSet{{ID: "set", Action: "loom", OperationID: "op", Members: []string{"a"}}}
+		if target != "" {
+			data, _ := json.Marshal(workspaceView{Section: 1, Row: target})
+			os.WriteFile(filepath.Join(m.data.Workspace.Path, "view-state.json"), data, 0600)
+		}
+		m.restoreWorkspaceView()
+		if !m.collapsed["other"] || !m.collapsed["sibling"] || !m.collapsed["leaf"] {
+			t.Fatal("unrelated branches or focused document expanded", target, m.collapsed)
+		}
+		wantOpen := map[string]bool{}
+		if target == "a" || target == "leaf" {
+			wantOpen["root"], wantOpen["loom:op"] = true, true
+		}
+		if target == "leaf" {
+			wantOpen["a"] = true
+		}
+		for _, id := range []string{"root", "loom:op", "a"} {
+			if m.collapsed[id] == wantOpen[id] {
+				t.Fatal("wrong ancestor expansion", target, id, m.collapsed)
+			}
+		}
+		if target != "" && target != "deleted" && m.targetRow().id != target {
+			t.Fatal("last document not revealed", target)
+		}
+		if m.focus != 3 || !m.command.Focused() || len(m.branchSelection) != 0 {
+			t.Fatal("restore changed interaction state")
+		}
+	}
+}
