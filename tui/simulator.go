@@ -34,10 +34,11 @@ func (m *model) simulationText() string {
 }
 
 func (m *model) openSimulatorConfig() tea.Cmd {
-	d := &dialog{kind: "sim-config", title: "Simulator"}
+	d := &dialog{kind: "sim-config", title: "Simulator defaults"}
 	for _, entry := range []struct{ key, label string }{
 		{"turns", "Turns"}, {"character_tokens", "Character tokens"}, {"visitor_tokens", "Visitor tokens"},
 		{"documents", "Anthology documents"}, {"character_alias", "Character model"}, {"visitor_alias", "Visitor model"},
+		{"contexts", "Context limits"},
 		{"openings", "Opening"},
 		{"character_settings", "Character sampling"}, {"visitor_settings", "Visitor sampling"},
 		{"prompts", "Prompts"},
@@ -48,6 +49,8 @@ func (m *model) openSimulatorConfig() tea.Cmd {
 		}
 		label := entry.label
 		switch entry.key {
+		case "contexts":
+			value = "Advanced: model capacity shared by input and output. Choose a token capacity or Max for the native model limit. Larger contexts need more memory."
 		case "character_tokens", "visitor_tokens":
 			group := strings.TrimSuffix(entry.key, "_tokens") + "_settings"
 			values, _ := m.data.SimulatorConfig[group].(map[string]any)
@@ -202,6 +205,12 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 		return m.saveDialog(d, "grow.selector", map[string]any{"alias": r.id})
 	case "sim-config", "sim-speakers", "sim-openings":
 		switch r.id {
+		case "contexts":
+			m.openSimulatorContexts()
+		case "character_context", "visitor_context":
+			role := strings.TrimSuffix(r.id, "_context")
+			info := m.data.ModelContexts[m.simString(role+"_alias")]
+			return m.numberConfig("sim-context", "context", float64(info.Configured), role)
 		case "prompts":
 			m.openSimulatorPrompts()
 		case "character_tokens", "visitor_tokens":
@@ -275,14 +284,41 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 	}
 	return nil
 }
+
+func (m *model) openSimulatorContexts() {
+	d := &dialog{kind: "sim-config", title: "Context limits"}
+	for _, role := range []string{"character", "visitor"} {
+		info := m.data.ModelContexts[m.simString(role+"_alias")]
+		native := "unknown"
+		if info.Native > 0 {
+			native = tokenNumber(info.Native)
+		}
+		value := strconv.Itoa(info.Configured)
+		if info.Configured == 0 {
+			value = "Max · " + native
+		}
+		name := "Character"
+		if role == "visitor" {
+			name = "Visitor"
+		}
+		d.rows = append(d.rows, row{id: role + "_context", label: name + " · " + value, preview: "Input + output share this capacity. Model maximum: " + native + ". Shared by speakers using this model; M selects Max; larger contexts require more memory."})
+	}
+	m.dialog = d
+}
 func (m *model) numberConfig(scope, key string, value float64, group string) tea.Cmd {
 	d := &dialog{kind: "config-number", title: samplingLabel(key) + " · ↑↓ adjust · ←→ ×10", args: map[string]any{"scope": scope, "key": key, "group": group}}
 	label := "Value"
 	if key == "n_predict" {
 		label = "Tokens · M = Max"
 	}
+	if key == "context" {
+		label = "Tokens · M = Max"
+	}
 	display := strconv.FormatFloat(value, 'f', -1, 64)
 	if key == "n_predict" && value == -1 {
+		display = "Max"
+	}
+	if key == "context" && value == 0 {
 		display = "Max"
 	}
 	d.add(label, display)
@@ -298,6 +334,10 @@ func (m *model) numberKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.submitDialog()
 	}
 	key := d.args["key"].(string)
+	if key == "context" && msg.String() == "m" {
+		d.fields[0].input.SetValue("Max")
+		return nil
+	}
 	if key == "n_predict" && msg.String() == "m" {
 		d.fields[0].input.SetValue("Max")
 		return nil
@@ -315,6 +355,9 @@ func (m *model) numberKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	value, _ := strconv.ParseFloat(d.fields[0].input.Value(), 64)
 	unit, lower := 1.0, 1.0
+	if key == "context" {
+		unit, lower = 1024, 0
+	}
 	if key == "temperature" {
 		unit, lower = .1, 0
 	}
@@ -347,6 +390,12 @@ func (m *model) saveNumber(d *dialog) tea.Cmd {
 	raw := d.fields[0].input.Value()
 	if raw == "Max" {
 		raw = "-1"
+		if key == "context" {
+			raw = "0"
+		}
+	}
+	if raw == "Default" {
+		raw = "0"
 	}
 	value, err := strconv.ParseFloat(raw, 64)
 	if err != nil {
@@ -361,7 +410,9 @@ func (m *model) saveNumber(d *dialog) tea.Cmd {
 	}
 	command := "simulator.configure"
 	args := map[string]any{key: setting}
-	if d.args["scope"] == "loom-policy" {
+	if d.args["scope"] == "sim-context" {
+		args = map[string]any{group + "_context": setting}
+	} else if d.args["scope"] == "loom-policy" {
 		command = "loom-policy.update"
 		args = map[string]any{"id": group, key: setting}
 	} else if d.args["scope"] == "document" {
@@ -385,6 +436,8 @@ func (m *model) saveNumber(d *dialog) tea.Cmd {
 
 func samplingLabel(key string) string {
 	switch key {
+	case "context":
+		return "Context · input + output"
 	case "turns":
 		return "Turns"
 	case "n_predict":

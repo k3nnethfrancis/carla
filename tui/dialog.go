@@ -61,11 +61,11 @@ func (m *model) openDialog(kind string) tea.Cmd {
 		d.add("Top-p", fmt.Sprint(s.TopP))
 		context := strconv.Itoa(m.data.ModelContext)
 		if m.data.ModelContext == 0 {
-			context = "Default"
+			context = "Max"
 		}
-		label := "Context (default unavailable)"
+		label := "Context (maximum unknown)"
 		if m.data.NativeContext > 0 {
-			label = fmt.Sprintf("Context (default: %s)", tokenNumber(m.data.NativeContext))
+			label = fmt.Sprintf("Context (maximum: %s)", tokenNumber(m.data.NativeContext))
 		}
 		d.add(label, context)
 	case "review":
@@ -222,7 +222,7 @@ func (m *model) submitDialog() tea.Cmd {
 					nums[i] = -1
 					continue
 				}
-				if i == 3 && strings.EqualFold(strings.TrimSpace(v), "Default") {
+				if i == 3 && (strings.EqualFold(strings.TrimSpace(v), "Default") || strings.EqualFold(strings.TrimSpace(v), "Max")) {
 					nums[i] = 0
 					continue
 				}

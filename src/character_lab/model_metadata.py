@@ -68,3 +68,8 @@ def native_context(model):
         return _context(str(path), stat.st_size, stat.st_mtime_ns)
     except (OSError, ValueError, KeyError, struct.error):
         return None
+
+
+def default_context(model):
+    """Start near 10k without exceeding a known native model capacity."""
+    return min(10240, native_context(model) or 10240)

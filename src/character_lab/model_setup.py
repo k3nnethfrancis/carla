@@ -13,6 +13,7 @@ from urllib.parse import unquote, urlparse
 
 from huggingface_hub import HfApi, hf_hub_download
 
+from .model_metadata import default_context
 from .models import load_models
 from .workspaces import HOME, acquire
 
@@ -142,7 +143,7 @@ def register(path, name, kind, source):
             path=str(path),
             port=port,
             url=f"http://127.0.0.1:{port}",
-            context=8192,
+            context=default_context({"path": str(path)}),
             gpu_layers=99,
             source=source,
         )

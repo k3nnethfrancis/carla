@@ -359,6 +359,21 @@ async def generate_alternatives(project, config, runtime_factory, emit, seed=Non
     return await _generate(project, config, runtime_factory, emit, plans)
 
 
+def conversation_prompt(config, role, documents, turns):
+    """One rendering path for fit checks and actual speaker completions."""
+    return templates.conversation(
+        config[role + "_template"],
+        dict(
+            anthology="\n\n".join(n["text"] for n in documents),
+            history="\n\n".join(
+                f"**{'Model C' if t['role'] == 'character' else 'User'}:** {t['text']}"
+                for t in turns
+            ),
+            visitor_brief=config["visitor_brief"],
+        ),
+    )
+
+
 async def _generate(project, config, runtime_factory, emit, plans):
     """Persist each leaf's chunks under its real run/index, sharing loaded weights."""
     from .stream_monitor import TurnMonitor
@@ -368,29 +383,56 @@ async def _generate(project, config, runtime_factory, emit, plans):
     # Validate every frozen source before archiving or creating any destination.
     for _, source, _ in plans:
         simulator_actions.validate_seed(project, source)
-    for local, seed, metadata in plans:
-        if config.get("action") == "continue":
-            run, selected = simulator_actions.continue_run(project, local, seed)
-        else:
-            run, selected = new_run(project, local, seed, metadata)
-        run.update(metadata)
-        runs.append(run)
-        for conversation in selected:
-            work.append((run, conversation))
-    if config.get("action") != "continue" and any(metadata for _, _, metadata in plans):
-        # Scope is supplied independently of the scheduler's flattened run batches.
-        sources = [
-            source
-            for _, source, _ in plans[
-                : len(plans) // max(1, config.get("alternatives", 1))
-            ]
-        ]
-        frozen = sources[0] if len(sources) == 1 else {"sets": sources}
-        if config.get("source_scope"):
-            frozen = dict(frozen, scope=config["source_scope"])
-        simulator_actions.attach_scopes(runs, frozen)
-    project.save()
     runtime = None
+    # A fixed fresh opening is fully known before creating any run. Reuse the
+    # loaded character model after checking, rather than loading weights twice.
+    if (
+        all(source is None for _, source, _ in plans)
+        and config["opening_mode"] == "fixed"
+        and not config.get("preview")
+    ):
+        runtime = runtime_factory(project.folder, models[config["character_alias"]])
+        try:
+            documents = [project.node(key) for key in config["documents"]]
+            prompt = conversation_prompt(
+                config,
+                "character",
+                documents,
+                [dict(role="user", text=config["opening"])],
+            )
+            await runtime.preflight(prompt, config["character_settings"])
+        except BaseException:
+            runtime.close()
+            raise
+    try:
+        for local, seed, metadata in plans:
+            if config.get("action") == "continue":
+                run, selected = simulator_actions.continue_run(project, local, seed)
+            else:
+                run, selected = new_run(project, local, seed, metadata)
+            run.update(metadata)
+            runs.append(run)
+            for conversation in selected:
+                work.append((run, conversation))
+        if config.get("action") != "continue" and any(
+            metadata for _, _, metadata in plans
+        ):
+            # Scope is supplied independently of the scheduler's flattened run batches.
+            sources = [
+                source
+                for _, source, _ in plans[
+                    : len(plans) // max(1, config.get("alternatives", 1))
+                ]
+            ]
+            frozen = sources[0] if len(sources) == 1 else {"sets": sources}
+            if config.get("source_scope"):
+                frozen = dict(frozen, scope=config["source_scope"])
+            simulator_actions.attach_scopes(runs, frozen)
+        project.save()
+    except BaseException:
+        if runtime:
+            runtime.close()
+        raise
     # Every set is either fresh or resumed; target resolution disallows mixing.
     seed = plans[0][1]
     try:
@@ -406,24 +448,14 @@ async def _generate(project, config, runtime_factory, emit, plans):
                 )  # Resume with the visitor, then requested character replies.
 
         async def sample(run, conversation, role, runtime, alias):
-            anthology = "\n\n".join(n["text"] for n in run["documents"])
             speaker = "Model C" if role == "character" else "User"
             index = conversation["index"]
             conversation["status"] = "running"
-            history = "\n\n".join(
-                f"**{'Model C' if t['role'] == 'character' else 'User'}:** {t['text']}"
-                for t in conversation["turns"]
-            )
             prompt = (
                 config["opening_prompt"]
                 if role == "opening"
-                else templates.conversation(
-                    config[role + "_template"],
-                    dict(
-                        anthology=anthology,
-                        history=history,
-                        visitor_brief=config["visitor_brief"],
-                    ),
+                else conversation_prompt(
+                    config, role, run["documents"], conversation["turns"]
                 )
             )
             settings = {
@@ -542,13 +574,15 @@ async def _generate(project, config, runtime_factory, emit, plans):
         for segment_index, (alias, segment) in enumerate(segments):
             if not any(c["status"] in {"queued", "running"} for _, c in work):
                 break
-            if runtime:
+            if runtime and segment_index > 0:
                 if runtime.process is None:
                     raise ValueError(
                         "Stop the externally managed model server before switching simulator models"
                     )
                 runtime.close()
-            runtime = runtime_factory(project.folder, models[alias])
+                runtime = None
+            if runtime is None:
+                runtime = runtime_factory(project.folder, models[alias])
 
             async def schedule(data):
                 await emit("capacity", data | {"model": alias})

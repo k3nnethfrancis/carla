@@ -55,7 +55,7 @@ func (m *model) commandHelp(id string) string {
 		text += "\n\nDocument judging defaults Off; Simulator inherits saved policy settings. --monitoring on|off overrides the monitor for this run; on requires a configured provider. --selection on|off overrides selection for this run. Selection needs /loom with at least two alternatives and an explicit --loops N. With --loops 1 it records the selected winner; additional loops continue from the winner. /continue cannot enable selection. These flags never save policy settings."
 	}
 	if id == "configure" && m.section == 3 {
-		text += "\n\nSettings: turns, character_tokens, visitor_tokens, documents, character_alias, visitor_alias, openings, character_settings, visitor_settings, prompts. Direct prompt shortcuts: visitor_brief, character_template, visitor_template."
+		text += "\n\nSettings: turns, character_tokens, visitor_tokens, documents, character_alias, visitor_alias, character_context, visitor_context, openings, character_settings, visitor_settings, prompts. Direct prompt shortcuts: visitor_brief, character_template, visitor_template."
 	}
 	return text
 }

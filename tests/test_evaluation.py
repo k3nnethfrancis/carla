@@ -405,6 +405,7 @@ async def test_loom_evaluation_chain_and_preflight(lab, monkeypatch):
 
     s = lab
     monkeypatch.setattr(Judge, "stream", FakeRuntime.stream, raising=False)
+    monkeypatch.setattr(Judge, "preflight", FakeRuntime.preflight, raising=False)
     definition = define(s)
     group = await collection(s, definition)
     node = s.project.add("Seed")
@@ -432,6 +433,7 @@ async def test_simulator_chain_freezes_conversations_and_runs_all_judges(
 
     s = lab
     monkeypatch.setattr(Judge, "stream", FakeRuntime.stream, raising=False)
+    monkeypatch.setattr(Judge, "preflight", FakeRuntime.preflight, raising=False)
     first, second = define(s), define(s, name="Another rubric")
     group = await collection(s, first)
     await s.execute(

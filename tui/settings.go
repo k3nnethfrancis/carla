@@ -14,7 +14,7 @@ func settingHelp(field int) string {
 	case 2:
 		return "Top-p range: 0–1. Step: 0.01."
 	case 3:
-		return "Default uses the model's native context."
+		return "Max uses the model's native context; larger contexts need more memory."
 	}
 	return "↑↓ small steps · ←→ larger steps"
 }
@@ -102,13 +102,13 @@ func (m *model) startSetting() {
 	}
 	special := "Max"
 	if d.field == 3 {
-		special = "Default"
+		special = "Max"
 	}
 	capacity := m.data.ModelContext
 	if capacity == 0 || d.field == 3 {
 		capacity = m.data.NativeContext
 	}
-	values := []int{128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576}
+	values := []int{128, 256, 512, 1024, 2048, 4096, 8192, 10240, 16384, 32768, 65536, 131072, 262144, 524288, 1048576}
 	if capacity > 0 {
 		values = append(values, capacity)
 	}

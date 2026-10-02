@@ -32,7 +32,7 @@ inside Carla; Escape cancels the transfer and retains cached partial files.
 Errors appear in the same dialog, with a way back to edit the source.
 Setup registers a model only after successful acquisition. It leaves existing
 entries intact and selects a distinct configured port, though another external
-process can still occupy that port. Initial context is 8192 and GPU layers 99;
+process can still occupy that port. Initial context is 10,240 tokens (capped at a known smaller native limit) and GPU layers 99;
 adjust these in settings/configuration for your hardware. No RAM-fit or throughput
 claim is inferred from the download size. Skip remains available for offline
 browsing. The model manager does not install llama.cpp.
@@ -44,7 +44,7 @@ Each entry needs `alias`, `kind: "base"`, `path` and `port`. Optional fields are
 
 - Aliases must be unique. Endpoints must be loopback HTTP and match the configured
   port; use distinct ports for distinct models.
-- `context` defaults to 8192. Zero requests llama.cpp's model default. Large native
+- `context` defaults to 10,240, capped at the native limit read from GGUF when smaller. Zero (**Max** in `/config`) requests llama.cpp's model default. Large native
   contexts can exhaust memory; choose a capacity your machine can hold. Output
   budgets are separate and never silently reduced to admit more requests.
 - `gpu_layers` defaults to 99; use 0 for CPU or a supported layer count for your

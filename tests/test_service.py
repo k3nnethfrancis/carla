@@ -17,6 +17,9 @@ class FakeRuntime:
         self.process = object()
         self.closed = False
 
+    async def preflight(self, prompt, settings):
+        return {}
+
     async def stream(self, prompt, settings, trace):
         trace.update(request={"prompt": prompt}, model=self.model, events=[])
         for chunk in [" A path", " remembers."]:

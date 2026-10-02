@@ -25,7 +25,7 @@ func (m *model) openConfig() tea.Cmd {
 	if m.section == 3 {
 		return m.openSimulatorConfig()
 	}
-	m.dialog = &dialog{kind: "loom-config", title: "Document Loom", rows: []row{
+	m.dialog = &dialog{kind: "loom-config", title: "Document defaults", rows: []row{
 		{id: "tokens", label: "Tokens · " + budgetLabel(m.data.Settings.Tokens), preview: "New tokens per continuation, per alternative and loop. --tokens overrides one run; Max uses remaining context."},
 		{id: "models", label: "Generation model"},
 		{id: "settings", label: "Advanced settings", preview: "Temperature, top-p and context capacity, with the same token ceiling. Bare /loom continues once; /loom N sets the alternatives for that run."},

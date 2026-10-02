@@ -94,7 +94,16 @@ Persistent defaults live in `/config`. Branches puts **Tokens** first, with mode
 selection and **Advanced settings** for sampling and context. Simulator puts
 **Turns**, **Character tokens** and **Visitor tokens** first; speaker sampling and
 **Prompts** open submenus. Turns counts additional character replies per loop;
-tokens cap each individual completion, not the whole Loom. Flags override one operation and are saved
+tokens cap each individual completion, not the whole Loom. **Context limits → Character / Visitor** edit the selected model’s shared input-plus-output
+capacity. The description shows its native default from GGUF metadata; choose
+**Max** (M) to use that capacity. New models default to **10,240 context tokens**,
+or their native maximum when smaller;
+existing explicit limits remain unchanged. Carla rejects a server reporting less
+than the declared native context when Max is selected. Speakers using the same model share this setting.
+Fresh Simulator runs with a fixed opening check the exact prompt against the
+loaded model before creating conversations. Generated openings and later turns
+are checked before each completion; an initial fit cannot guarantee a whole
+conversation will fit as history grows. Flags override one operation and are saved
 with its provenance. Model flags do not change workspace defaults. Token caps
 apply independently to each speaker; reaching a cap does not stop later turns.
 Token ranges are not supported. Conversation-specific flags on documents are

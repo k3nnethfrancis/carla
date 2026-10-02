@@ -41,6 +41,14 @@ async def test_output_budget_uses_actual_loaded_context(
     trace = {}
     if expected is None:
         with pytest.raises(ValueError, match="Nothing was truncated"):
+            await runtime.preflight("test", settings)
+        assert not requests
+    else:
+        budget = await runtime.preflight("test", settings)
+        assert budget == {"prompt_tokens": 4, "context_capacity": 32768}
+        assert not requests
+    if expected is None:
+        with pytest.raises(ValueError, match="Nothing was truncated"):
             _ = [text async for text in runtime.stream("test", settings, trace)]
         assert not requests
     else:
@@ -306,3 +314,15 @@ async def test_managed_server_startup_and_cleanup(tmp_path, monkeypatch, outcome
         runtime.close()
     assert all(p.terminated for p in spawned)
     assert all(p.waited for p in spawned)
+
+
+@pytest.mark.asyncio
+async def test_native_context_does_not_silently_shrink(runtime_server, monkeypatch):
+    from character_lab import runtime as module
+
+    runtime, requests = runtime_server(lambda: httpx.Response(200), capacity=8192)
+    runtime.model["context"] = 0
+    monkeypatch.setattr(module, "native_context", lambda model: 32768)
+    with pytest.raises(ValueError, match="server loaded 8192"):
+        await runtime.preflight("prompt", dict(n_predict=512))
+    assert "/completion" not in requests

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import httpx
 
+from .model_metadata import native_context
 from .scheduling import MAX_WORKERS, Admission
 
 DEFAULT_MODEL = {
@@ -19,7 +20,7 @@ DEFAULT_MODEL = {
     "url": "http://127.0.0.1:18986",
     "port": 18986,
     "kind": "base",
-    "context": 8192,
+    "context": 10240,
 }
 
 
@@ -131,32 +132,50 @@ class Runtime:
         )
         if type(capacity) is not int or capacity < 1:
             raise ValueError("Model server did not report a usable context capacity")
+        if self.model["context"] == 0:
+            expected = native_context(self.model)
+            if expected and capacity < expected:
+                raise ValueError(
+                    f"Model default context is {expected} tokens, but the server loaded {capacity}. Restart the model server or explicitly choose a smaller context."
+                )
         return capacity, props
+
+    async def _budget(self, client, prompt, settings, trace):
+        tokenized = await client.post(
+            self.model["url"] + "/tokenize",
+            json={"content": prompt, "add_special": True},
+        )
+        tokenized.raise_for_status()
+        count = len(tokenized.json()["tokens"])
+        capacity, props = await self.context(client)
+        trace["prompt_tokens"] = count
+        trace["context_capacity"] = capacity
+        output = (
+            capacity - count if settings["n_predict"] == -1 else settings["n_predict"]
+        )
+        requested_max = output
+        if output < 1 or count + requested_max > capacity:
+            raise ValueError(
+                f"Input needs {count} tokens plus {requested_max} requested output tokens; context is {capacity}. Select less text. Nothing was truncated."
+            )
+        return count, capacity, output, props
+
+    async def preflight(self, prompt, settings):
+        """Exact fit check against the loaded model; never sends a completion."""
+        await self.ensure()
+        async with httpx.AsyncClient(timeout=180, trust_env=False) as client:
+            trace = {}
+            await self._budget(client, prompt, settings, trace)
+            return trace
 
     async def stream(self, prompt, settings, trace):
         await self.ensure()
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(180, connect=10), trust_env=False
         ) as client:
-            tokenized = await client.post(
-                self.model["url"] + "/tokenize",
-                json={"content": prompt, "add_special": True},
+            count, capacity, output, props = await self._budget(
+                client, prompt, settings, trace
             )
-            tokenized.raise_for_status()
-            count = len(tokenized.json()["tokens"])
-            capacity, props = await self.context(client)
-            trace["prompt_tokens"] = count
-            trace["context_capacity"] = capacity
-            output = (
-                capacity - count
-                if settings["n_predict"] == -1
-                else settings["n_predict"]
-            )
-            requested_max = output
-            if output < 1 or count + requested_max > capacity:
-                raise ValueError(
-                    f"Input needs {count} tokens plus {requested_max} requested output tokens; context is {capacity}. Select less text. Nothing was truncated."
-                )
             request = {
                 "prompt": prompt,
                 "n_predict": output,

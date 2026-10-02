@@ -106,3 +106,43 @@ func TestSimulatorPromptSubmenuAndShortcuts(t *testing.T) {
 		t.Fatal("legacy prompt shortcut lost")
 	}
 }
+
+func TestSimulatorContextPickerTargetsSpeakerModel(t *testing.T) {
+	m := fixture()
+	m.section = 3
+	m.data.SimulatorConfig = map[string]any{"character_alias": "second"}
+	m.data.ModelContexts = map[string]modelContext{"second": {Configured: 8192, Native: 32768}}
+	m.openSimulatorContexts()
+	parent := m.dialog
+	for i, r := range parent.rows {
+		if r.id == "character_context" {
+			parent.index = i
+			if !strings.Contains(r.label, "8192") || !strings.Contains(r.preview, "32,768") {
+				t.Fatal(r)
+			}
+		}
+	}
+	m.submitDialog()
+	m.numberKey(tea.KeyPressMsg{Code: 'm', Text: "m"})
+	if m.dialog.fields[0].input.Value() != "Max" {
+		t.Fatal("native context option missing")
+	}
+	left, right := net.Pipe()
+	m.client = &client{conn: left}
+	cmd := m.submitDialog()
+	done := make(chan tea.Msg, 1)
+	go func() { done <- runPrimaryCommand(cmd) }()
+	var request struct {
+		Command string
+		Args    map[string]any
+	}
+	if err := json.NewDecoder(right).Decode(&request); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	left.Close()
+	right.Close()
+	if request.Command != "simulator.configure" || request.Args["character_context"] != float64(0) || len(request.Args) != 1 || m.dialog != parent {
+		t.Fatal(request)
+	}
+}

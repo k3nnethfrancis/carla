@@ -908,7 +908,7 @@ func TestSettingsShowResolvedDefault(t *testing.T) {
 	m.data.ModelContext = 0
 	m.data.Settings.Tokens = -1
 	m.openDialog("settings")
-	if m.dialog.fields[3].input.Value() != "Default" || !strings.Contains(m.dialog.fields[3].label, "32,768 tokens") {
+	if m.dialog.fields[3].input.Value() != "Max" || !strings.Contains(m.dialog.fields[3].label, "32,768 tokens") {
 		t.Fatal("missing actual model default")
 	}
 	if m.dialog.fields[0].input.Value() != "Max" {

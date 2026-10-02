@@ -93,6 +93,12 @@ async def dispatch(session, command, args, request_id):
         args = {"monitor_dimensions": items}
         command = "simulator.configure"
     if command == "simulator.configure":
+        args = dict(args)
+        contexts = {
+            role: args.pop(role + "_context")
+            for role in ("character", "visitor")
+            if role + "_context" in args
+        }
         if args.get("monitor_mode") == "jev" and not credentials.openrouter_key()[0]:
             raise ValueError(
                 "Configure an OpenRouter API key in /policy → Monitoring first"
@@ -100,6 +106,23 @@ async def dispatch(session, command, args, request_id):
         config = {**simulator.configuration(p, session.runtime.model["alias"]), **args}
         policy_overrides.remember_provider(config, p.data.get("simulator_config", {}))
         simulator.validate(config, p, session.validate_settings)
+        changes = {}
+        for role, context in contexts.items():
+            if type(context) is not int or context < 0:
+                raise ValueError(
+                    "Context must be a nonnegative integer; 0 (Max) uses the model's native context"
+                )
+            alias = config[role + "_alias"]
+            if alias in changes and changes[alias] != context:
+                raise ValueError(
+                    "Speakers using the same model share its context setting"
+                )
+            changes[alias] = context
+        for model in p.data["models"]:
+            if model["alias"] in changes:
+                if session.runtime.model["alias"] == model["alias"]:
+                    session.runtime.close()
+                model["context"] = changes[model["alias"]]
         p.data["simulator_config"] = config
         operational_policies.sync(session, "monitoring")
         p.save()

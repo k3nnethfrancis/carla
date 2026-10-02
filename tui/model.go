@@ -31,6 +31,11 @@ type node struct {
 	Kept                                                         bool
 	Origins                                                      []origin
 }
+type modelContext struct {
+	Configured int `json:"configured"`
+	Native     int `json:"native"`
+}
+
 type localModel struct{ Name, Alias string }
 type settings struct {
 	Count       int     `json:"count"`
@@ -128,9 +133,10 @@ type state struct {
 	Nodes                     []node
 	Current                   *node
 	Models                    []localModel
-	ModelAlias                string `json:"model_alias"`
-	ModelContext              int    `json:"model_context"`
-	NativeContext             int    `json:"native_context"`
+	ModelAlias                string                  `json:"model_alias"`
+	ModelContext              int                     `json:"model_context"`
+	NativeContext             int                     `json:"native_context"`
+	ModelContexts             map[string]modelContext `json:"model_contexts"`
 	Settings                  settings
 	PolicySpec                string `json:"policy_spec"`
 	PolicyPrompt              string `json:"policy_prompt"`

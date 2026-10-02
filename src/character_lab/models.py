@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from urllib.parse import urlparse
 
+from .model_metadata import default_context
 from .runtime import DEFAULT_MODEL
 from .workspaces import HOME
 
@@ -30,7 +31,7 @@ def load_models(path, kind="base"):
         location = Path(location).expanduser()
         model["path"] = str((path.parent / location).absolute())
         model.setdefault("name", alias)
-        model.setdefault("context", 8192)
+        model.setdefault("context", default_context(model))
         model.setdefault("gpu_layers", 99)
         port = model.get("port")
         if type(port) is not int or not 1 <= port <= 65535:

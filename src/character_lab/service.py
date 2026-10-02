@@ -226,6 +226,10 @@ class Session:
             document_heads=p.data.get("document_heads", {}),
             current=node,
             models=p.data["models"],
+            model_contexts={
+                m["alias"]: dict(configured=m["context"], native=native_context(m))
+                for m in p.data["models"]
+            },
             model_alias=self.runtime.model["alias"],
             settings={**DEFAULT_SETTINGS, **p.data.get("settings", {})},
             model_context=self.runtime.model["context"],
