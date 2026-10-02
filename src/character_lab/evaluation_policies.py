@@ -232,7 +232,16 @@ def run_summary(project, run):
         if complete
         else ("running" if states & {"queued", "running"} else "incomplete")
     )
+    titles = {}
+    for record in records:
+        # Several behavior assessments can refer to the same evaluated item.
+        key = record.get("item") or str(record.get("target", record["id"]))
+        titles.setdefault(key, record.get("title", "Untitled item"))
+    subject = run.get("collection_name") or (
+        next(iter(titles.values())) if len(titles) == 1 else f"{len(titles)} items"
+    )
     return copy.deepcopy(run) | dict(
+        subject=subject,
         status=status,
         passed=all(r.get("passed") is True for r in records) if complete else None,
         count=len(records),

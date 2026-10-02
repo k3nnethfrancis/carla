@@ -146,3 +146,16 @@ func TestEvaluatedConversationUsesFrozenSimulatorRendering(t *testing.T) {
 		t.Fatal("legacy fallback changed")
 	}
 }
+
+func TestRunLabelsLeadWithDataThenPolicyAndVerdict(t *testing.T) {
+	m := evalFixture()
+	pass := true
+	r := evaluationRun{ID: "r", Subject: "doc-4", Status: "complete", Passed: &pass}
+	r.Policy.Name = "Coherence"
+	m.data.EvaluationRuns = []evaluationRun{r}
+	m.evalArea = "runs"
+	rows := m.evaluationAreaRows()
+	if rows[1].label != "doc-4 · Coherence · PASS · run 1" {
+		t.Fatal(rows[1].label)
+	}
+}

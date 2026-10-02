@@ -456,3 +456,17 @@ def test_conflicting_variants_compare_all_original_fields(field, value):
     evaluation_judges.lift_behaviors(policy)
     assert len(policy["behaviors"]) == 2
     assert policy["behaviors"][1][field] == value
+
+
+def test_run_subject_uses_frozen_dataset_or_distinct_items(lab):
+    records = [
+        dict(id="a", item="one", title="doc-1", status="complete", passed=True),
+        dict(id="b", item="one", title="doc-1", status="complete", passed=True),
+    ]
+    lab.project.data["evaluations"] = records
+    run = dict(records=["a", "b"], collection_name="")
+    assert policies.run_summary(lab.project, run)["subject"] == "doc-1"
+    records[1].update(item="two", title="doc-2")
+    assert policies.run_summary(lab.project, run)["subject"] == "2 items"
+    run["collection_name"] = "Coherence samples"
+    assert policies.run_summary(lab.project, run)["subject"] == "Coherence samples"

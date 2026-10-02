@@ -405,7 +405,7 @@ func TestRunRowsHaveDistinctStableOrdinals(t *testing.T) {
 	r.Policy.Name = "Quality"
 	m.data.EvaluationRuns = []evaluationRun{r, r}
 	rows := m.evaluationAreaRows()
-	if rows[1].label != "2 · Quality · PASS" || rows[2].label != "1 · Quality · PASS" {
+	if rows[1].label != "Saved data · Quality · PASS · run 2" || rows[2].label != "Saved data · Quality · PASS · run 1" {
 		t.Fatal(rows)
 	}
 }

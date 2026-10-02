@@ -28,6 +28,7 @@ type evaluationRun struct {
 	Progress                        evaluationProgress `json:"progress"`
 	ID, Created, Collection, Status string
 	CollectionName                  string `json:"collection_name"`
+	Subject                         string `json:"subject"`
 	Policy                          struct {
 		ID, Name  string
 		Revision  int
@@ -70,7 +71,7 @@ func (m *model) evaluationAreaRows() []row {
 	case "runs":
 		for i := len(m.data.EvaluationRuns) - 1; i >= 0; i-- {
 			r := m.data.EvaluationRuns[i]
-			rows = append(rows, row{id: r.ID, kind: "eval-run", label: fmt.Sprintf("%d · %s · %s", i+1, r.Policy.Name, evaluationStatus(evaluationSummary{Status: r.Status, Passed: r.Passed})), preview: fmt.Sprintf("%s · %d/%d assessed · policy revision %d", r.Created, r.Completed, r.Count, r.Policy.Revision)})
+			rows = append(rows, row{id: r.ID, kind: "eval-run", label: fmt.Sprintf("%s · %s · %s · run %d", evaluationRunSubject(r), r.Policy.Name, evaluationStatus(evaluationSummary{Status: r.Status, Passed: r.Passed}), i+1), preview: fmt.Sprintf("%s · %d/%d assessed · policy revision %d", r.Created, r.Completed, r.Count, r.Policy.Revision)})
 		}
 	default:
 		return []row{{id: "data", kind: "eval-area", label: "Data", preview: "Documents and conversation traces to assess."}, {id: "policies", kind: "eval-area", label: "Policies", preview: "Configure behaviors and one judge per policy for complete traces. Active: " + m.activePolicyName()}, {id: "runs", kind: "eval-area", label: "Runs", preview: "Results of applying policies to data, with frozen inputs and configuration."}, {id: "new-run", kind: "eval-new-run", label: "+ New run", preview: "Choose a dataset, policy and options for one evaluation run."}}
@@ -210,7 +211,7 @@ func (m *model) evaluationRunView(width int) string {
 		return "Runs\n\nChoose a run and press ENTER to read its results.\nEach run preserves the exact data and policy used."
 	}
 	r := m.evalRun
-	text := fmt.Sprintf("%s · %s · %d/%d assessed\n", safe(r.Policy.Name), safe(r.Status), r.Completed, r.Count)
+	text := fmt.Sprintf("%s · %s · %s · %d/%d assessed\n", safe(evaluationRunSubject(*r)), safe(r.Policy.Name), safe(evaluationStatus(evaluationSummary{Status: r.Status, Passed: r.Passed})), r.Completed, r.Count)
 	if r.Status == "incomplete" {
 		text += "No overall verdict: one or more assessments did not complete.\n"
 	}
@@ -273,4 +274,17 @@ func (m *model) evaluationRunStale(id string) bool {
 		}
 	}
 	return false
+}
+
+func evaluationRunSubject(r evaluationRun) string {
+	if r.Subject != "" {
+		return r.Subject
+	}
+	if r.CollectionName != "" {
+		return r.CollectionName
+	}
+	if len(r.Results) > 0 {
+		return r.Results[0].Title
+	}
+	return "Saved data"
 }
