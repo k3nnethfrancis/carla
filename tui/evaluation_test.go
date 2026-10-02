@@ -520,3 +520,49 @@ func TestEvaluateMouseControlsAndDataFocus(t *testing.T) {
 
 	}
 }
+
+func TestRemoveInsideDatasetTargetsOverviewOrItems(t *testing.T) {
+	for _, alias := range []string{"/remove", "/delete"} {
+		m := evalFixture()
+		m.section, m.evalArea = 4, "data"
+		m.data.EvaluationSets[0].Items = []evaluationSummary{{ID: "item", Title: "Trace"}}
+		m.enterCollection("set")
+		m.focus = 3
+		for _, position := range []int{0, 1, 2, 3} {
+			m.selected = position
+			m.command.SetValue(alias)
+			choices := m.commandChoices()
+			found := false
+			for _, a := range choices {
+				if a.id == "remove" {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("missing dataset removal", alias, position)
+			}
+			if cmd := m.perform("remove"); cmd != nil {
+				t.Fatal("must confirm before deleting")
+			}
+			if m.dialog == nil || m.dialog.kind != "eval-collection-delete" || m.dialog.args["collection"] != "set" || m.dialog.index != 0 {
+				t.Fatal(m.dialog)
+			}
+			m.submitDialog()
+			if m.dialog != nil || len(m.data.EvaluationSets) != 1 {
+				t.Fatal("cancel changed dataset")
+			}
+		}
+		m.selected = 4
+		req := captureCommand(t, m, func() tea.Cmd { return m.perform("remove") })
+		if req.Command != "evaluation.collection.remove" || string(req.Args["ids"]) != `["item"]` {
+			t.Fatal("focused item must retain removal scope", req)
+		}
+		m.pending = false
+		m.selected = 0
+		m.evalSelection["item"] = true
+		req = captureCommand(t, m, func() tea.Cmd { return m.perform("remove") })
+		if req.Command != "evaluation.collection.remove" {
+			t.Fatal("checked item must retain removal scope", req)
+		}
+	}
+}

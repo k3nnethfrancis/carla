@@ -85,6 +85,20 @@ func (m *model) openCollectionConfig() tea.Cmd {
 	return nil
 }
 
+// Item targets take precedence; otherwise Remove acts on the open dataset.
+func (m *model) removableEvaluationCollection() string {
+	if m.section != 4 || len(m.evaluationIDs()) > 0 {
+		return ""
+	}
+	if m.targetRow().kind == "eval-collection" {
+		return m.targetRow().id
+	}
+	if c := m.currentEvaluation(); c != nil {
+		return c.ID
+	}
+	return ""
+}
+
 func (m *model) confirmRemoveCollection(id string) tea.Cmd {
 	for _, c := range m.data.EvaluationSets {
 		if c.ID == id {

@@ -204,8 +204,8 @@ func (m *model) evalAction(id string) tea.Cmd {
 	case "keep", "untrain":
 		return m.send("evaluation.item.annotate", map[string]any{"collection": m.evalCollection, "ids": ids, "training": id == "keep"})
 	case "remove":
-		if m.targetRow().kind == "eval-collection" {
-			return m.confirmRemoveCollection(m.targetRow().id)
+		if collection := m.removableEvaluationCollection(); collection != "" {
+			return m.confirmRemoveCollection(collection)
 		}
 		return m.send("evaluation.collection.remove", map[string]any{"collection": m.evalCollection, "ids": ids})
 	case "snapshot":

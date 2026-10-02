@@ -212,6 +212,8 @@ func TestEvaluationRemoveAndUntrainAreDifferent(t *testing.T) {
 		m := evalFixture()
 		m.section = 4
 		m.evalCollection = "set"
+		m.data.EvaluationSets[0].Items = []evaluationSummary{{ID: "item"}}
+		m.evalSelection["item"] = true
 		req := captureCommand(t, m, func() tea.Cmd { return m.evalAction(operation) })
 		want := "evaluation.collection.remove"
 		if operation == "untrain" {

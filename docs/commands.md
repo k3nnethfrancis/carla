@@ -15,7 +15,7 @@ text, never executed as shell code.
 | Command | Meaning |
 | --- | --- |
 | `/add` | Add material to the current collection. In Library, import a text file; in Branches, keep selected versions in Anthology; in Anthology, choose existing versions to add. Evaluate has collection/item actions. |
-| `/remove` | Remove the selected material from its context. In Anthology, unkeep it; in Branches, confirm deletion and its descendant scope. |
+| `/remove` | Remove the selected material from its context. In Anthology, unkeep it; in Branches, confirm deletion and its descendant scope. In an open dataset, remove targeted items, or open dataset removal confirmation when no item is targeted. `/delete` is an alias. |
 | `/branch` | Copy a selected document, conversation or set without inference, retaining ancestry. |
 | `/continue` | Advance the existing selected item or set. Prior versions remain saved. |
 | `/loom [N]` | Continue the selected target with N=1 (default); N≥2 forks alternatives. Anthology starts Simulator. |
