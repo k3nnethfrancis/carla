@@ -137,3 +137,67 @@ func TestBranchRestoreOpensOnlySavedDocumentAncestry(t *testing.T) {
 		}
 	}
 }
+
+func TestSimulatorRestoreOpensOnlySavedAncestry(t *testing.T) {
+	for _, target := range []string{"", "deleted", "batch", "batch:0", "child:1", "choices", "choices/1", "alt:0"} {
+		t.Run(target, func(t *testing.T) {
+			m := simulatorFixture()
+			m.data.Workspace.Path = t.TempDir()
+			m.data.SimulationRuns = []runSummary{
+				{ID: "batch", Count: 2, Conversations: m.simulation.Conversations},
+				{ID: "child", Count: 2, Conversations: m.simulation.Conversations, Parent: &conversationParent{Run: "batch", Conversation: 0}},
+				{ID: "other", Count: 2},
+				{ID: "alt", Count: 1, Conversations: []simulationConversation{{Index: 0}}, AlternativeGroup: "choices", AlternativeCount: 2, AlternativeIndex: 1},
+			}
+			if target != "" {
+				raw, _ := json.Marshal(workspaceView{Section: 3, Row: target})
+				os.WriteFile(filepath.Join(m.data.Workspace.Path, "view-state.json"), raw, 0600)
+			}
+			m.restoreWorkspaceView()
+			expected := map[string]bool{}
+			switch target {
+			case "batch:0":
+				expected["batch"] = true
+			case "child:1":
+				expected["batch"], expected["batch:0"], expected["child"] = true, true, true
+			case "choices/1":
+				expected["choices"] = true
+			case "alt:0":
+				expected["choices"], expected["choices/1"] = true, true
+			}
+			for _, id := range []string{"batch", "batch:0", "child", "other", "choices", "choices/0", "choices/1"} {
+				if m.collapsed[id] == expected[id] {
+					t.Fatalf("%s: wrong expansion %s: %v", target, id, m.collapsed)
+				}
+			}
+			if target != "" && target != "deleted" && m.targetRow().id != target {
+				t.Fatal("saved row not revealed", m.targetRow())
+			}
+			if m.simSelection != nil || m.focus != 3 || !m.command.Focused() {
+				t.Fatal("restore must not check targets or steal command focus")
+			}
+		})
+	}
+}
+
+func TestRestoredLoomResponseDoesNotExpandChildren(t *testing.T) {
+	m := simulatorFixture()
+	m.data.Workspace.Path = t.TempDir()
+	raw, _ := json.Marshal(workspaceView{Section: 3, Row: "batch"})
+	os.WriteFile(filepath.Join(m.data.Workspace.Path, "view-state.json"), raw, 0600)
+	if m.restoreWorkspaceView() == nil {
+		t.Fatal("missing load")
+	}
+	run := *m.simulation
+	run.Opened = true
+	raw, _ = json.Marshal(run)
+	m.apply(event{Type: "simulation", Data: raw})
+	if !m.collapsed["batch"] || m.targetRow().id != "batch" || m.focus != 3 || m.simSelection != nil {
+		t.Fatal("restored grid expanded or activated the tree")
+	}
+	// An explicitly opened grid still reveals the run during normal navigation.
+	m.apply(event{Type: "simulation", Data: raw})
+	if m.collapsed["batch"] {
+		t.Fatal("normal open should still reveal run")
+	}
+}

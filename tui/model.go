@@ -749,7 +749,8 @@ func (m *model) apply(e event) tea.Cmd {
 			m.gridPinned = true
 			m.focus = 1
 		}
-		if run.Opened && m.restoringView {
+		restored := run.Opened && m.restoringView
+		if restored {
 			m.restoringView = false
 			m.focus, m.sectionFocus = 3, false
 			m.command.Focus()
@@ -772,7 +773,7 @@ func (m *model) apply(e event) tea.Cmd {
 		if run.Opened || newView || m.simulation != nil && m.simulation.ID == run.ID {
 			m.simulation = &run
 		}
-		if newView && !m.conversationOpen {
+		if newView && !m.conversationOpen && !restored {
 			m.selectLoomRow()
 		}
 		if newView && m.conversationOpen {

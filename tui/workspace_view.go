@@ -52,10 +52,12 @@ func (m *model) restoreWorkspaceView() tea.Cmd {
 	// Use the real tree projection so Loom wrappers and nested sets count too.
 	tree := *m
 	tree.section, tree.filter, tree.collapsed = 1, "", nil
-	branches := tree.branchRows()
+	trees := map[int][]row{1: tree.branchRows(), 3: tree.simulationRows()}
 	m.collapsed = map[string]bool{}
-	for _, row := range branches {
-		m.collapsed[row.id] = true
+	for _, rows := range trees {
+		for _, row := range rows {
+			m.collapsed[row.id] = true
+		}
 	}
 	var saved workspaceView
 	data, err := os.ReadFile(filepath.Join(m.data.Workspace.Path, "view-state.json"))
@@ -63,16 +65,16 @@ func (m *model) restoreWorkspaceView() tea.Cmd {
 		return nil
 	}
 	m.section, m.selected = saved.Section, 0
-	if saved.Section == 1 {
-		for i, row := range branches {
+	if rows, ok := trees[saved.Section]; ok {
+		for i, row := range rows {
 			if row.id != saved.Row {
 				continue
 			}
 			depth := row.depth
 			for j := i - 1; j >= 0 && depth > 0; j-- {
-				if branches[j].depth < depth {
-					m.collapsed[branches[j].id] = false
-					depth = branches[j].depth
+				if rows[j].depth < depth {
+					m.collapsed[rows[j].id] = false
+					depth = rows[j].depth
 				}
 			}
 			break

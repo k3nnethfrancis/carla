@@ -99,7 +99,9 @@ model registry, keybindings and credentials live at application level.
 - `project.json` and the stream journal preserve saved branches and partial work.
   Crash recovery is not a guarantee against disk failure or power loss.
 - Startup restores the last tab/document with the command bar focused. It does
-  not restore editing mode or checked Loom targets. Exit recovery drafts are
+  not restore editing mode or checked Loom targets. Branches and Simulator start
+  collapsed, revealing only the ancestors of the saved item; without a valid saved
+  item, their trees stay collapsed. Exit recovery drafts are
   separate from committed versions; inspect them before deleting recovery data.
 - `/export` writes selected items or the current collection under `exports/`, with
   a versioned JSON manifest and text reading copies. Conversations retain structured
