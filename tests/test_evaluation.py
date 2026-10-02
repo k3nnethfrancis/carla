@@ -588,3 +588,52 @@ def test_group_selection_evidence_attaches_by_set_not_leaf(tmp_path):
     evaluation_sets.attach_policy_evidence(p, item)
     assert len(item["evidence"]) == 1
     assert item["evidence"][0]["scope"] == "candidate set"
+
+
+@pytest.mark.asyncio
+async def test_remove_collection_preserves_evidence_and_stays_removed(lab):
+    from character_lab import evaluation_sets
+
+    s = lab
+    node = s.project.add("Exact source material")
+    group = await collection(s, define(s))
+    item = evaluation_sets.add_capture(
+        group, evaluation.capture(s.project, {"node": node["id"]})
+    )
+    await s.execute(
+        "evaluation.collection.run",
+        {"collection": group["id"], "items": [item["id"]]},
+        "run",
+    )
+    await s.job
+    before = copy.deepcopy(s.project.data)
+    for key in (None, "missing"):
+        with pytest.raises(ValueError):
+            await s.execute(
+                "evaluation.collection.delete", {"collection": key}, "invalid"
+            )
+        assert s.project.data == before
+    second = await collection(s, define(s, name="Other"), "Other")
+    await s.execute(
+        "evaluation.collection.active", {"collection": group["id"]}, "active"
+    )
+    await s.execute(
+        "evaluation.collection.delete", {"collection": group["id"]}, "delete"
+    )
+    assert s.project.data["active_evaluation"] == second["id"]
+    assert (
+        s.project.data["removed_evaluation_sets"][0]["collection"]
+        == before["evaluation_sets"][0]
+    )
+    await s.execute(
+        "evaluation.collection.delete", {"collection": second["id"]}, "delete-last"
+    )
+    assert s.project.data["active_evaluation"] == ""
+    for key in ("nodes", "evaluations", "evaluation_runs"):
+        assert s.project.data[key] == before[key]
+    policies = copy.deepcopy(s.project.data["evaluation_policies"])
+    reloaded = Project(s.project.folder)
+    evaluation_sets.migrate(reloaded)
+    assert reloaded.data["evaluation_sets"] == []
+    assert reloaded.data["evaluation_policies"] == policies
+    assert len(reloaded.data["removed_evaluation_sets"]) == 2

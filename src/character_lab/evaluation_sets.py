@@ -30,6 +30,22 @@ def resolve(project, name=None):
     return matches[0]
 
 
+def remove_collection(project, key):
+    """Remove membership from Data, retaining frozen evidence for recovery."""
+    if not key:
+        raise ValueError("Choose a data collection to remove")
+    group = resolve(project, key)
+    project.data.setdefault("removed_evaluation_sets", []).append(
+        {"removed": now(), "collection": copy.deepcopy(group)}
+    )
+    project.data["evaluation_sets"] = [
+        s for s in collections(project) if s["id"] != group["id"]
+    ]
+    if project.data.get("active_evaluation") == group["id"]:
+        remaining = collections(project)
+        project.data["active_evaluation"] = remaining[0]["id"] if remaining else ""
+
+
 def migrate(project):
     """One-time, lossless membership migration; original records stay untouched."""
     if "evaluation_sets" in project.data:
@@ -335,6 +351,8 @@ async def dispatch(session, command, args, request_id):
             old["legacy_policy"] = policy["id"]
     elif command == "evaluation.collection.active":
         p.data["active_evaluation"] = resolve(p, args["collection"])["id"]
+    elif command == "evaluation.collection.delete":
+        remove_collection(p, args.get("collection"))
     else:
         if command == "evaluation.collection.run":
             group, definitions = plan(

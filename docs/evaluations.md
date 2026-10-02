@@ -113,6 +113,13 @@ Evaluate has three views:
 Create or open a data collection and use **Add data** to add saved documents,
 conversations or existing judgments. **Collection settings** lets you rename the
 collection or make it the default destination for data assessed from other tabs.
+To remove a collection, use **Collection settings → Remove collection**, or focus
+it in the Data list and use `/remove` (`/delete` is an alias). Confirmation removes
+the collection and its membership from Data. Source documents, conversations,
+policies and historical Runs remain; a recovery copy is retained in the workspace.
+Removing the default collection uses the next remaining collection as the default.
+If none remain, the next `/eval` from a document or conversation creates a new Data
+collection.
 
 Open **Policies → a policy** to configure assessment:
 

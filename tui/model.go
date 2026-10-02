@@ -815,7 +815,14 @@ func (m *model) apply(e event) tea.Cmd {
 		m.pending = false
 		if m.dialogRequest != "" && e.ID == m.dialogRequest {
 			if m.dialog == m.savingDialog {
-				m.dialog = m.savingDialog.parent
+				if m.savingDialog.kind == "eval-collection-delete" {
+					m.dialog = nil
+					m.evalArea = "data"
+					m.enterCollection("")
+					m.status = "Collection removed · sources and Runs retained"
+				} else {
+					m.dialog = m.savingDialog.parent
+				}
 			}
 			m.dialogRequest, m.savingDialog = "", nil
 		}

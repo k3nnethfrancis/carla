@@ -87,7 +87,20 @@ func (m *model) openCollectionConfig() tea.Cmd {
 	if c.ID == m.data.ActiveEvaluation {
 		active = "Default collection"
 	}
-	m.dialog = &dialog{kind: "eval-collection-config", title: c.Name, rows: []row{{id: "name", label: "Name · " + c.Name, preview: "Rename this collection of data."}, {id: "active", label: active, preview: "Use this collection for data added by /eval from documents and conversations."}}}
+	m.dialog = &dialog{kind: "eval-collection-config", title: c.Name, rows: []row{{id: "name", label: "Name · " + c.Name, preview: "Rename this collection of data."}, {id: "active", label: active, preview: "Use this collection for data added by /eval from documents and conversations."}, {id: "remove", label: "Remove collection…", preview: "Remove this collection from Data. Source documents, conversations, policies and Runs remain."}}}
+	return nil
+}
+
+func (m *model) confirmRemoveCollection(id string) tea.Cmd {
+	for _, c := range m.data.EvaluationSets {
+		if c.ID == id {
+			m.dialog = &dialog{kind: "eval-collection-delete", title: "Remove collection · " + c.Name + "?", parent: m.dialog, args: map[string]any{"collection": c.ID}, rows: []row{
+				{id: "cancel", label: "Cancel", preview: "Keep this collection."},
+				{id: "remove", label: "Remove collection", preview: fmt.Sprintf("Remove %d items from Data. Source documents, conversations, policies and Runs remain; a recovery record is retained.", len(c.Items))},
+			}}
+			break
+		}
+	}
 	return nil
 }
 func (m *model) enterCollection(id string) {
@@ -160,6 +173,16 @@ func (m *model) openCollectionItems() tea.Cmd {
 	return nil
 }
 func (m *model) submitCollection(d *dialog) tea.Cmd {
+	if d.kind == "eval-collection-delete" {
+		if len(d.rows) == 0 {
+			return nil
+		}
+		if d.rows[d.index].id == "cancel" {
+			m.dialog = d.parent
+			return nil
+		}
+		return m.saveDialog(d, "evaluation.collection.delete", map[string]any{"collection": d.args["collection"]})
+	}
 	c := m.currentEvaluation()
 	if d.kind == "eval-collection-new" {
 		name := strings.TrimSpace(d.fields[0].input.Value())
@@ -213,6 +236,8 @@ func (m *model) submitCollection(d *dialog) tea.Cmd {
 			return m.dialog.fields[0].input.Focus()
 		case "active":
 			return m.send("evaluation.collection.active", map[string]any{"collection": c.ID})
+		case "remove":
+			return m.confirmRemoveCollection(c.ID)
 
 		}
 	}

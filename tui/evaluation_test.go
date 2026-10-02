@@ -406,3 +406,61 @@ func TestRunRowsHaveDistinctStableOrdinals(t *testing.T) {
 		t.Fatal(rows)
 	}
 }
+
+func TestCollectionRemovalConfirmationAndReply(t *testing.T) {
+	for _, fromSettings := range []bool{false, true} {
+		m := evalFixture()
+		m.section, m.focus = 4, 0
+		m.evalArea = "data"
+		if fromSettings {
+			m.enterCollection("set")
+			m.openCollectionConfig()
+			m.dialog.index = 2
+			m.submitDialog()
+		} else {
+			m.selected = 2
+			m.focus = 3
+			m.command.SetValue("/delete")
+			suggestions := m.commandChoices()
+			found := false
+			for _, a := range suggestions {
+				if a.id == "remove" {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("collection removal missing from palette", suggestions)
+			}
+			m.perform("remove")
+		}
+		d := m.dialog
+		if d == nil || d.kind != "eval-collection-delete" || d.index != 0 {
+			t.Fatal("missing safe confirmation", d)
+		}
+		m.submitDialog()
+		if m.dialog != d.parent || len(m.data.EvaluationSets) != 1 {
+			t.Fatal("cancel removed data or lost parent")
+		}
+		m.confirmRemoveCollection("set")
+		m.dialog.index = 1
+		req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
+		if req.Command != "evaluation.collection.delete" || string(req.Args["collection"]) != `"set"` {
+			t.Fatal(req)
+		}
+		m.apply(event{Type: "error", ID: req.ID, Data: json.RawMessage(`{"message":"Stop the active operation"}`)})
+		if m.dialog == nil || m.dialog.args["error"] == nil {
+			t.Fatal("error dismissed confirmation")
+		}
+		req = captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
+		m.data.EvaluationSets = nil
+		m.data.ActiveEvaluation = ""
+		raw, _ := json.Marshal(m.data)
+		m.apply(event{Type: "state", ID: req.ID, Data: raw})
+		if m.dialog != nil || m.evalCollection != "" || m.evalArea != "data" {
+			t.Fatal("did not return to Data")
+		}
+		if len(m.data.EvaluationPolicies) != 1 {
+			t.Fatal("removal affected policies")
+		}
+	}
+}

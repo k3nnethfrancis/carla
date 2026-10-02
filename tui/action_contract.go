@@ -31,7 +31,7 @@ func (m *model) paletteAvailable(id, input string) bool {
 	case "branch":
 		return (m.section == 1 || m.section == 2) && len(m.actionNodeIDs()) > 0 || m.section == 3 && len(m.selectedConversations()) > 0
 	case "remove":
-		return m.section != 3 && !(m.section == 4 && m.currentEvaluation() == nil)
+		return m.section != 3 && !(m.section == 4 && m.currentEvaluation() == nil && m.targetRow().kind != "eval-collection")
 	}
 	return true
 }

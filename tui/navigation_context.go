@@ -198,8 +198,8 @@ func (m *model) refreshConfig() {
 	}
 }
 func (m *model) saveDialog(d *dialog, command string, args map[string]any) tea.Cmd {
-	// Keep the local model field visible until backend validation succeeds.
-	if len(d.fields) > 0 && d.args["field"] == "monitor_local_model" {
+	// Keep validation-sensitive forms open until their own backend reply arrives.
+	if command == "evaluation.collection.delete" || len(d.fields) > 0 && d.args["field"] == "monitor_local_model" {
 		id, cmd := m.dispatch(command, args)
 		if cmd != nil {
 			delete(d.args, "error")
