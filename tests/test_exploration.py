@@ -11,8 +11,9 @@ from character_lab.exploration import explore
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("call_mode", ["separate", "bundled"])
+@pytest.mark.parametrize("templated", [False, True])
 async def test_selection_requires_every_behavior_then_preserves_holistic_choice(
-    tmp_path, call_mode
+    tmp_path, call_mode, templated
 ):
     project = Project(tmp_path / "workspace")
     model_file = tmp_path / "judge.gguf"
@@ -20,7 +21,11 @@ async def test_selection_requires_every_behavior_then_preserves_holistic_choice(
     model = dict(alias="judge", path=str(model_file))
     project.data.update(
         selection_call_mode=call_mode,
-        policy_prompt="A saved chooser template that must remain intact.",
+        policy_prompt=(
+            "Choose using {{behaviors}}\n{{candidates}}\n{{assessments}}"
+            if templated
+            else "A saved chooser template that must remain intact."
+        ),
         selection_behaviors=[
             dict(
                 id="coherent",
@@ -38,12 +43,18 @@ async def test_selection_requires_every_behavior_then_preserves_holistic_choice(
             pass
 
         async def judge(self, messages, trace):
-            payload = json.loads(messages[1]["content"])
+            payload = trace.get("template_context") or json.loads(
+                messages[1]["content"]
+            )
             calls.append(payload)
             if "candidates" in payload:
                 # Both good candidates passed; ranking still chooses the second.
                 assert [c["node"] for c in payload["candidates"]] == ["good", "better"]
-                assert messages[0]["content"] == project.data["policy_prompt"]
+                if templated:
+                    assert "{{candidates}}" not in messages[1]["content"]
+                    assert "better" in messages[1]["content"]
+                else:
+                    assert messages[0]["content"] == project.data["policy_prompt"]
                 return dict(
                     reviews=[
                         dict(

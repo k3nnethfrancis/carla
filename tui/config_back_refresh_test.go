@@ -33,7 +33,7 @@ func TestMonitoringBackRefreshesCountsAndEnabledList(t *testing.T) {
 	m.dialog.index = 1
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	root := m.dialog
-	chooseBehaviorRow(t, m, "behaviors")
+	chooseBehaviorRow(t, m, "actions")
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	for i, r := range m.dialog.rows {
 		if r.id == "action" {
@@ -47,7 +47,7 @@ func TestMonitoringBackRefreshesCountsAndEnabledList(t *testing.T) {
 	if m.dialog != root {
 		t.Fatal("back skipped policy")
 	}
-	if m.dialog.rows[m.dialog.index].id != "behaviors" {
+	if m.dialog.rows[m.dialog.index].id != "actions" {
 		t.Fatalf("lost focused row index %d rows %+v", m.dialog.index, m.dialog.rows)
 	}
 	if !strings.Contains(m.dialog.rows[m.dialog.index].label, "2 warn · 1 stop") {

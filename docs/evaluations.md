@@ -49,12 +49,12 @@ If no provider has been configured, choose one in `/policy` first. DiffusionGemm
 environment OpenRouter key before other settings appear. [Credential storage
 and external data flow](configuration.md#optional-monitoring) apply here.
 
-Open **Behaviors** directly inside the policy. Each condition has a name, spec, enabled status, detection rule
-and action. Most likely means estimated probability above 50%; Threshold uses
-your chosen cutoff. Configure **Action** and warning color in that same behavior
-panel. Warn annotates the trace and highlights detection; Stop ends
-the flagged generation/conversation. Disabled conditions retain their settings.
-Custom behaviors can be deleted; built-in ones can be disabled.
+Open **Behaviors** directly inside the policy to name, describe and enable conditions.
+**Judge → Detection rules** sets when each probability counts as detected: Most
+likely means above 50%; Threshold uses your cutoff. **Policy → Actions** sets
+Warn/Stop and warning color for each behavior. Warn annotates the trace and
+highlights detection; Stop ends the flagged generation/conversation. Disabled
+conditions retain settings. Custom behaviors can be deleted; built-ins disabled.
 
 **Heartbeat** separately enables checks during and after replies. **Interval**
 sets the output-token interval for partial checks. Defaults when enabled are both
@@ -67,6 +67,7 @@ and fail open. Scores are model estimates, not calibrated guarantees.
 Open `/policy` → Selection → a policy → **Judge** to choose a registered local
 instruct model, **Call mode**, **Assessment template**, and **Choice template**.
 Saving a changed template requires confirmation; cancelling preserves the draft.
+[Template variables](templates.md) control where behaviors and candidate text appear.
 
 Each enabled behavior is first assessed against each complete candidate. **Pass
 when · Present/Absent** determines whether that observation is wanted. Separate

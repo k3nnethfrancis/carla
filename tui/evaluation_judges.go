@@ -277,7 +277,7 @@ func (m *model) submitPolicyJudge(d *dialog) tea.Cmd {
 			m.editing = "policy-judge-prompt"
 			m.editReturn = d
 			m.dialog = nil
-			m.editor.SetValue(p.Judges[i].Prompt)
+			m.editor.SetValue(explicitTemplate("policy-judge-prompt", p.Judges[i].Prompt))
 			m.focus = 1
 			m.reflow()
 			return m.editor.Focus()

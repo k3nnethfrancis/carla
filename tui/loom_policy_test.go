@@ -35,15 +35,6 @@ func TestLoomPolicyNestedNavigationAndProtectedDefaults(t *testing.T) {
 			t.Fatal("default can be deleted")
 		}
 	}
-	m.dialog.index = 3
-	m.submitDialog()
-	if m.dialog.kind != "loom-policy-pick" {
-		t.Fatal("missing decision picker")
-	}
-	m.closeDialog()
-	if m.dialog.kind != "loom-policy-dimension" {
-		t.Fatal("Escape skipped dimension")
-	}
 	m.closeDialog()
 	if m.dialog.kind != "loom-policy-behaviors" {
 		t.Fatal("Escape skipped behaviors")
@@ -208,7 +199,7 @@ func TestMonitoringSetupGatesSettingsAndMasksKey(t *testing.T) {
 	}
 	m.data.MonitorKeySource = "environment"
 	m.openLoomPolicy()
-	if len(m.dialog.rows) != 4 || m.dialog.rows[2].id != "behaviors" {
+	if len(m.dialog.rows) != 5 || m.dialog.rows[2].id != "behaviors" {
 		t.Fatal("environment key did not unlock settings")
 	}
 }
@@ -285,7 +276,7 @@ func TestMonitoringLayoutAndBehaviorCounts(t *testing.T) {
 			t.Fatal(m.dialog.rows)
 		}
 	}
-	if m.dialog.rows[2].label != "Behaviors · 2 warn · 1 stop · 1 off" {
+	if m.dialog.rows[4].label != "Actions · 2 warn · 1 stop · 1 off" {
 		t.Fatal(m.dialog.rows[2].label)
 	}
 	m.openMonitorJudge()

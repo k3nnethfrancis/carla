@@ -3,6 +3,7 @@
 import copy
 import uuid
 
+from . import templates
 from .assessments import expected_state
 from .monitor import LOCAL_URL, local_url
 
@@ -102,6 +103,8 @@ def normalize(judges, previous=()):
             j["kind"] == "llm" and not j["prompt"].strip()
         ):
             raise ValueError("LLM judge needs a prompt")
+        if j["kind"] == "llm":
+            templates.validate_assessment(j["prompt"])
         if j["kind"] == "diffusion":
             j["endpoint"] = local_url(source.get("endpoint", LOCAL_URL))
         prior = old.get(j["id"], {})

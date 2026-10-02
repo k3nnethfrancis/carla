@@ -95,7 +95,7 @@ func TestSelectionAssessmentTemplateConfirmCancelAndNamedSave(t *testing.T) {
 	m.submitDialog()
 	chooseBehaviorRow(t, m, "judge")
 	chooseBehaviorRow(t, m, "assessment-prompt")
-	if m.editing != "selection_assessment_prompt" || m.dialog != nil || m.editor.Value() != "Assess presence" {
+	if m.editing != "selection_assessment_prompt" || m.dialog != nil || m.editor.Value() != explicitTemplate("selection_assessment_prompt", "Assess presence") {
 		t.Fatal("wrong editor")
 	}
 	m.editor.SetValue("Changed\nContract")

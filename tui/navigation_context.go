@@ -130,6 +130,10 @@ func (m *model) refreshConfig() {
 		m.openConfig()
 	case "eval-definitions":
 		m.openEvaluators()
+	case "loom-policy-detection-list", "loom-policy-actions-list":
+		m.openMonitorRules(strings.TrimSuffix(strings.TrimPrefix(d.kind, "loom-policy-"), "-list"))
+	case "loom-policy-detection", "loom-policy-actions":
+		m.openMonitorRule(strings.TrimPrefix(d.kind, "loom-policy-"), d.args["id"].(string))
 	case "loom-policy-judge":
 		m.openMonitorJudge()
 	case "loom-policy-behaviors":

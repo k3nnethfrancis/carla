@@ -12,16 +12,16 @@ import uuid
 from contextlib import aclosing
 from itertools import groupby
 
-from . import monitor, simulator_actions
+from . import monitor, simulator_actions, templates
 from .domain import now
 from .scheduling import parallel_map
 from .simulator_names import NAME_FIELDS
 
 CHARACTER_TEMPLATE = (
-    "{anthology}\n\nFull conversation with Model C:\n\n{history}\n\n**Model C:**"
+    "{{anthology}}\n\nFull conversation with Model C:\n\n{{history}}\n\n**Model C:**"
 )
 VISITOR_TEMPLATE = (
-    "{visitor_brief}\n\nFull conversation with Model C:\n\n{history}\n\n**User:**"
+    "{{visitor_brief}}\n\nFull conversation with Model C:\n\n{{history}}\n\n**User:**"
 )
 
 
@@ -145,13 +145,20 @@ def validate(config, project, validate_settings):
         if not isinstance(template, str):
             raise ValueError(f"{role} template must be text")
         try:
-            template.format(anthology="", history="", visitor_brief="")
+            templates.conversation(
+                template, dict(anthology="", history="", visitor_brief="")
+            )
         except (KeyError, ValueError, IndexError, AttributeError) as exc:
             raise ValueError(f"Invalid {role} template: {exc}") from exc
-        if "{history}" not in template:
-            raise ValueError(f"{role} template must include {{history}}")
-    if "{anthology}" not in config["character_template"]:
-        raise ValueError("Character template must include {anthology}")
+        has_history = "history" in templates.conversation_variables(template)[0]
+        if not has_history:
+            raise ValueError(role + " template must include {{history}}")
+    character_template = config["character_template"]
+    has_anthology = (
+        "anthology" in templates.conversation_variables(character_template)[0]
+    )
+    if not has_anthology:
+        raise ValueError("Character template must include {{anthology}}")
     if not isinstance(config["visitor_brief"], str):
         raise ValueError("Visitor brief must be text")
     if not isinstance(config["opening"], str) or not config["opening"].strip():
@@ -410,10 +417,13 @@ async def _generate(project, config, runtime_factory, emit, plans):
             prompt = (
                 config["opening_prompt"]
                 if role == "opening"
-                else config[role + "_template"].format(
-                    anthology=anthology,
-                    history=history,
-                    visitor_brief=config["visitor_brief"],
+                else templates.conversation(
+                    config[role + "_template"],
+                    dict(
+                        anthology=anthology,
+                        history=history,
+                        visitor_brief=config["visitor_brief"],
+                    ),
                 )
             )
             settings = {

@@ -58,8 +58,9 @@ func (m *model) openLoomPolicy() tea.Cmd {
 	}
 	d.rows = append(d.rows,
 		row{id: "timing", label: "Heartbeat · " + m.monitorTimingSummary(), preview: "When this policy runs: during streaming output, after completed replies, or both."},
-		row{id: "behaviors", label: "Behaviors · " + m.behaviorCounts(), preview: "Define what to detect and its Warn or Stop action, detection rule and warning color."},
-		row{id: "judge", label: "Judge · " + m.monitorJudgeName(), preview: "Choose the model and call mode used to assess this policy’s behaviors."},
+		row{id: "behaviors", label: fmt.Sprintf("Behaviors · %d", len(m.dimensions())), preview: "Name and describe what to detect. Detection rules belong to Judge; responses belong to Actions."},
+		row{id: "judge", label: "Judge · " + m.monitorJudgeName(), preview: "Choose the model, call mode and detection rules used to assess behaviors."},
+		row{id: "actions", label: "Actions · " + m.behaviorCounts(), preview: "Choose Warn or Stop and warning colors for each detected behavior."},
 	)
 	return nil
 }
@@ -79,6 +80,7 @@ func (m *model) openMonitorJudge() tea.Cmd {
 		{id: "mode", label: "Model · " + m.monitorJudgeName(), preview: "Choose the classifier. DiffusionGemma runs locally; Jev uses OpenRouter and requires an API key."},
 		{id: "monitor_call_mode", label: "Call mode · " + strings.Title(m.monitorCallMode()), preview: "Separate sends one request per behavior. Bundled checks all enabled behaviors in one request."},
 	}}
+	d.rows = append(d.rows, row{id: "detection", label: "Detection rules", preview: "Choose when each classifier probability counts as a detection. Preserves individual cutoffs."})
 	if m.monitorJudgeName() == "Jev (classifier)" {
 		d.rows = append(d.rows, row{id: "key", label: "API key · " + m.data.MonitorKeySource, preview: "Replace the saved OpenRouter key. Keys stay outside workspaces and exported traces."})
 	}
@@ -88,28 +90,66 @@ func (m *model) openMonitorJudge() tea.Cmd {
 
 func (m *model) openDimension(id string) tea.Cmd {
 	item := m.dimension(id)
-	decision := "Most likely"
-	if item.Decision == "threshold" {
-		decision = fmt.Sprintf("Probability ≥ %.0f%%", item.Threshold*100)
-	}
 	d := &dialog{kind: "loom-policy-dimension", title: item.Name, args: map[string]any{"id": id}, rows: []row{
-		{id: "enabled", label: "Enabled · " + map[bool]string{true: "On", false: "Off"}[item.Enabled], preview: "Off skips this behavior entirely; its detection and action settings remain saved."},
-		{id: "name", label: "Name · " + item.Name, preview: "The behavior label shown in policy results and warnings."}, {id: "spec", label: "Behavior spec", preview: "Defines what the judge should detect. " + item.Spec},
-		{id: "decision", label: "Detection rule · " + decision, preview: "Determines when the behavior counts as detected. Most likely: estimated probability > 50%. Threshold: probability ≥ your cutoff. Action then decides Warn or Stop; probabilities are not calibrated confidence."},
+		{id: "enabled", label: "Enabled · " + map[bool]string{true: "On", false: "Off"}[item.Enabled], preview: "Off skips this behavior; Judge detection rules and Policy actions remain saved."},
+		{id: "name", label: "Name · " + item.Name, preview: "The label shown in results."},
+		{id: "spec", label: "Behavior spec", preview: "What the judge should observe. " + item.Spec},
 	}}
-	if item.Decision == "threshold" {
-		d.rows = append(d.rows, row{id: "threshold", label: fmt.Sprintf("Threshold · %.0f%%", item.Threshold*100), preview: "Minimum estimated probability that triggers this behavior’s action."})
-	}
-
-	d.rows = append(d.rows, row{id: "action", label: "Action · " + item.Action, preview: "Warn highlights this detection; Stop interrupts generation. This action applies within this policy."})
-	if item.Action == "warn" {
-		d.rows = append(d.rows, row{id: "color", label: "Warning color · " + item.Color, preview: "Highlight color for this behavior in this policy."})
-	}
 	if id == "draft" {
 		d.title = "New behavior"
-		d.rows = append(d.rows, row{id: "create", label: "Create behavior", preview: "Save the name, full spec and all settings shown here."})
+		d.rows = append(d.rows, row{id: "create", label: "Create behavior", preview: "Save this behavior. Judge configures detection; Actions defaults to Warn in amber."})
 	} else if !item.builtin() {
 		d.rows = append(d.rows, row{id: "delete", label: "Delete behavior", preview: "Remove this custom behavior from the monitoring policy. Confirmation is required."})
+	}
+	m.dialog = d
+	return nil
+}
+
+// Detection belongs to Judge; responses belong to Policy. Both are keyed by
+// behavior ID so moving the controls never changes existing per-behavior choices.
+func (m *model) openMonitorRules(kind string) tea.Cmd {
+	title := "Actions"
+	if kind == "detection" {
+		title = "Detection rules"
+	}
+	d := &dialog{kind: "loom-policy-" + kind + "-list", title: title}
+	for _, b := range m.dimensions() {
+		label := b.Name
+		if kind == "actions" {
+			label += " · " + b.Action
+			if b.Action == "warn" {
+				label += " · " + b.Color
+			}
+		} else {
+			label += " · " + detectionLabel(b)
+		}
+		if !b.Enabled {
+			label += " · off"
+		}
+		d.rows = append(d.rows, row{id: b.ID, label: label, preview: b.Spec})
+	}
+	m.dialog = d
+	return nil
+}
+func detectionLabel(b loomDimension) string {
+	if b.Decision == "threshold" {
+		return fmt.Sprintf("Probability ≥ %.0f%%", b.Threshold*100)
+	}
+	return "Most likely"
+}
+func (m *model) openMonitorRule(kind, id string) tea.Cmd {
+	b := m.dimension(id)
+	d := &dialog{kind: "loom-policy-" + kind, title: b.Name, args: map[string]any{"id": id}}
+	if kind == "detection" {
+		d.rows = []row{{id: "decision", label: "Detection rule · " + detectionLabel(b), preview: "Most likely means probability > 50%. Threshold uses your cutoff. Probabilities are not calibrated confidence."}}
+		if b.Decision == "threshold" {
+			d.rows = append(d.rows, row{id: "threshold", label: fmt.Sprintf("Threshold · %.0f%%", b.Threshold*100), preview: "Minimum probability that counts as detected. The policy determines what happens next."})
+		}
+	} else {
+		d.rows = []row{{id: "action", label: "Action · " + b.Action, preview: "Warn highlights a detection. Stop interrupts generation when this behavior is detected."}}
+		if b.Action == "warn" {
+			d.rows = append(d.rows, row{id: "color", label: "Warning color · " + b.Color, preview: "Color used for this policy’s warning."})
+		}
 	}
 	m.dialog = d
 	return nil
@@ -216,6 +256,12 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 		}
 		return m.send("simulator.configure", args)
 	}
+	if d.kind == "loom-policy-detection-list" || d.kind == "loom-policy-actions-list" {
+		kind := strings.TrimSuffix(strings.TrimPrefix(d.kind, "loom-policy-"), "-list")
+		m.openMonitorRule(kind, r.id)
+		m.dialog.parent = d
+		return nil
+	}
 	if d.kind == "loom-policy-behaviors" {
 		if r.id == "library" {
 			m.openBehaviorLibraryPicker(d, "operational-policy-library-monitor", nil)
@@ -235,6 +281,9 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 			return cmd
 		}
 		switch r.id {
+		case "detection", "actions":
+			m.openMonitorRules(r.id)
+			m.dialog.parent = d
 		case "judge":
 			m.openMonitorJudge()
 			m.dialog.parent = d

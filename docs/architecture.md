@@ -249,3 +249,21 @@ leaves for scheduling, and remaps saved output scopes to new IDs on splits.
 Continue retains conversation identities; document continuations save child
 versions. Current document sets resolve their current member heads, while old
 set snapshots and evaluated versions remain unchanged.
+
+
+### Prompt data and policy ownership
+
+`templates.py` resolves only `{{name}}` and dotted data lookups; list fields project
+in order and objects serialize as JSON. It never evaluates code or re-renders
+inserted text. `assessments.py` supplies behavior objects and full input; explicit
+templates own their placement, while a separate system message preserves the
+validated response contract. Instruction-only legacy prompts keep their prior
+JSON user envelope. Traces preserve template, context and rendered messages.
+Simulator uses the same renderer while accepting old single-brace formats.
+
+Monitoring policy storage owns `actions` keyed by behavior ID. Judge configuration
+owns `monitor_detection`, also keyed by ID; behavior definitions retain names,
+specs and policy membership. `expanded()` produces the legacy runtime/wire shape
+at the boundary. Migration moves detection fields without changing values, and
+never rewrites frozen run configurations. TUI Behaviors, Judge → Detection rules,
+and Policy → Actions edit those same settings through existing command handlers.

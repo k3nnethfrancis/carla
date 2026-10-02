@@ -365,7 +365,7 @@ func orderOperationalRows(d *dialog) {
 	if d.args["operational_id"] == nil {
 		return
 	}
-	order := map[string]int{"status": 0, "rename-policy": 1, "key": 2, "behaviors": 2, "judge": 3, "timing": 4, "delete-policy": 6}
+	order := map[string]int{"status": 0, "rename-policy": 1, "key": 2, "behaviors": 2, "judge": 3, "actions": 4, "timing": 5, "delete-policy": 6}
 	sort.SliceStable(d.rows, func(i, j int) bool { return order[d.rows[i].id] < order[d.rows[j].id] })
 }
 

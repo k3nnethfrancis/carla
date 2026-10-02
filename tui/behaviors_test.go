@@ -23,7 +23,7 @@ func TestBehaviorDraftFullConfigurationAndMultilineSpec(t *testing.T) {
 	m.width, m.height = 120, 36
 	m.openBehaviors()
 	chooseBehaviorRow(t, m, "new")
-	for _, id := range []string{"enabled", "name", "spec", "decision", "create"} {
+	for _, id := range []string{"enabled", "name", "spec", "create"} {
 		found := false
 		for _, r := range m.dialog.rows {
 			if r.id == id {
@@ -51,17 +51,8 @@ func TestBehaviorDraftFullConfigurationAndMultilineSpec(t *testing.T) {
 	if m.behaviorDraft.Spec != spec || m.dialog == nil || m.editing != "" {
 		t.Fatal("multiline draft not preserved")
 	}
-	chooseBehaviorRow(t, m, "decision")
-	m.dialog.index = 1
-	m.submitDialog()
-	chooseBehaviorRow(t, m, "threshold")
-	m.dialog.fields[0].input.SetValue("90")
-	m.submitDialog()
-	if m.behaviorDraft.Threshold != .9 {
-		t.Fatal("threshold not saved locally")
-	}
 	req := captureCommand(t, m, func() tea.Cmd { return chooseBehaviorRow(t, m, "create") })
-	if req.Command != "loom-policy.add" || string(req.Args["enabled"]) != "false" || string(req.Args["decision"]) != `"threshold"` || string(req.Args["threshold"]) != "0.9" {
+	if req.Command != "loom-policy.add" || string(req.Args["enabled"]) != "false" || string(req.Args["decision"]) != `"most_likely"` || string(req.Args["threshold"]) != "0.8" {
 		t.Fatal(req)
 	}
 }

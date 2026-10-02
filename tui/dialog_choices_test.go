@@ -44,7 +44,7 @@ func TestHeartbeatQuickTogglePreservesFilter(t *testing.T) {
 
 func TestQuickCycleDirectionAndTextEntry(t *testing.T) {
 	m := policyFixture()
-	m.openDimension("looping")
+	m.openMonitorRule("actions", "looping")
 	for i, r := range m.dialog.rows {
 		if r.id == "color" {
 			m.dialog.index = i

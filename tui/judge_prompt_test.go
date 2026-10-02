@@ -99,6 +99,8 @@ func TestEvaluationTemplateConfirmationAndDeletedTarget(t *testing.T) {
 }
 func TestUnchangedTemplateDoesNotWarn(t *testing.T) {
 	m := selectionPromptFixture(t)
+	previous, _ := m.currentJudgePrompt()
+	m.editor.SetValue(previous)
 	req := captureCommand(t, m, m.saveEditor)
 	if req.Command != "operational.policy.save" || m.dialog != nil {
 		t.Fatal(req)

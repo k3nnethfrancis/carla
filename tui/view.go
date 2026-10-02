@@ -511,7 +511,7 @@ func (m *model) View() tea.View {
 					}
 				}
 				title += fmt.Sprintf(" · line %d/%d", m.editor.Line()+1, m.editor.LineCount())
-				body = m.editor.View()
+				body = m.templateEditorView()
 			}
 		case 2:
 			title = "Inspector"
@@ -587,7 +587,7 @@ func (m *model) View() tea.View {
 			status = m.capacityStatus + " · " + status
 		}
 	}
-	if m.editing != "" {
+	if m.editing != "" && !strings.HasPrefix(status, "Error:") {
 		status = "Editing · " + m.keyLabel("save") + " / " + m.keyLabel("save.alt") + " save · " + m.keyLabel("nav.back") + " cancel"
 		if m.editing == "document" {
 			status += " · /save · /cancel"
@@ -640,6 +640,9 @@ func (m *model) View() tea.View {
 		if len(strings.Fields(m.command.Value())) > 1 || m.historyPosition > 0 {
 			legend = "↑↓ history · ENTER run · ESC return · /keys"
 		}
+	}
+	if hint := templateHint(m.editing); hint != "" {
+		legend = hint
 	}
 	lines = append(lines, m.footerView(legend, saved))
 	content := strings.Join(lines, "\n")

@@ -10,9 +10,9 @@ import json
 import uuid
 from pathlib import Path
 
-from . import assessments
+from . import assessments, templates
 from .domain import now
-from .policy import DEFAULT_PROMPT, DEFAULT_SPEC, validate
+from .policy import CHOICE_RESPONSE, DEFAULT_PROMPT, DEFAULT_SPEC, validate
 
 
 def require_selector(model):
@@ -116,6 +116,8 @@ async def explore(project, loops, model, runtime_factory, batch, advance, emit):
         run["policy"] = copy.deepcopy(named)
     if not run["spec"].strip() or not run["prompt"].strip():
         raise ValueError("Selection criteria and prompt are required in /policy")
+    templates.validate_assessment(assessment_judge["prompt"])
+    templates.validate_choice(run["prompt"])
     project.data.setdefault("policy_runs", []).append(run)
     project.save()
     judge = runtime_factory(project.folder, run["policy_model"])
@@ -191,10 +193,24 @@ async def explore(project, loops, model, runtime_factory, batch, advance, emit):
                     if a["eligible"]
                 ],
             )
-            step["messages"] = [
-                dict(role="system", content=run["prompt"]),
-                dict(role="user", content=json.dumps(state, ensure_ascii=False)),
-            ]
+            context = {
+                **state,
+                "behaviors": templates.behavior_objects(run["behaviors"]),
+            }
+            if templates.variables(run["prompt"]):
+                step["trace"]["template_context"] = context
+                step["messages"] = [
+                    dict(
+                        role="system",
+                        content=CHOICE_RESPONSE,
+                    ),
+                    dict(role="user", content=templates.render(run["prompt"], context)),
+                ]
+            else:
+                step["messages"] = [
+                    dict(role="system", content=run["prompt"]),
+                    dict(role="user", content=json.dumps(state, ensure_ascii=False)),
+                ]
             project.save()
             await emit(
                 "operation", dict(stage="selecting", loop=index + 1, loops=loops)

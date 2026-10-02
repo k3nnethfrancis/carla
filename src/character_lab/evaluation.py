@@ -11,7 +11,7 @@ import json
 import uuid
 from pathlib import Path
 
-from . import assessments
+from . import assessments, templates
 from .domain import display_title, now
 from .monitor import LOCAL_URL, classify, local_url
 
@@ -86,6 +86,8 @@ def save_definition(project, args):
         raise ValueError(
             "Classifier pass threshold must be greater than 0 and at most 1"
         )
+    if definition["kind"] == "llm":
+        templates.validate_assessment(definition["prompt"])
     definition["expected"] = assessments.expected_state(args)
     definition.update(
         id=old["id"] if old else uuid.uuid4().hex[:12],

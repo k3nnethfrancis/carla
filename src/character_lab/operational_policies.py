@@ -7,7 +7,7 @@ routing pointer remembers the last configuration when all policies are Off.
 import copy
 import uuid
 
-from . import assessments, credentials, monitor, policy_overrides, simulator
+from . import assessments, credentials, monitor, policy_overrides, simulator, templates
 from .policy import DEFAULT_PROMPT, DEFAULT_SPEC
 
 PURPOSES = {"monitoring", "selection"}
@@ -107,10 +107,15 @@ def store(item, config):
     value = copy.deepcopy(config)
     if "monitor_dimensions" in value:
         item["actions"] = {}
+        detection = {}
         for behavior in value["monitor_dimensions"]:
+            detection[behavior["id"]] = {
+                k: behavior.pop(k) for k in ("decision", "threshold") if k in behavior
+            }
             item["actions"][behavior["id"]] = {
                 k: behavior.pop(k) for k in ("action", "color") if k in behavior
             }
+        value["monitor_detection"] = detection
     else:
         item["actions"] = {"advance_selected": True}
     item["config"] = value
@@ -123,7 +128,9 @@ def expanded(item):
     if "selection_enabled" in value:
         value.setdefault("selection_assessment_prompt", assessments.DEFAULT_PROMPT)
         value.setdefault("selection_call_mode", "separate")
+    detection = value.pop("monitor_detection", {})
     for behavior in value.get("monitor_dimensions", []):
+        behavior.update(detection.get(behavior["id"], {}))
         behavior.update(item.get("actions", {}).get(behavior["id"], {}))
     return value
 
@@ -149,6 +156,9 @@ def migrate(project, alias, policy_model):
             store(item, item["config"])
             catalog[purpose] = [item]
             active[purpose] = item["id"]
+    for item in catalog["monitoring"]:
+        if "monitor_detection" not in item["config"]:
+            store(item, expanded(item))
     for purpose in PURPOSES:
         # Rename only the former built-in label, never a user name or a collision.
         if not any(item["name"] == "Default policy" for item in catalog[purpose]):
@@ -305,6 +315,8 @@ def validate(session, purpose, config, *, activating=False):
         for k in ("policy_spec", "policy_prompt", "selection_assessment_prompt")
     ):
         raise ValueError("Selection instructions cannot be empty")
+    templates.validate_assessment(config["selection_assessment_prompt"])
+    templates.validate_choice(config["policy_prompt"])
     model = session.judge_model(config["model_alias"])
     if config["selection_enabled"]:
         from .exploration import require_selector

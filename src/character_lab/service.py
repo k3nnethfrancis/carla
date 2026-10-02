@@ -22,6 +22,7 @@ from . import (
     exports,
     operational_policies,
     simulator,
+    templates,
 )
 from .domain import Project, display_title, generation_status, library, now
 from .exploration import explore, require_selector
@@ -238,7 +239,7 @@ class Session:
             active_evaluation_policy=p.data.get("active_evaluation_policy", ""),
             evaluation_runs=evaluation_policies.run_summaries(p),
             active_evaluation=p.data.get("active_evaluation", ""),
-            evaluation_prompt=evaluation.DEFAULT_PROMPT,
+            evaluation_prompt=assessments.DEFAULT_TEMPLATE,
             selection_enabled=p.data.get("selection_enabled", False),
             policy_spec=p.data.get("policy_spec", DEFAULT_SPEC),
             policy_prompt=p.data.get("policy_prompt", DEFAULT_PROMPT),
@@ -504,6 +505,10 @@ class Session:
         elif command == "snapshot":
             await self.emit("result", {"path": str(p.snapshot())}, request_id)
         elif command == "configure":
+            if "selection_assessment_prompt" in args:
+                templates.validate_assessment(args["selection_assessment_prompt"])
+            if "policy_prompt" in args:
+                templates.validate_choice(args["policy_prompt"])
             if "selection_call_mode" in args and args["selection_call_mode"] not in {
                 "separate",
                 "bundled",

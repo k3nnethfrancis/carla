@@ -156,6 +156,9 @@ The selection policy lives under `/policy`; no policy instructions enter base-mo
 prompts. It never automatically keeps documents. Configure a selector before
 using policy-guided split loops; see [configuration](docs/configuration.md).
 
+Prompt templates support highlighted `{{behaviors}}`, `{{text}}` and conversation
+`{{history}}` variables. See [template examples](docs/templates.md).
+
 ## Policies and evaluations
 
 These use criteria to judge text, but serve different purposes:

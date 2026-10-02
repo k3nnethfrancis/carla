@@ -74,9 +74,9 @@ func TestOffOperationalActionEditsDoNotEnablePolicy(t *testing.T) {
 	if !strings.Contains(m.dialog.title, "Draft") {
 		t.Fatal("missing policy name")
 	}
-	chooseBehaviorRow(t, m, "behaviors")
+	chooseBehaviorRow(t, m, "actions")
 	m.submitDialog()
-	if m.dialog.kind != "loom-policy-dimension" {
+	if m.dialog.kind != "loom-policy-actions" {
 		t.Fatal(m.dialog)
 	}
 	chooseBehaviorRow(t, m, "action")
@@ -117,12 +117,12 @@ func TestNamedSelectionBehaviorEditorTargetsPolicyAndBehavior(t *testing.T) {
 		t.Fatal(c)
 	}
 }
-func TestNamedMonitoringBehaviorContainsPolicyActions(t *testing.T) {
+func TestNamedMonitoringPolicyContainsActions(t *testing.T) {
 	m := namedOperationalFixture()
 	m.openOperationalPolicies("monitoring")
 	m.dialog.index = 1
 	m.submitDialog()
-	chooseBehaviorRow(t, m, "behaviors")
+	chooseBehaviorRow(t, m, "actions")
 	m.submitDialog()
 	for _, id := range []string{"action", "color"} {
 		found := false

@@ -495,6 +495,7 @@ func (m *model) beginEdit(kind string) tea.Cmd {
 		return nil
 	}
 	m.editing = kind
+	text = explicitTemplate(kind, text)
 	m.editNode = m.currentID()
 	m.editor.SetValue(text)
 	m.editor.CursorEnd()

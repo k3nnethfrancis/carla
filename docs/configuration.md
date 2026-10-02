@@ -83,9 +83,9 @@ Selection and local evaluation are separate instruct-model judge calls.
 | Visitor brief | Simulator → `/config` → Visitor brief | Text substituted into `{visitor_brief}`. |
 | Fixed opener | Simulator → `/config` → Opening → Fixed → Message | First Visitor message for fresh conversations; `--msg` overrides it for one run. |
 | Generated opener | Simulator → `/config` → Opening → Generated → Generation prompt | Raw completion using its selected model/sampling, once per fresh conversation. |
-| Selection | `/policy` → Selection | Criteria and system prompt for candidate classification; never injected into generator text. |
+| Selection | `/policy` → Selection | Criteria and assessment/choice templates for candidate classification; never injected into generator text. |
 | Monitoring | `/policy` → Monitoring → a policy → Behaviors | Named behavior specs sent to local DiffusionGemma or Jev with context. The provider envelope is managed by Carla. |
-| Evaluation | Evaluate → Policies | Criteria and local judge system prompt, or DiffusionGemma/Jev behavior spec/threshold. |
+| Evaluation | Evaluate → Policies | Criteria and local judge template, or DiffusionGemma/Jev behavior spec/threshold. |
 
 ### Document continuations
 
@@ -103,11 +103,11 @@ Current defaults are:
 Character:
 
 ```text
-{anthology}
+{{anthology}}
 
 Full conversation with Model C:
 
-{history}
+{{history}}
 
 **Model C:**
 ```
@@ -115,19 +115,19 @@ Full conversation with Model C:
 Visitor:
 
 ```text
-{visitor_brief}
+{{visitor_brief}}
 
 Full conversation with Model C:
 
-{history}
+{{history}}
 
 **User:**
 ```
 
-Both accept `{anthology}`, `{history}` and `{visitor_brief}`. `{history}` is
-required in both; `{anthology}` is required in the Character template. Unknown
-fields or invalid formatting are rejected. Use doubled braces `{{` and `}}` for
-literal braces. These are Python string-format fields, not executable templates.
+Both accept `{{anthology}}`, `{{history}}` and `{{visitor_brief}}`. History is
+required in both; anthology is required in the Character template. Unknown
+variables fail validation. Existing single-brace templates retain their prior
+rendering; new templates use the shared [data-only syntax](templates.md).
 
 History is rendered as `**User:**` and `**Model C:**` turns. Speaker-boundary stop
 strings use those labels too. They are not separately configurable: preserve
@@ -302,8 +302,8 @@ Policies own behaviors separately from their judge settings. The judge owns the
 model, prompt and Call mode. Behaviors own specs, enabled states and passing
 rules. Every judge in an evaluation policy assesses the same enabled behaviors.
 Models can be registered local LLMs, local DiffusionGemma or hosted Jev.
-Classifiers use probability thresholds; local LLM judges expose the full system
-prompt and return a boolean judgment with evidence for each behavior. DiffusionGemma uses the
+Classifiers use probability thresholds; local LLM judges expose an input template
+and return a boolean observation with evidence under a separate validated response contract. DiffusionGemma uses the
 managed local OpenJev worker after [one-time setup](local-judge.md).
 
 Data collections and policies are independent. Choose an active policy for bare
@@ -331,13 +331,15 @@ to cycle backward/forward, without opening a picker. Enter still opens the full
 picker. Heartbeat toggles use the same keys; Interval opens its numeric control.
 Typing filters the list, and the filter is retained after a setting changes.
 
-Open a policy’s **Behaviors** panel to edit specs, enabled states and detection
-rules. Each monitoring behavior also exposes its **Action** (Warn or Stop) and
-warning color. **Judge** is a sibling panel for the model and Call mode;
+Open a policy’s **Behaviors** panel to edit names, specs and enabled states.
+**Judge** contains model, Call mode and monitoring **Detection rules**, with a
+separate rule/cutoff for each behavior. Policy-level **Actions** configures Warn
+or Stop and warning colors by behavior.
 **Heartbeat** controls when monitoring runs. Selection has the same direct
 Behaviors / Judge layout, with separate **Assessment template** and **Choice template**
 rows in Judge. Evals LLM judges expose **Prompt template**.
-LLM judge templates open the full multiline editor. Saving a changed template
+LLM judge templates open the full multiline editor with highlighted `{{variables}}`.
+See [template variables and examples](templates.md) for input placement and object fields. Saving a changed template
 asks for confirmation: changing its instructions or required response format
 can change judge behavior. Cancel returns to the draft; confirm saves a workspace
 override without changing Carla’s built-in defaults. Classifier judges use their
@@ -361,4 +363,4 @@ complete multiline text, including content outside the visible window.
 
 The local monitoring **Model alias** is the request identifier sent to OpenJev.
 `openjev-latest` routes to DiffusionGemma in Carla’s managed worker; it is not a
-second model. The Behaviors row counts enabled Warn/Stop rules and disabled Off rules.
+second model. The Actions row counts enabled Warn/Stop rules and disabled Off rules.

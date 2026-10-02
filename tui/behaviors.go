@@ -3,7 +3,6 @@ package main
 import (
 	tea "charm.land/bubbletea/v2"
 	"encoding/json"
-	"fmt"
 )
 
 func (d loomDimension) args() map[string]any {
@@ -17,13 +16,9 @@ func (m *model) openBehaviors() {
 		if item.Enabled {
 			enabled = "Enabled"
 		}
-		detection := "most likely"
-		if item.Decision == "threshold" {
-			detection = fmt.Sprintf("≥ %.0f%%", item.Threshold*100)
-		}
-		d.rows = append(d.rows, row{id: item.ID, label: item.Name + " · " + enabled, preview: "Detection: " + detection + ". " + item.Spec})
+		d.rows = append(d.rows, row{id: item.ID, label: item.Name + " · " + enabled, preview: item.Spec})
 	}
-	d.rows = append(d.rows, row{id: "new", label: "+ New behavior", preview: "Configure its spec, detection rule, action and warning color."})
+	d.rows = append(d.rows, row{id: "new", label: "+ New behavior", preview: "Name and describe a behavior. Configure detection in Judge and responses in Actions."})
 	d.rows = append(d.rows, row{id: "library", label: "From library", preview: "Copy a saved behavior definition into this policy."})
 	m.dialog = d
 }
