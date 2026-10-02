@@ -447,6 +447,9 @@ func (m *model) conversationDocument(width int) string {
 		}
 		blocks = append(blocks, block)
 	}
+	if error := conversationFailure(m.simulation, c); error != "" {
+		blocks = append(blocks, m.accent("#A84F39", "#DB937C").Render(ansi.Wrap(safe(error), width, "")))
+	}
 	return strings.Join(blocks, "\n\n\n")
 }
 

@@ -88,6 +88,9 @@ func (m *model) gridItems() []loomTile {
 			}
 			fmt.Fprintln(&body)
 		}
+		if error := conversationFailure(run, c); error != "" {
+			fmt.Fprintln(&body, error)
+		}
 		title := conversationName(c, false)
 
 		if m.conversationSelected(target.Run, c.Index) {
@@ -98,6 +101,13 @@ func (m *model) gridItems() []loomTile {
 		})
 	}
 	return items
+}
+
+func conversationFailure(run *simulationRun, c simulationConversation) string {
+	if run != nil && c.Status == "failed" && run.Error != "" {
+		return "Generation error: " + run.Error
+	}
+	return ""
 }
 func (m *model) gridVisible() bool {
 	return m.loomGrid && m.editing == "" && len(m.gridItems()) > 1

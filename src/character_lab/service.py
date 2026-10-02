@@ -1138,8 +1138,16 @@ class Session:
             if any(r["status"] == "stopped" for r in latest):
                 raise asyncio.CancelledError
             if any(r["status"] != "complete" for r in latest):
+                errors = list(
+                    dict.fromkeys(r["error"] for r in latest if r.get("error"))
+                )
                 raise ValueError(
-                    "Conversation generation incomplete; partial outputs retained"
+                    (
+                        "; ".join(errors)
+                        if errors
+                        else "Conversation generation incomplete"
+                    )
+                    + "; partial outputs retained"
                 )
             return simulator_actions.group_candidates(latest)
 

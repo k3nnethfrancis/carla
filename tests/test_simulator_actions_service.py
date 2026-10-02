@@ -21,6 +21,31 @@ async def configure(s):
 
 
 @pytest.mark.asyncio
+async def test_simulator_loop_reports_underlying_context_error(session, monkeypatch):
+    await configure(session)
+    error = "Input needs 8213 tokens plus 641 requested output tokens; context is 8192. Select less text. Nothing was truncated."
+
+    async def overflow(self, prompt, settings, trace):
+        trace.update(prompt_tokens=8213, context_capacity=8192)
+        raise ValueError(error)
+        yield  # This replacement has the runtime's async-generator interface.
+
+    monkeypatch.setattr(FakeRuntime, "stream", overflow)
+    await session.execute(
+        "simulator.run", dict(action="loom", count=2, turns=3, loops=2), "overflow"
+    )
+    await session.job
+    runs = session.project.data["simulation_runs"]
+    assert len(runs) == 1 and runs[0]["status"] == "failed"
+    assert runs[0]["error"] == error
+    assert len(runs[0]["conversations"]) == 2
+    assert any(
+        kind == "error" and error in data["message"] for kind, data, _ in session.events
+    )
+    assert not session.busy
+
+
+@pytest.mark.asyncio
 async def test_session_group_loops_select_entire_alternatives(session):
     s = session
     await configure(s)
