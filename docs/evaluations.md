@@ -139,7 +139,7 @@ the collection and its membership from Data. Source documents, conversations,
 policies and historical results remain; a recovery copy is retained in the workspace.
 Starting an evaluation opens its run in **Runs**. Running rows use an accent color.
 The document pane shows the current item, judge and call count, streams actual LLM
-judge text, and displays completed assessments or errors. Classifier calls show
+judge text in a distinct color, and separates judge assessments from the saved input with headings and dividers. Each assessment identifies its judge and behavior. An incomplete run has no overall verdict: a PASS on one behavior does not override another assessment’s error. Classifier calls show
 waiting progress followed by returned scores; they do not generate a text stream.
 
 Open **Policies → a policy** to configure assessment:

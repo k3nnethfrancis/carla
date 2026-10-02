@@ -394,7 +394,7 @@ func TestRunItemAggregatesFrozenBehaviorVerdicts(t *testing.T) {
 		t.Fatal(text)
 	}
 	run.Results[1].Status = "failed"
-	if text := m.evaluationRunView(80); !strings.Contains(text, "ERROR · doc-1") {
+	if text := m.evaluationRunView(80); !strings.Contains(text, "INCOMPLETE · doc-1") {
 		t.Fatal(text)
 	}
 }

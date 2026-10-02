@@ -244,7 +244,7 @@ async def evaluate(session, records, *, manage_job=True):
                             run=batch,
                             record=group[0]["id"],
                             title=group[0]["title"],
-                            judge=definition["name"],
+                            judge=definition.get("judge_name", definition["name"]),
                             stage="Generating judgment"
                             if text
                             else "Waiting for judge response",

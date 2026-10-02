@@ -209,22 +209,25 @@ func (m *model) evaluationRunView(width int) string {
 		return "Runs\n\nChoose a run and press ENTER to read its results.\nEach run preserves the exact data and policy used."
 	}
 	r := m.evalRun
-	text := fmt.Sprintf("%s · %s · %d/%d assessed\n", r.Policy.Name, r.Status, r.Completed, r.Count)
+	text := fmt.Sprintf("%s · %s · %d/%d assessed\n", safe(r.Policy.Name), safe(r.Status), r.Completed, r.Count)
+	if r.Status == "incomplete" {
+		text += "No overall verdict: one or more assessments did not complete.\n"
+	}
 	if r.Status == "running" {
 		p := r.Progress
-		text += p.Stage
+		text += safe(p.Stage)
 		if p.Total > 0 {
 			text += fmt.Sprintf(" · call %d/%d", p.Call, p.Total)
 		}
-		text += " · " + p.Judge + "\n"
+		text += " · " + safe(p.Judge) + "\n"
 		if p.Text != "" {
-			text += p.Text + "\n"
+			text += "\n" + m.judgeStyle().Render(ansi.Wrap("// Judge output\n\n"+safe(p.Text), width, "")) + "\n\n" + strings.Repeat("─", max(1, min(width, 60))) + "\n"
 		}
-		text += "\nItem · " + p.Title + "\n"
+		text += "\nItem · " + safe(p.Title) + "\n"
 	}
-	text += fmt.Sprintf("%s · policy revision %d\n", r.Created, r.Policy.Revision)
+	text += fmt.Sprintf("%s · policy revision %d\n", safe(r.Created), r.Policy.Revision)
 	if r.CollectionName != "" {
-		text += "Dataset · " + r.CollectionName + "\n"
+		text += "Dataset · " + safe(r.CollectionName) + "\n"
 	}
 	// A run stores one result per behavior. Render all judgments beside one
 	// copy of each frozen input rather than repeating the document for each.
@@ -255,7 +258,7 @@ func (m *model) evaluationRunView(width int) string {
 		text += "\n────────────────\n" + m.collectionItemView(&item, width) + "\n"
 	}
 
-	return ansi.Wrap(safe(text), width, "")
+	return ansi.Wrap(text, width, "")
 }
 
 // Refresh only when the backend summary changed, preserving scroll while live.

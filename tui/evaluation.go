@@ -13,6 +13,7 @@ import (
 // Definitions and result snapshots belong to Python; these structs only render
 // them and carry explicit user actions back across the protocol.
 type evaluator struct {
+	JudgeName                                     string `json:"judge_name"`
 	ID, Name, Kind, Spec, Prompt, Model, Endpoint string
 	Revision                                      int
 	Threshold                                     float64
@@ -175,13 +176,13 @@ func evaluationStatus(e evaluationSummary) string {
 }
 func (m *model) evaluationRows() []row { return m.collectionRows() }
 func (m *model) evaluationView(width int) (text string) {
-	defer func() { text = ansi.Wrap(safe(text), width, "") }()
+	defer func() { text = ansi.Wrap(text, width, "") }()
 	if m.evalArea == "runs" {
 		return m.evaluationRunView(width)
 	}
 	if m.evaluation == nil || m.evaluation.ID != m.targetRow().id {
 		if c := m.currentEvaluation(); c != nil {
-			return c.Name + "\n\nAdd · saved documents, conversations or existing judgments.\nSettings · rename or remove this dataset.\n/eval configures a new run for this dataset or selected items.\nSPACE selects · ENTER opens · /keep marks for training"
+			return safe(c.Name) + "\n\nAdd · saved documents, conversations or existing judgments.\nSettings · rename or remove this dataset.\n/eval configures a new run for this dataset or selected items.\nSPACE selects · ENTER opens · /keep marks for training"
 		}
 		return "Evaluate\n\nData · saved documents and conversation traces.\nPolicies · judges and the behaviors they assess.\nRuns · recorded assessments with exact inputs and policy.\n+ New run · choose a dataset and policy before starting."
 	}

@@ -177,3 +177,17 @@ def test_one_judge_boundary_preserves_legacy_configuration(lab):
     assert len(first["judges"]) == 1
     assert first["previous_judges"] == [frozen["judges"]]
     assert first["behaviors"] == frozen["behaviors"]
+
+
+def test_partial_legacy_run_has_no_overall_pass(lab):
+    records = [
+        dict(id="ok", status="complete", passed=True),
+        dict(id="error", status="failed", passed=None, error="Local judge unavailable"),
+    ]
+    lab.project.data["evaluations"] = records
+    run = dict(id="legacy", records=["ok", "error"], policy={"name": "Quality"})
+    summary = policies.run_summary(lab.project, run)
+    assert summary["status"] == "incomplete"
+    assert summary["passed"] is None
+    assert summary["completed"] == 1 and summary["count"] == 2
+    assert records[0]["passed"] is True

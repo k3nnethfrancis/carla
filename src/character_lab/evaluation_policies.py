@@ -256,7 +256,7 @@ def run_view(project, run):
             run=run["id"],
             record=active["id"],
             title=active["title"],
-            judge=active["definition"]["name"],
+            judge=active["definition"].get("judge_name", active["definition"]["name"]),
             stage="Assessing",
             text=active.get("trace", {}).get("raw_response", ""),
         )

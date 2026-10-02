@@ -3,6 +3,8 @@ package main
 import (
 	tea "charm.land/bubbletea/v2"
 	"encoding/json"
+	"github.com/charmbracelet/x/ansi"
+	"os"
 	"strings"
 	"testing"
 )
@@ -70,5 +72,47 @@ func TestLiveRunDoesNotStealExplicitRunNavigation(t *testing.T) {
 	m.apply(event{Type: "evaluation_run", Data: json.RawMessage(`{"id":"chosen","status":"complete"}`)})
 	if m.evalRun.ID != "chosen" {
 		t.Fatal("explicit run open was blocked")
+	}
+}
+
+func TestEvaluationJudgmentsAreSeparatedColoredAndSanitized(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	os.Unsetenv("NO_COLOR")
+	m := evalFixture()
+	m.section, m.evalArea, m.selected = 4, "runs", 1
+	run := evaluationRun{ID: "r", Status: "incomplete", Count: 2, Completed: 1}
+	run.Policy.Name = "Quality"
+	one := evaluationRecord{ID: "one", Title: "Conversation 1", Text: "user: Hello\ncharacter: Hi", Status: "complete"}
+	one.Definition = evaluator{Name: "Coherence", JudgeName: "Reader", Kind: "llm", Model: "judge"}
+	one.Result.Passed = true
+	one.Result.Reason = "Natural reply\x1b[31m"
+	two := one
+	two.ID, two.Status, two.Error = "two", "failed", "Local judge unavailable"
+	two.Definition = evaluator{Name: "Coherence", JudgeName: "Local classifier", Kind: "diffusion"}
+	run.Results = []evaluationRecord{one, two}
+	m.evalRun = &run
+	m.data.EvaluationRuns = []evaluationRun{run}
+	view := m.evaluationView(60)
+	plain := ansi.Strip(view)
+	for _, want := range []string{"1/2 assessed", "No overall verdict", "INCOMPLETE · Conversation 1", "PASS · Coherence", "ERROR · Coherence", "// Judge · Reader", "// Judge · Local classifier", "Assessment error: Local judge unavailable", "Saved text · evaluated input"} {
+		if !strings.Contains(plain, want) {
+			t.Fatal("missing", want, plain)
+		}
+	}
+	if strings.Contains(view, "\x1b[31m") {
+		t.Fatal("untrusted ANSI escaped sanitization")
+	}
+	if !strings.Contains(view, "\x1b[") {
+		t.Fatal("judge color stripped by outer rendering")
+	}
+	if !strings.Contains(plain, "\n\n"+strings.Repeat("─", 60)+"\nSaved text") {
+		t.Fatal("input missing separator", plain)
+	}
+	if strings.Count(plain, one.Text) != 1 {
+		t.Fatal("duplicate input")
+	}
+	t.Setenv("NO_COLOR", "1")
+	if v := m.evaluationView(60); v != ansi.Strip(v) {
+		t.Fatal("NO_COLOR ignored")
 	}
 }
