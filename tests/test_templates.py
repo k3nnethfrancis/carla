@@ -126,16 +126,19 @@ def test_monitor_detection_and_actions_migrate_without_changing_execution(tmp_pa
         b["id"]: {k: b.pop(k) for k in ("action", "color")}
         for b in config["monitor_dimensions"]
     }
+    config["monitor_detection"] = {
+        b["id"]: {k: b.pop(k) for k in ("decision", "threshold")}
+        for b in config["monitor_dimensions"]
+    }
     p.data["operational_policies"] = {"monitoring": [old], "selection": []}
     p.data["active_operational_policies"] = {"monitoring": "m", "selection": ""}
     before = ops.expanded(old)
     p.data["policy_runs"] = [dict(config=copy.deepcopy(before))]
     ops.migrate(p, alias, dict(alias="judge"))
     assert ops.expanded(old) == before
-    assert "decision" not in old["config"]["monitor_dimensions"][0]
-    assert old["config"]["monitor_detection"]["looping"] == dict(
-        decision="threshold", threshold=0.93
-    )
+    assert "monitor_detection" not in old["config"]
+    assert old["config"]["monitor_dimensions"][0]["decision"] == "threshold"
+    assert old["config"]["monitor_dimensions"][0]["threshold"] == 0.93
     assert old["actions"]["looping"] == dict(action="stop", color="coral")
     assert p.data["policy_runs"][0]["config"] == before
     frozen = copy.deepcopy(p.data)

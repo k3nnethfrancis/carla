@@ -18,7 +18,7 @@ async def test_policy_runs_independently_of_data_and_freezes_configuration(lab):
     second = define(lab, name="Voice", spec="Voice stays consistent")
     await lab.execute(
         "evaluation.policy.save",
-        {"name": "Quality", "judges": [first["id"], second["id"]]},
+        {"name": "Quality", "judges": [first["id"]]},
         "policy",
     )
     policy = policies.active(lab.project)
@@ -33,7 +33,7 @@ async def test_policy_runs_independently_of_data_and_freezes_configuration(lab):
     await lab.job
     result = policies.run_summaries(lab.project)[0]
     assert result["status"] == "complete" and result["passed"] is True
-    assert len(result["records"]) == 4
+    assert len(result["records"]) == 1
     assert result["collection"] == ""
     assert group["items"] == []
     frozen = copy.deepcopy(result)
@@ -46,7 +46,7 @@ async def test_policy_runs_independently_of_data_and_freezes_configuration(lab):
     assert policies.run_summaries(lab.project)[0] == frozen
     await lab.execute("evaluation.run.open", {"id": result["id"]}, "open")
     assert lab.events[-1][0] == "evaluation_run"
-    assert len(lab.events[-1][1]["results"]) == 4
+    assert len(lab.events[-1][1]["results"]) == 1
     assert lab.events[-1][1]["policy"]["name"] == "Quality"
     await lab.execute("evaluation.policy.delete", {"id": policy["id"]}, "delete")
     assert policies.run_summaries(lab.project)[0] == frozen
@@ -157,3 +157,23 @@ async def test_live_run_events_link_failed_and_completed_judgments(lab):
     progress = [e[1] for e in lab.events if e[0] == "evaluation_progress"]
     assert all(e["run"] == updates[0]["id"] for e in progress)
     assert any(e["text"] == '{"passed": true}' for e in progress)
+
+
+def test_one_judge_boundary_preserves_legacy_configuration(lab):
+    from test_evaluation_judges import config
+
+    first = policies.save(lab.project, dict(name="Legacy", judges=[config()]))
+    first["judges"].append(dict(first["judges"][0], id="second", name="Second"))
+    frozen = copy.deepcopy(first)
+    with pytest.raises(ValueError, match="one judge"):
+        data.plan(lab)
+    with pytest.raises(ValueError, match="one judge"):
+        policies.save(lab.project, copy.deepcopy(first))
+    assert first == frozen
+    replacement = dict(
+        copy.deepcopy(first), judges=[dict(first["judges"][0], name="Chosen")]
+    )
+    policies.save(lab.project, replacement)
+    assert len(first["judges"]) == 1
+    assert first["previous_judges"] == [frozen["judges"]]
+    assert first["behaviors"] == frozen["behaviors"]

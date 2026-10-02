@@ -169,6 +169,8 @@ def data_collection(project, key=None):
 
 def plan(session, name=None, collection=None):
     policy = evaluation_policies.resolve(session.project, name)
+    if len(policy.get("judges", [])) != 1:
+        raise ValueError("Choose one judge in this evaluation policy before running it")
     definitions = evaluation_policies.Definitions(
         policy,
         evaluation_judges.flatten(policy),

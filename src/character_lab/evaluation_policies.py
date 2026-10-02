@@ -63,6 +63,8 @@ def save(project, args):
             else j
             for j in judges
         ]
+    if isinstance(judges, list) and len(judges) > 1:
+        raise ValueError("Choose one judge per policy")
     proposed = {"judges": copy.deepcopy(judges)}
     if "behaviors" in args:
         proposed["behaviors"] = copy.deepcopy(args["behaviors"])
@@ -86,6 +88,10 @@ def save(project, args):
     ):
         raise ValueError("Evaluation actions require boolean train_on_pass")
     if old:
+        # Preserve formerly editable multi-judge settings when the user explicitly
+        # replaces them. Historical run snapshots are never rewritten.
+        if len(old["judges"]) > 1:
+            old.setdefault("previous_judges", []).append(copy.deepcopy(old["judges"]))
         old.update(
             name=name,
             judges=judges,

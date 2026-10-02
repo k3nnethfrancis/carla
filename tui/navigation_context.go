@@ -118,8 +118,6 @@ func (m *model) refreshConfig() {
 		m.openEvaluationPolicies()
 	case "eval-policy-config":
 		m.openEvaluationPolicy(d.args["id"].(string))
-	case "eval-policy-judges":
-		m.openPolicyJudges(d.args["id"].(string))
 	case "eval-policy-judge":
 		m.openPolicyJudge(d.args["id"].(string), d.args["judge"].(int))
 	case "eval-policy-behaviors":
@@ -130,10 +128,10 @@ func (m *model) refreshConfig() {
 		m.openConfig()
 	case "eval-definitions":
 		m.openEvaluators()
-	case "loom-policy-detection-list", "loom-policy-actions-list":
-		m.openMonitorRules(strings.TrimSuffix(strings.TrimPrefix(d.kind, "loom-policy-"), "-list"))
-	case "loom-policy-detection", "loom-policy-actions":
-		m.openMonitorRule(strings.TrimPrefix(d.kind, "loom-policy-"), d.args["id"].(string))
+	case "loom-policy-actions-list":
+		m.openMonitorActions()
+	case "loom-policy-actions":
+		m.openMonitorAction(d.args["id"].(string))
 	case "loom-policy-judge":
 		m.openMonitorJudge()
 	case "loom-policy-behaviors":

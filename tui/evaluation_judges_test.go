@@ -38,36 +38,23 @@ func TestLegacyRunJudgeDisplayCompatibility(t *testing.T) {
 		t.Fatal(run, err)
 	}
 }
-func TestNewJudgeThenBehaviorNavigation(t *testing.T) {
+func TestPolicyJudgeDirectNavigation(t *testing.T) {
 	m := evalFixture()
-	m.openPolicyJudges("policy")
-	m.dialog.index = len(m.dialog.rows) - 1
+	m.openEvaluationPolicy("policy")
+	root := m.dialog
+	m.dialog.index = 2
 	m.submitDialog()
-	if m.dialog.kind != "eval-policy-judge-model" {
+	if m.dialog.kind != "eval-policy-judge" {
 		t.Fatal(m.dialog)
 	}
-	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
-	var judges []evaluationJudge
-	json.Unmarshal(req.Args["judges"], &judges)
-	j := judges[len(judges)-1]
-	if j.Kind != "diffusion" || j.CallMode != "separate" {
-		t.Fatal(j)
+	for _, r := range m.dialog.rows {
+		if r.id == "library" || r.id == "new" || r.id == "all-judges" {
+			t.Fatal(r)
+		}
 	}
-	if m.dialog.kind != "eval-policy-judges" {
-		t.Fatal("new judge returns to list")
-	}
-}
-
-func TestJudgeBackRefreshesParentCounts(t *testing.T) {
-	m := evalFixture()
-	m.openPolicyJudges("policy")
-	parent := m.dialog
-	m.openPolicyJudge("policy", 0)
-	m.dialog.parent = parent
-	m.data.EvaluationPolicies[0].Behaviors = append(m.data.EvaluationPolicies[0].Behaviors, evaluationBehavior{Name: "Second", Enabled: true})
 	m.closeDialog()
-	if m.dialog.kind != "eval-policy-judges" || !strings.Contains(m.dialog.rows[0].preview, "2 behaviors") {
-		t.Fatalf("stale parent after child edit: %+v", m.dialog)
+	if m.dialog != root {
+		t.Fatal("Escape should return to policy")
 	}
 }
 
@@ -88,34 +75,34 @@ func TestPolicyBehaviorEditableWithoutJudge(t *testing.T) {
 		t.Fatal("behavior depends on judge context")
 	}
 }
-func TestMultipleJudgesPreserveOneBehaviorSet(t *testing.T) {
+func TestLegacyMultipleJudgesRequireSingleModelChoice(t *testing.T) {
 	m := evalFixture()
-	m.data.EvaluationPolicies[0].Judges = append(m.data.EvaluationPolicies[0].Judges, evaluationJudge{ID: "two", Name: "Second", Kind: "diffusion", Model: "openjev-latest"})
+	m.data.EvaluationPolicies[0].Judges = append(m.data.EvaluationPolicies[0].Judges, evaluationJudge{ID: "old", Kind: "llm"})
 	m.openEvaluationPolicy("policy")
+	root := m.dialog
 	m.dialog.index = 2
 	m.submitDialog()
-	if m.dialog.kind != "eval-policy-judges" {
-		t.Fatal("multiple judges should list models")
+	if m.dialog.kind != "eval-policy-judge-model" {
+		t.Fatal(m.dialog)
 	}
-	m.dialog.index = 1
-	m.submitDialog()
-	m.dialog.index = 0
-	m.submitDialog()
-	m.dialog.fields[0].input.SetValue("Renamed second")
-	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
-	var behaviors []evaluationBehavior
-	json.Unmarshal(req.Args["behaviors"], &behaviors)
-	var judges []map[string]any
-	json.Unmarshal(req.Args["judges"], &judges)
-	if len(behaviors) != 1 || len(judges) != 2 || judges[1]["name"] != "Renamed second" {
-		t.Fatal(req)
-	}
-	for _, j := range judges {
-		if _, ok := j["behaviors"]; ok {
-			t.Fatal("live judges must not serialize nested behaviors")
+	for _, r := range m.dialog.rows {
+		if !strings.HasPrefix(r.id, "llm:") {
+			t.Fatal("picker must contain only LLMs", r)
 		}
 	}
+	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
+	var judges []evaluationJudge
+	json.Unmarshal(req.Args["judges"], &judges)
+	if len(judges) != 1 || judges[0].Kind != "llm" {
+		t.Fatal(judges)
+	}
+	var behaviors []evaluationBehavior
+	json.Unmarshal(req.Args["behaviors"], &behaviors)
+	if len(behaviors) != 1 || m.dialog != root {
+		t.Fatal("preserve behaviors and return to policy")
+	}
 }
+
 func TestPolicyBehaviorRemoveAndCancel(t *testing.T) {
 	m := evalFixture()
 	m.openPolicyBehaviors("policy")
@@ -172,19 +159,14 @@ func TestJudgesDeleteEscapeReturnsPolicy(t *testing.T) {
 	}
 	choose("judges")
 	if m.dialog.parent != root {
-		t.Fatal("Judges list must sit directly beneath policy")
+		t.Fatal("Judge must sit directly beneath policy")
 	}
-	choose("0")
 	choose("delete")
 	m.dialog.index = 1
 	req := captureCommand(t, m, func() tea.Cmd { return m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter}) })
 	json.Unmarshal(req.Args["judges"], &m.data.EvaluationPolicies[0].Judges)
 	data, _ := json.Marshal(m.data)
 	m.apply(event{Type: "state", ID: req.ID, Data: data})
-	if m.dialog.kind != "eval-policy-judges" {
-		t.Fatal(m.dialog)
-	}
-	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.dialog.kind != "eval-policy-config" {
 		t.Fatal("escaped to deleted judge", m.dialog)
 	}
@@ -206,7 +188,7 @@ func TestStaleJudgeDialogAndEditorCannotPanic(t *testing.T) {
 		}
 		m.data.EvaluationPolicies[0].Judges = nil
 		m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-		if m.dialog.kind != "eval-policy-judges" {
+		if m.dialog.kind != "eval-policy-judge-model" {
 			t.Fatal("stale judge not recovered", field)
 		}
 	}
@@ -217,54 +199,5 @@ func TestStaleJudgeDialogAndEditorCannotPanic(t *testing.T) {
 	m.data.EvaluationPolicies[0].Judges = nil
 	if cmd := m.savePolicyEditor("draft"); cmd != nil {
 		t.Fatal("saved removed judge")
-	}
-}
-
-func TestJudgeLibraryCopiesConfigurationWithoutBehaviorsOrIdentity(t *testing.T) {
-	m := evalFixture()
-	source := evaluationPolicy{ID: "source", Name: "Other policy", Judges: []evaluationJudge{{ID: "original", Revision: 7, Name: "Careful reader", Kind: "llm", Model: "other-model", Prompt: "Custom {{behaviors}} {{text}}", CallMode: "bundled"}}, Behaviors: []evaluationBehavior{{ID: "source-only", Name: "Other criteria"}}}
-	m.data.EvaluationPolicies = append(m.data.EvaluationPolicies, source)
-	original, _ := json.Marshal(m.data.EvaluationPolicies)
-	m.openPolicyJudges("policy")
-	parent := m.dialog
-	for i, r := range parent.rows {
-		if r.id == "library" {
-			parent.index = i
-		}
-	}
-	m.submitDialog()
-	if m.dialog.kind != "eval-policy-judge-library" || m.dialog.parent != parent {
-		t.Fatal("library belongs beside New judge")
-	}
-	m.closeDialog()
-	if m.dialog != parent {
-		t.Fatal("Escape must return to Judges")
-	}
-	m.openJudgeLibraryPicker(parent)
-	req := captureCommand(t, m, func() tea.Cmd { return m.submitDialog() })
-	var judges []evaluationJudge
-	json.Unmarshal(req.Args["judges"], &judges)
-	copy := judges[len(judges)-1]
-	if copy.ID != "" || copy.Revision != 0 || copy.Model != "other-model" || copy.Prompt != source.Judges[0].Prompt || copy.CallMode != "bundled" {
-		t.Fatal("copy lost settings or retained identity", copy)
-	}
-	var behaviors []evaluationBehavior
-	json.Unmarshal(req.Args["behaviors"], &behaviors)
-	if len(behaviors) != len(m.data.EvaluationPolicies[0].Behaviors) || behaviors[0].ID == "source-only" {
-		t.Fatal("import changed policy behaviors")
-	}
-	after, _ := json.Marshal(m.data.EvaluationPolicies)
-	if string(original) != string(after) {
-		t.Fatal("picker mutated saved policies before backend validation")
-	}
-	if m.dialog != parent {
-		t.Fatal("import must return to judge list")
-	}
-	m.pending = false
-	m.openPolicyJudge("policy", 0)
-	for _, r := range m.dialog.rows {
-		if r.id == "all-judges" {
-			t.Fatal("redundant shortcut remains")
-		}
 	}
 }

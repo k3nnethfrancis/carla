@@ -46,40 +46,45 @@ func TestMonitoringOwnershipNavigationAndQuickDetection(t *testing.T) {
 	m.submitDialog()
 	policy := m.dialog
 	chooseBehaviorRow(t, m, "behaviors")
-	m.submitDialog()
-	for _, row := range m.dialog.rows {
-		if row.id == "action" || row.id == "decision" || row.id == "color" || row.id == "threshold" {
-			t.Fatal("behavior owns operational config", row)
-		}
-	}
-	m.closeDialog()
-	m.closeDialog()
-	chooseBehaviorRow(t, m, "judge")
-	judge := m.dialog
-	chooseBehaviorRow(t, m, "detection")
 	list := m.dialog
 	m.submitDialog()
+	found := false
+	for i, r := range m.dialog.rows {
+		if r.id == "action" || r.id == "color" {
+			t.Fatal("actions belong to policy", r)
+		}
+		if r.id == "decision" {
+			m.dialog.index = i
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("behavior needs detection rule")
+	}
 	req := captureCommand(t, m, func() tea.Cmd { return m.dialogKey(tea.KeyPressMsg{Code: tea.KeyRight}) })
-	if req.Command != "operational.policy.save" || string(req.Args["id"]) != `"draft"` {
+	if req.Command != "operational.policy.save" {
 		t.Fatal(req)
 	}
 	m.pending = false
 	m.closeDialog()
 	if m.dialog != list {
-		t.Fatal("lost detection list")
-	}
-	m.closeDialog()
-	if m.dialog != judge {
-		t.Fatal("lost Judge parent")
+		t.Fatal("return to behaviors")
 	}
 	m.closeDialog()
 	if m.dialog != policy {
-		t.Fatal("lost Policy parent")
+		t.Fatal("return to policy")
 	}
+	chooseBehaviorRow(t, m, "judge")
+	for _, r := range m.dialog.rows {
+		if r.id == "detection" {
+			t.Fatal("detection belongs to behavior")
+		}
+	}
+	m.closeDialog()
 	chooseBehaviorRow(t, m, "actions")
 	m.submitDialog()
 	if m.dialog.kind != "loom-policy-actions" {
-		t.Fatal("actions not at policy")
+		t.Fatal(m.dialog)
 	}
 }
 

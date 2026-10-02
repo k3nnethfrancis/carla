@@ -61,12 +61,10 @@ The same rules can assess document continuations with `--monitoring on`.
 Document Looms default to judging Off; Simulator follows the saved policy switch.
 Visitor replies are not monitored separately.
 
-**Whole-item evaluations:** open Evaluate → Policies → a policy. Add a
-**DiffusionGemma (classifier)** judge and define specs and pass thresholds in the
-sibling **Behaviors** panel. With multiple judges, all assess the same enabled specs. Choose its Call mode at the judge level, then run `/eval "policy name"` on selected data or
-`/loom … --eval "policy name"`. Each result
-freezes its judge configuration, including automatic or explicit endpoint mode, alongside the exact
-request, response, provider and elapsed time. Later policy changes do not rewrite it.
+**Whole-item evaluations:** new Evals policies currently offer registered local
+LLMs only. Existing DiffusionGemma evaluation configurations and frozen results
+remain supported for compatibility; the model picker does not create new ones.
+Each result retains its exact judge configuration, request, response and timing.
 
 Selection during multi-loop Loom still uses the configured local instruct model;
 this addition does not replace its candidate/evidence contract.

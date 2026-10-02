@@ -8,7 +8,7 @@ inputs, triggers and effects. Configuring one does not silently enable another.
 | --- | --- | --- |
 | Monitoring | Partial or completed generation and its context, at configured Heartbeat checkpoints | Local DiffusionGemma or hosted Jev behavior probabilities; enabled rules annotate, warn or explicitly stop. |
 | Selection | Selection On, 2+ alternatives and explicit `--loops N` | Local instruct model reviews candidates and chooses one eligible continuation, or none. Others remain saved. |
-| Evaluation | Frozen document/conversation items in a named collection | One or more instruct/DiffusionGemma/Jev judges record whole-item results for comparison and dataset curation. |
+| Evaluation | Frozen document/conversation items in a named collection | One LLM judge per policy records whole-item results for comparison and dataset curation. |
 
 All are inspectable. A monitor flag is not automatically a training rejection;
 a selected branch is not automatically an anthology or training member.
@@ -52,7 +52,7 @@ environment OpenRouter key before other settings appear. [Credential storage
 and external data flow](configuration.md#optional-monitoring) apply here.
 
 Open **Behaviors** directly inside the policy to name, describe and enable conditions.
-**Judge → Detection rules** sets when each probability counts as detected: Most
+Each behavior’s **Detection rule** sets when each probability counts as detected: Most
 likely means above 50%; Threshold uses your cutoff. **Policy → Actions** sets
 Warn/Stop and warning color for each behavior. Warn annotates the trace and
 highlights detection; Stop ends the flagged generation/conversation. Disabled
@@ -144,28 +144,29 @@ waiting progress followed by returned scores; they do not generate a text stream
 
 Open **Policies → a policy** to configure assessment:
 
-- **Judges:** open the list, then choose a judge’s model, call mode and, for an LLM, the assessment prompt
+- **Judge:** choose the policy’s LLM, call mode and assessment prompt
   template. Changed templates require confirmation before saving.
 - **Behavior:** give it a name and spec, enable or disable it, and configure its
-  **Pass when · Present/Absent** setting. All configured judges assess it. For
-  classifiers, the threshold applies to the probability of the desired outcome:
+  **Pass when · Present/Absent** setting. The policy’s judge assesses it. For
+  saved legacy classifier policies, the threshold applies to the probability of the desired outcome:
   with Absent selected, `P(absent) = 1 - P(present)`. The original observed
   probability is retained. LLMs report a boolean observation plus reason/evidence;
   Carla compares it with Pass when without inventing confidence probabilities.
 
 **Separate** calls assess one enabled behavior per request. **Bundled** calls
-assess the policy’s enabled behaviors together for each judge. Bundling reduces request count,
+assess the policy’s enabled behaviors together. Bundling reduces request count,
 but can change the judgments; the UI asks you to confirm the tradeoff. Each
 classifier behavior still has its own probability; scores are not normalized
 against other behaviors. LLM judgments retain a boolean result, reason and evidence.
 
 Set the active policy to choose what bare `/eval` runs. Monitoring and Selection
 remain separately enabled operational policies. They each use one supported
-operational judge, configured directly in **Judge** beside **Behaviors**. Evals
-opens the **Judges** list. **From library**, alongside **New judge**, copies a judge
-configuration from another Evals policy: model, prompt template and call mode.
-The copy receives its own identity; later edits are independent. Behaviors stay
-with the destination policy and are not imported with a judge.
+judge, configured directly in **Judge** beside **Behaviors**. Evals uses the same
+layout, with one LLM per policy and no heartbeat. The model picker currently
+shows only registered LLMs. Existing classifier configurations and historical
+results remain readable; no judge library or multiple-judge setup is offered.
+Older multi-judge policies require an explicit single-model choice before running.
+Their previous configurations are retained when replaced; frozen results stay intact.
 Monitoring retains heartbeat and warn/stop actions. Selection uses the shared
 whole-item assessment engine, then its own candidate-set choice contract.
 
@@ -178,9 +179,9 @@ Select data and run `/eval`, or choose a policy explicitly:
 /loom 3 --turns 2 --tokens 512 --eval "Voice" --loops 4
 ```
 
-The name identifies a **policy**, not a data collection. Each judge assesses all
-enabled policy behaviors on the targeted items. Judges run sequentially; Call
-mode determines whether each judge assesses the behaviors separately or together.
+The name identifies a **policy**, not a data collection. The judge assesses all
+enabled policy behaviors on the targeted items. Call mode determines whether
+it assesses the behaviors separately or together.
 Each local LLM judge resolves its own registered model. Model switches unload the
 previous local LLM before loading the next; an unavailable model fails visibly.
 Generation `--eval`
@@ -234,7 +235,7 @@ The training controls mark or unmark selected evaluation items. `/remove` remove
 items from the collection; stored judgments and a recovery record are preserved.
 The compatibility command `/keep` remains available for this action.
 Manual selection is independent of the judge result, allowing deliberate negative
-examples too. `/eval --train-on-pass true` marks only items whose judges all pass
+examples too. `/eval --train-on-pass true` marks only items whose enabled behaviors all pass
 in that run; it does not undo an earlier manual training selection.
 
 `/notes` records item notes. Notes/training changes have metadata histories.

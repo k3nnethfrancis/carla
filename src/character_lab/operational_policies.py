@@ -107,15 +107,10 @@ def store(item, config):
     value = copy.deepcopy(config)
     if "monitor_dimensions" in value:
         item["actions"] = {}
-        detection = {}
         for behavior in value["monitor_dimensions"]:
-            detection[behavior["id"]] = {
-                k: behavior.pop(k) for k in ("decision", "threshold") if k in behavior
-            }
             item["actions"][behavior["id"]] = {
                 k: behavior.pop(k) for k in ("action", "color") if k in behavior
             }
-        value["monitor_detection"] = detection
     else:
         item["actions"] = {"advance_selected": True}
     item["config"] = value
@@ -157,7 +152,7 @@ def migrate(project, alias, policy_model):
             catalog[purpose] = [item]
             active[purpose] = item["id"]
     for item in catalog["monitoring"]:
-        if "monitor_detection" not in item["config"]:
+        if "monitor_detection" in item["config"] or "actions" not in item:
             store(item, expanded(item))
     for purpose in PURPOSES:
         # Rename only the former built-in label, never a user name or a collision.

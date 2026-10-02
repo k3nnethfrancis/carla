@@ -424,22 +424,20 @@ async def test_loom_evaluation_chain_and_preflight(lab, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_simulator_chain_freezes_conversations_and_runs_all_judges(
-    lab, monkeypatch
-):
+async def test_simulator_chain_freezes_conversations_and_runs_policy(lab, monkeypatch):
     from test_service import FakeRuntime
 
     s = lab
     monkeypatch.setattr(Judge, "stream", FakeRuntime.stream, raising=False)
     monkeypatch.setattr(Judge, "preflight", FakeRuntime.preflight, raising=False)
-    first, second = define(s), define(s, name="Another rubric")
+    first = define(s)
     group = await collection(s, first)
     await s.execute(
         "evaluation.collection.save",
         {
             "id": group["id"],
             "name": group["name"],
-            "judges": [first["id"], second["id"]],
+            "judges": [first["id"]],
         },
         "judges",
     )
@@ -458,7 +456,7 @@ async def test_simulator_chain_freezes_conversations_and_runs_all_judges(
     await s.execute("simulator.run", {"count": 2, "eval": group["name"]}, "chain")
     await s.job
     assert group["items"] == []
-    assert len(s.project.data["evaluations"]) == 8
+    assert len(s.project.data["evaluations"]) == 2
     assert all(r["passed"] for r in s.project.data["evaluations"])
     statuses = [data["busy"] for kind, data, _ in s.events if kind == "state"]
     # Once generation starts, ownership stays held through judging until final snapshot.

@@ -134,17 +134,18 @@ async def test_distinct_llm_judges_use_frozen_models_and_close_before_switch(
     lab.judge_models.append(second_model)
     first, second = config(), config(name="Second")
     second["model"] = second_model["alias"]
-    policies.save(lab.project, dict(name="Two models", judges=[first, second]))
-    group, definitions = datasets.plan(lab)
-    assert {d["resolved_model"]["alias"] for d in definitions} == {
+    node = lab.project.add("Exact input")
+    records = []
+    for index, judge in enumerate([first, second]):
+        policy = policies.save(lab.project, dict(name=f"Model {index}", judges=[judge]))
+        group, definitions = datasets.plan(lab, policy["id"])
+        item = evaluation.capture(lab.project, {"node": node["id"]})
+        datasets.add_capture(group, item)
+        records.extend(datasets.prepare(lab, group, definitions, group["items"]))
+    assert {r["definition"]["resolved_model"]["alias"] for r in records} == {
         "judge",
         "second-model",
     }
-    node = lab.project.add("Exact input")
-    item = evaluation.capture(lab.project, {"node": node["id"]})
-    # prepare expects a collection item; add it through the normal data helper.
-    datasets.add_capture(group, item)
-    records = datasets.prepare(lab, group, definitions, group["items"])
     lab.judge_models[1] = dict(second_model, path="changed-after-plan.gguf")
     lifecycle = []
 

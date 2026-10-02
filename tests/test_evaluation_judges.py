@@ -42,18 +42,25 @@ def config(mode="separate", kind="llm", name="Reader"):
 
 
 async def execute(lab, judges):
-    policies.save(lab.project, dict(name="Quality", judges=judges))
     await lab.execute(
         "evaluation.collection.save", {"name": "Explicit test data"}, "data"
     )
     dataset = data.resolve(lab.project)
     node = lab.project.add("Exact source text")
-    await lab.execute(
-        "evaluation.collection.run",
-        {"collection": dataset["id"], "targets": [{"node": node["id"]}]},
-        "test",
-    )
-    await lab.job
+    for index, judge in enumerate(judges):
+        policy = policies.save(
+            lab.project, dict(name=f"Quality {index}", judges=[judge])
+        )
+        await lab.execute(
+            "evaluation.collection.run",
+            {
+                "policy": policy["id"],
+                "collection": dataset["id"],
+                "targets": [{"node": node["id"]}],
+            },
+            "test",
+        )
+        await lab.job
     return lab.project.data["evaluations"]
 
 
@@ -218,20 +225,19 @@ async def test_mixed_judges_two_items_never_bundle_across_inputs(lab, monkeypatc
 
     lab.runtime_factory = Judge
     monkeypatch.setattr(evaluation, "classify", classify)
-    policies.save(
-        lab.project,
-        dict(
-            name="Mixed",
-            judges=[config("bundled"), config("bundled", "jev", "Classifier")],
-        ),
-    )
     nodes = [lab.project.add(t) for t in ("First exact input", "Second exact input")]
-    await lab.execute(
-        "evaluation.collection.run",
-        {"targets": [{"node": n["id"]} for n in nodes]},
-        "test",
-    )
-    await lab.job
+    for index, judge in enumerate(
+        [config("bundled"), config("bundled", "jev", "Classifier")]
+    ):
+        policy = policies.save(
+            lab.project, dict(name=f"Policy {index}", judges=[judge])
+        )
+        await lab.execute(
+            "evaluation.collection.run",
+            {"policy": policy["id"], "targets": [{"node": n["id"]} for n in nodes]},
+            "test",
+        )
+        await lab.job
     assert [p["text"] for p in llm_calls] == [n["text"] for n in nodes]
     assert [p["state"]["text"] for p in classifier_calls] == [n["text"] for n in nodes]
     records = lab.project.data["evaluations"]
@@ -317,7 +323,7 @@ async def test_flat_migration_preserves_variants_revisions_and_frozen_runs(lab):
 
 
 @pytest.mark.asyncio
-async def test_flat_policy_behavior_edit_reaches_every_judge_next_run(lab, monkeypatch):
+async def test_policy_behavior_edit_reaches_judge_next_run(lab, monkeypatch):
     from character_lab import evaluation_judges
 
     calls = []
@@ -329,10 +335,8 @@ async def test_flat_policy_behavior_edit_reaches_every_judge_next_run(lab, monke
     monkeypatch.setattr(evaluation, "classify", classify)
     first = config("bundled", "jev")
     behaviors = first.pop("behaviors")
-    second = copy.deepcopy(first)
-    second.update(id="other", name="Other")
     policy = policies.save(
-        lab.project, dict(name="Shared", judges=[first, second], behaviors=behaviors)
+        lab.project, dict(name="Shared", judges=[first], behaviors=behaviors)
     )
     old = copy.deepcopy(policy)
     node = lab.project.add("Source text")
@@ -347,17 +351,15 @@ async def test_flat_policy_behavior_edit_reaches_every_judge_next_run(lab, monke
         "evaluation.collection.run", dict(targets=[{"node": node["id"]}]), "second"
     )
     await lab.job
-    assert len(calls) == 4
+    assert len(calls) == 2
     assert all(
         "New shared criteria" in next(iter(c["questions"].values()))["instructions"]
-        for c in calls[2:]
+        for c in calls[1:]
     )
     assert lab.project.data["evaluation_runs"][0]["policy"] == old
     assert {d["id"] for d in evaluation_judges.flatten(policy)} == {
         "Reader:b0",
         "Reader:b1",
-        "other:b0",
-        "other:b1",
     }
 
 

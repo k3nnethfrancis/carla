@@ -173,9 +173,9 @@ Plain document `/loom`, `/loom N` and `/continue` generate without judging.
 Use `--monitoring on`, `--selection on` (with 2+ alternatives and explicit `--loops`)
 or `--eval "policy"` to opt in. Simulator uses its saved monitoring/selection settings.
 
-Use `/policy` to configure monitoring, selection and reusable judges. Selection
+Use `/policy` to configure monitoring, selection and evaluation policies. Selection
 uses a local instruct model. Monitoring can use local DiffusionGemma through OpenJev, or optional Jev through
-OpenRouter. Evaluation judges also support registered local instruct models, selected per judge.
+OpenRouter. Each evaluation policy uses one registered local instruct model as its judge.
 After [one-time setup](docs/local-judge.md), Carla starts and stops the Apple Silicon
 classifier automatically on an available local port.
 Hosted classification sends the assessed text to an external service and can

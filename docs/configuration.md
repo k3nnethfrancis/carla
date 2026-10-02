@@ -300,8 +300,8 @@ use On/Off; editing an Off policy does not enable it. Evaluate → Policies
 opens the same Evals policy list; there is no separate evaluation configuration.
 Policies own behaviors separately from their judge settings. The judge owns the
 model, prompt and Call mode. Behaviors own specs, enabled states and passing
-rules. Every judge in an evaluation policy assesses the same enabled behaviors.
-Models can be registered local LLMs, local DiffusionGemma or hosted Jev.
+rules. Each evaluation policy has one judge assessing its enabled behaviors.
+Evals currently offers registered local LLMs; Monitoring offers local DiffusionGemma or hosted Jev.
 Classifiers use probability thresholds; local LLM judges expose an input template
 and return a boolean observation with evidence under a separate validated response contract. DiffusionGemma uses the
 managed local OpenJev worker after [one-time setup](local-judge.md).

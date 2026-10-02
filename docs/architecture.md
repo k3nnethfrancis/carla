@@ -208,7 +208,7 @@ groups and run envelopes. The workspace stores:
   at most one On policy per category. `active_operational_policies` is the legacy
   internal routing reference, retained to remember settings while all are Off;
   it is not a separate user-visible activation state.
-- `evaluation_policies`: sibling actions, judges (model, prompt, call mode) and
+- `evaluation_policies`: sibling actions, one judge (model, prompt, call mode) and
   versioned behaviors (spec, enabled state, expected Present/Absent, threshold). Execution expands each
   judge against every enabled behavior, retaining both identities in the result.
   Exact resolved LLM configurations are frozen for execution; model changes unload
@@ -261,9 +261,13 @@ validated response contract. Instruction-only legacy prompts keep their prior
 JSON user envelope. Traces preserve template, context and rendered messages.
 Simulator uses the same renderer while accepting old single-brace formats.
 
-Monitoring policy storage owns `actions` keyed by behavior ID. Judge configuration
-owns `monitor_detection`, also keyed by ID; behavior definitions retain names,
-specs and policy membership. `expanded()` produces the legacy runtime/wire shape
-at the boundary. Migration moves detection fields without changing values, and
-never rewrites frozen run configurations. TUI Behaviors, Judge → Detection rules,
-and Policy → Actions edit those same settings through existing command handlers.
+Monitoring policy storage owns `actions` keyed by behavior ID. Behaviors own their
+names, specs and detection rules (`decision`, `threshold`). The judge configures
+model, prompt and call mode. `expanded()` accepts the former `monitor_detection`
+map; migration folds it into behaviors without changing execution values or
+historical run snapshots. The UI exposes these settings at their owning level.
+
+Editable Evals policies allow zero judges while drafting and exactly one to run.
+The wire field remains `judges` for historical compatibility. Legacy multi-judge
+policies require an explicit replacement, which archives their prior settings in
+`previous_judges`. Frozen multi-judge run evidence remains supported by the harness.
