@@ -212,7 +212,7 @@ func TestSectionsHelpAndBranchTree(t *testing.T) {
 	for _, size := range [][2]int{{60, 18}, {80, 24}, {144, 42}} {
 		m.width, m.height = size[0], size[1]
 		m.openHelp()
-		if len(m.dialog.rows) < 25 {
+		if len(m.helpAllRows()) < 25 {
 			t.Fatal("help missing commands")
 		}
 		for i, r := range m.dialog.rows {
@@ -550,7 +550,7 @@ func TestLongDialogDescriptionFits(t *testing.T) {
 	m.width, m.height = 60, 18
 	m.dialog = &dialog{kind: "help", title: "Details", rows: []row{{label: "Selected item", preview: strings.Repeat("description ", 14) + "LAST DETAIL"}}}
 	frame := ansi.Strip(m.View().Content)
-	if !strings.Contains(frame, "LAST DETAIL") || !strings.Contains(frame, "ESC return") {
+	if !strings.Contains(frame, "… ENTER to open") || !strings.Contains(frame, "ESC return") {
 		t.Fatal("description or footer cut off", frame)
 	}
 }

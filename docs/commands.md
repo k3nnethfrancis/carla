@@ -35,14 +35,14 @@ The shared controls are:
 - `/policy`: named Monitoring, Selection and Evals policies, with judges and actions.
 - `/behaviors`: reusable behavior specs for this workspace.
 - `/stop`: cancel the active operation, retaining partial output.
-- `/help`: command descriptions and arguments.
+- `/help`: a searchable guide with Loom/Continue flags and examples, collection actions, policies, settings and navigation. Type a command, alias or flag (such as `--turns`) to search; Enter opens read-only help, never runs the example. Arrows/Page Up/Page Down scroll details and Escape returns.
 - `/rename`: name a focused document or individual conversation; optionally update descendant ancestry names.
 
 Arrows move focus and preview content. Space selects/unselects. Enter opens a
 selected object or its actions. Tab/Shift+Tab move between panes; Escape unwinds
 one level, cancelling an editor draft before leaving its owner. On restart,
-Branches opens only the ancestor path to your last focused document; other
-branches stay collapsed. Without a saved location, the tree starts collapsed. `/config` exposes
+Branches and Simulator open only the ancestor path to your last focused item;
+other branches and Looms stay collapsed. Without a saved location, the tree starts collapsed. `/config` exposes
 keybindings, including selection clearing, editing, save/cancel and session exit.
 Delete invokes Remove in content panels; in text editors it deletes text.
 

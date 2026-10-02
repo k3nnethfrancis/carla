@@ -163,10 +163,7 @@ func (m *model) submitDialog() tea.Cmd {
 		return nil
 	}
 	if d.kind == "help" {
-		if len(d.rows) > 0 {
-			m.dialog = &dialog{kind: "help-detail", title: d.rows[d.index].label, parent: d, args: map[string]any{"text": d.rows[d.index].preview}}
-		}
-		return nil
+		return m.openHelpRow()
 	}
 	if len(d.fields) > 0 {
 		values := []string{}
@@ -398,6 +395,9 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 			}
 			return m.cycleDialogChoice(step)
 		}
+	}
+	if d.kind == "help" && m.filterHelp(msg) {
+		return nil
 	}
 	if m.filterDialog(msg) {
 		return nil

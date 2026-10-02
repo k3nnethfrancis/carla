@@ -256,6 +256,12 @@ func (m *model) navigation(r rect) string {
 func (m *model) dialogRect() rect {
 	width := min(76, m.width-4)
 	height := min(m.height-6, 18)
+	if m.dialog != nil && (m.dialog.kind == "help" || m.dialog.kind == "help-detail") {
+		height = min(m.height-4, 32)
+		if m.dialog.kind == "help" {
+			height = min(height, max(1, len(m.dialog.rows))+7)
+		}
+	}
 	if m.dialog != nil && strings.HasPrefix(m.dialog.kind, "setup-") && len(m.dialog.rows) > 0 {
 		height = min(height, len(m.dialog.rows)+8)
 	}
@@ -276,6 +282,9 @@ func (m *model) dialogPreviewLines() []string {
 	r := m.dialogRect()
 	lines := strings.Split(ansi.Wrap(safe(d.rows[d.index].preview), r.w-4, ""), "\n")
 	limit := max(1, min(4, r.h-7))
+	if d.kind == "help" {
+		limit = 2
+	}
 	if d.kind == "loom-policy-bundle-confirm" {
 		limit = max(1, r.h-7)
 	}
@@ -300,7 +309,7 @@ func (m *model) renderDialog() string {
 		for len(body) < height {
 			body = append(body, "")
 		}
-		body = append(body, m.keyLabel("nav.up")+"/"+m.keyLabel("nav.down")+" scroll · "+m.keyLabel("nav.back")+" back")
+		body = append(body, fmt.Sprintf("%s/%s scroll · %s back · %d/%d", m.keyLabel("nav.up"), m.keyLabel("nav.down"), m.keyLabel("nav.back"), min(start+height, len(lines)), len(lines)))
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box(d.title, strings.Join(body, "\n"), r, true))
 	}
 	if len(d.rows) > 0 || d.allRows != nil {
@@ -337,7 +346,7 @@ func (m *model) renderDialog() string {
 			footer = "ESC cancel"
 		}
 		if d.kind == "help" {
-			footer = m.keyLabel("nav.up") + "/" + m.keyLabel("nav.down") + " · " + m.keyLabel("nav.enter") + " details · " + m.keyLabel("nav.back") + " return"
+			footer = "Type to search · " + m.keyLabel("nav.enter") + " details · " + m.keyLabel("nav.back") + " return"
 		}
 		if d.kind == "keys" {
 			footer = "ENTER bind · CTRL+S save · ESC cancel"
