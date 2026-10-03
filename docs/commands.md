@@ -211,3 +211,5 @@ Inside a Selection or Evals behavior, the library row shows **Save to library**,
 Evaluate displays frozen conversation turns using the same Visitor/Character labels, colors, numbering and model headings as Simulator. The opening internal `user` role is displayed as Visitor. Display formatting does not change the raw transcript supplied to the judge; old records without structured turns retain their plain-text display.
 
 Run labels lead with the saved dataset or item name, followed by the policy and overall result. Ad hoc multi-item selections show an item count. A trailing run number distinguishes repeat evaluations. Names come from the captured data, so later renaming does not rewrite historical runs.
+
+Loom selection outcomes and saved-candidate retries are described in [Loom selection](loom-selection.md). Use `/inspect` on a selected result to inspect or retry judging without regenerating text.

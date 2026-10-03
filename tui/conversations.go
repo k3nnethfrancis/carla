@@ -153,7 +153,15 @@ func (m *model) simulationRows() []row {
 		if m.collapsed[group] {
 			arrow = "▸ "
 		}
-		rows = append(rows, row{id: group, kind: "simulation-group", depth: depth, label: mark + arrow + fmt.Sprintf("%s · %d branches", simulationName(r.OperationTitle, r.OperationShortLabel, r.OperationLabel, fmt.Sprintf("loom-%d", loomNumber(r))), r.AlternativeCount)})
+		loopLabel := ""
+		if r.Loop > 0 {
+			p := m.selectionAttempt(r.PolicyRun)
+			loopLabel = fmt.Sprintf("loop %d/%d · ", r.Loop, p.Loops)
+			if p.Status == "failed" {
+				loopLabel += "selection blocked · "
+			}
+		}
+		rows = append(rows, row{id: group, kind: "simulation-group", depth: depth, label: mark + arrow + loopLabel + fmt.Sprintf("%s · %d branches", simulationName(r.OperationTitle, r.OperationShortLabel, r.OperationLabel, fmt.Sprintf("loom-%d", loomNumber(r))), r.AlternativeCount)})
 		if m.collapsed[group] {
 			for _, peer := range runs {
 				if peer.AlternativeGroup == group {
@@ -176,6 +184,9 @@ func (m *model) simulationRows() []row {
 			for _, peer := range runs {
 				if peer.AlternativeGroup == group && peer.AlternativeIndex == alternative {
 					branchName = simulationName(peer.AlternativeTitle, peer.AlternativeShortLabel, peer.AlternativeLabel, branchName)
+					if outcome := m.selectionOutcome(peer); outcome != "" {
+						branchName += " · " + outcome
+					}
 					break
 				}
 			}

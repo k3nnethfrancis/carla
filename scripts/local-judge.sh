@@ -6,11 +6,17 @@ if [ "$(uname -s)" != Darwin ] || [ "$(uname -m)" != arm64 ]; then
     echo 'This launcher requires Apple Silicon. See docs/local-judge.md for other hosts.' >&2
     exit 1
 fi
-exec uv run --no-project --python 3.12 \
-    --with 'openjev[mlx] @ git+https://github.com/razorback16/openjev@a0ddd7d928298eccef2c17153b00b5636b6d996a' \
-    python - <<'PY'
+runtime="${CARLA_DATA_DIR:-$HOME/.local/share/character-lab}/runtimes/openjev-a0ddd7d9-v1"
+if [ ! -f "$runtime/ready" ]; then
+    uv venv --python 3.12 "$runtime"
+    uv pip install --python "$runtime/bin/python" 'openjev[mlx] @ git+https://github.com/razorback16/openjev@a0ddd7d928298eccef2c17153b00b5636b6d996a'
+    uv pip freeze --python "$runtime/bin/python" > "$runtime/installed.txt"
+    touch "$runtime/ready"
+fi
+exec "$runtime/bin/python" - "$@" <<'PY'
 import os
 import runpy
+import sys
 
 from huggingface_hub import snapshot_download
 
@@ -20,6 +26,9 @@ model = snapshot_download(
     revision="a7a81407613811e8ba63af92ac0d852b809e191f",
     local_files_only=os.environ.get("HF_HUB_OFFLINE") == "1",
 )
+if "--setup-only" in sys.argv:
+    print("Local judge runtime and checkpoint ready")
+    raise SystemExit(0)
 # Lock this companion to local inference, regardless of inherited OpenJev routing.
 os.environ.update(
     OPENJEV_BACKEND="mlx",

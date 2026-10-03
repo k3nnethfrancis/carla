@@ -92,12 +92,21 @@ func (m *model) gridItems() []loomTile {
 			fmt.Fprintln(&body, error)
 		}
 		title := conversationName(c, false)
+		summary := m.selectionRunSummary(target.Run)
+		outcome := m.selectionOutcome(summary)
+		if summary.Loop > 0 {
+			title = fmt.Sprintf("L%d · B%d · %s", summary.Loop, summary.AlternativeIndex+1, title)
+		}
+		status := conversationStatus(c)
+		if outcome != "" {
+			status += " · " + outcome
+		}
 
 		if m.conversationSelected(target.Run, c.Index) {
 			title = "✓ " + title
 		}
 		items = append(items, loomTile{
-			ID: conversationKey(target.Run, c.Index), Title: title, Text: body.String(), Status: conversationStatus(c),
+			ID: conversationKey(target.Run, c.Index), Title: title, Text: body.String(), Status: status,
 		})
 	}
 	return items
@@ -233,7 +242,18 @@ func (m *model) gridSummary() string {
 		if p.kind == 1 {
 			_, _, size := m.gridGeometry(p.box)
 			n := len(m.gridItems())
-			return fmt.Sprintf("Loom · %d outputs · page %d/%d", n, m.gridPage(p.box)+1, (n+size-1)/size)
+			heading := "Loom"
+			if m.section == 3 && m.simulation != nil {
+				r := m.selectionRunSummary(m.simulation.ID)
+				if r.Loop > 0 {
+					attempt := m.selectionAttempt(r.PolicyRun)
+					heading = fmt.Sprintf("Loop %d/%d", r.Loop, attempt.Loops)
+					if attempt.Status == "failed" {
+						heading += " · selection blocked"
+					}
+				}
+			}
+			return fmt.Sprintf("%s · %d outputs · page %d/%d", heading, n, m.gridPage(p.box)+1, (n+size-1)/size)
 		}
 	}
 	return ""

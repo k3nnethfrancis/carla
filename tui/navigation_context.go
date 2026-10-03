@@ -19,6 +19,8 @@ type pagePosition struct {
 	notes                                    bool
 }
 type runSummary struct {
+	PolicyRun             string `json:"policy_run"`
+	Loop                  int
 	Label                 string `json:"label"`
 	Title                 string `json:"title"`
 	ShortLabel            string `json:"short_label"`

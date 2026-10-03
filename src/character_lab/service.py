@@ -19,6 +19,7 @@ from . import (
     evaluation,
     evaluation_policies,
     evaluation_sets,
+    exploration,
     exports,
     operational_policies,
     policy_overrides,
@@ -254,10 +255,7 @@ class Session:
             selection_call_mode=p.data.get("selection_call_mode", "separate"),
             policy_model=self.selection_model()["name"],
             annotations=p.data.get("annotations", []),
-            policy_runs=[
-                {k: r.get(k) for k in ("id", "status", "selected", "created")}
-                for r in p.data.get("policy_runs", [])
-            ],
+            policy_runs=[exploration.summary(r) for r in p.data.get("policy_runs", [])],
             simulator_config=simulator.configuration(p, self.runtime.model["alias"]),
             monitor_key_source=credentials.openrouter_key()[1],
             simulation_runs=[
@@ -340,6 +338,12 @@ class Session:
         eval_plan = (
             evaluation_sets.plan(self, args["eval"]) if args.get("eval") else None
         )
+        if command == "policy.retry":
+            self.job_id = request_id
+            self.job = asyncio.create_task(
+                self.retry_selection(args["run"], request_id)
+            )
+            return
         if command == "grow.selector":
             self.policy_model = self.judge_model(args["alias"])
             p.data["selection_model_alias"] = args["alias"]
@@ -1198,3 +1202,26 @@ class Session:
                 self.view_node = None
                 p.save()
             await self.snapshot()
+
+    async def retry_selection(self, run_id, request_id):
+        async def emit(kind, data):
+            await self.emit(kind, data, request_id)
+
+        try:
+            await exploration.retry(self.project, run_id, self.runtime_factory, emit)
+            await emit(
+                "operation",
+                dict(
+                    stage="complete",
+                    message="Selection retry finished; no text generated. Open Selection results to inspect.",
+                ),
+            )
+        except asyncio.CancelledError:
+            await emit(
+                "operation", dict(stage="stopped", message="Selection retry stopped")
+            )
+        except Exception as exc:
+            await emit("error", dict(message=str(exc)))
+        finally:
+            self.job = None
+            await self.snapshot(request_id)

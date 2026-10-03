@@ -182,6 +182,8 @@ def summary(run):
         **{
             key: run[key]
             for key in (
+                "policy_run",
+                "loop",
                 "alternative_group",
                 "alternative_index",
                 "alternative_count",

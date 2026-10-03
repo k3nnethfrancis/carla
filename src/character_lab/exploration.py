@@ -136,96 +136,10 @@ async def explore(project, loops, model, runtime_factory, batch, advance, emit):
             candidates = copy.deepcopy(candidates)
             step["candidates"] = [c["id"] for c in candidates]
             step["inputs"] = candidates
-            step["assessments"] = []
-            eligible = []
-            step["status"] = "assessing"
-            await emit(
-                "operation", dict(stage="assessing", loop=index + 1, loops=loops)
-            )
-            for candidate in candidates:
-                assessment = dict(candidate=candidate["id"], records=[])
-                step["assessments"].append(assessment)
-                await assess_candidate(project, candidate, run, judge, assessment)
-                if assessment["eligible"]:
-                    eligible.append(candidate)
-            step["eligible"] = [c["id"] for c in eligible]
-            if not eligible:
-                errors = any(
-                    r["status"] == "failed"
-                    for a in step["assessments"]
-                    for r in a["records"]
-                )
-                if errors:
-                    raise ValueError(
-                        "No eligible candidate; some behavior assessments failed"
-                    )
-                step.update(
-                    status="complete",
-                    decision=dict(
-                        selected=None,
-                        reviews=[],
-                        reason="No candidate met every enabled behavior",
-                    ),
-                )
-                run.update(status="no_selection", selected=None)
+            await decide_step(project, run, step, judge, emit)
+            if run["selected"] is None:
                 break
-            step["status"] = "selecting"
-            state = dict(
-                spec=run["spec"],
-                behaviors=copy.deepcopy(run["behaviors"]),
-                candidates=[
-                    dict(
-                        node=c["id"],
-                        parent=c["prompt"],
-                        continuation=c["text"][len(c["prompt"]) :],
-                    )
-                    for c in eligible
-                ],
-                assessments=[
-                    dict(
-                        candidate=a["candidate"],
-                        results=[
-                            dict(behavior=r["definition"]["id"], result=r["result"])
-                            for r in a["records"]
-                        ],
-                    )
-                    for a in step["assessments"]
-                    if a["eligible"]
-                ],
-            )
-            context = {
-                **state,
-                "behaviors": templates.behavior_objects(run["behaviors"]),
-            }
-            if templates.variables(run["prompt"]):
-                step["trace"]["template_context"] = context
-                step["messages"] = [
-                    dict(
-                        role="system",
-                        content=CHOICE_RESPONSE,
-                    ),
-                    dict(role="user", content=templates.render(run["prompt"], context)),
-                ]
-            else:
-                step["messages"] = [
-                    dict(role="system", content=run["prompt"]),
-                    dict(role="user", content=json.dumps(state, ensure_ascii=False)),
-                ]
-            project.save()
-            await emit(
-                "operation", dict(stage="selecting", loop=index + 1, loops=loops)
-            )
-            result = await judge.judge(step["messages"], step["trace"])
-            step["raw_decision"] = result
-            step["decision"] = validate(result, eligible)
-            step["status"] = "complete"
-            run["selected"] = result["selected"]
-            project.save()
-            judge.close()
-            if result["selected"] is None:
-                run["status"] = "no_selection"
-                break
-            await advance(result["selected"])
+            await advance(run["selected"])
         else:
             run["status"] = "complete"
     except BaseException as exc:
@@ -250,3 +164,189 @@ async def explore(project, loops, model, runtime_factory, batch, advance, emit):
         "operation", dict(stage=run["status"], message="Loom loops: " + run["status"])
     )
     return run
+
+
+async def decide_step(project, run, step, judge, emit):
+    candidates = step["inputs"]
+    step["assessments"] = []
+    eligible = []
+    step["status"] = "assessing"
+    await emit(
+        "operation", dict(stage="assessing", loop=step["loop"], loops=run["loops"])
+    )
+    for candidate in candidates:
+        assessment = dict(candidate=candidate["id"], records=[])
+        step["assessments"].append(assessment)
+        await assess_candidate(project, candidate, run, judge, assessment)
+        if assessment["eligible"]:
+            eligible.append(candidate)
+    step["eligible"] = [c["id"] for c in eligible]
+    if not eligible:
+        errors = any(
+            r["status"] == "failed" for a in step["assessments"] for r in a["records"]
+        )
+        if errors:
+            raise ValueError(
+                "Selection blocked: behavior assessment errors; inspect or retry saved candidates"
+            )
+        step.update(
+            status="complete",
+            decision=dict(
+                selected=None,
+                reviews=[],
+                reason="No candidate met every enabled behavior",
+            ),
+        )
+        run.update(status="no_selection", selected=None)
+        return
+    step["status"] = "selecting"
+    state = dict(
+        spec=run["spec"],
+        behaviors=copy.deepcopy(run["behaviors"]),
+        candidates=[
+            dict(
+                node=c["id"],
+                parent=c["prompt"],
+                continuation=c["text"][len(c["prompt"]) :],
+            )
+            for c in eligible
+        ],
+        assessments=[
+            dict(
+                candidate=a["candidate"],
+                results=[
+                    dict(behavior=r["definition"]["id"], result=r["result"])
+                    for r in a["records"]
+                ],
+            )
+            for a in step["assessments"]
+            if a["eligible"]
+        ],
+    )
+    context = {
+        **state,
+        "behaviors": templates.behavior_objects(run["behaviors"]),
+    }
+    if templates.variables(run["prompt"]):
+        step["trace"]["template_context"] = context
+        step["messages"] = [
+            dict(
+                role="system",
+                content=CHOICE_RESPONSE,
+            ),
+            dict(role="user", content=templates.render(run["prompt"], context)),
+        ]
+    else:
+        step["messages"] = [
+            dict(role="system", content=run["prompt"]),
+            dict(role="user", content=json.dumps(state, ensure_ascii=False)),
+        ]
+    project.save()
+    await emit(
+        "operation", dict(stage="selecting", loop=step["loop"], loops=run["loops"])
+    )
+    result = await judge.judge(step["messages"], step["trace"])
+    step["raw_decision"] = result
+    step["decision"] = validate(result, eligible)
+    step["status"] = "complete"
+    run["selected"] = result["selected"]
+    project.save()
+    judge.close()
+    if result["selected"] is None:
+        run["status"] = "no_selection"
+        return
+
+
+async def retry(project, source_id, runtime_factory, emit):
+    """Reassess frozen candidates/policy in a new attempt; never generate text."""
+    source = next(
+        (r for r in project.data.get("policy_runs", []) if r["id"] == source_id), None
+    )
+    if (
+        source is None
+        or not source.get("steps")
+        or not source["steps"][-1].get("inputs")
+    ):
+        raise ValueError("No saved selection candidates to retry")
+    run = copy.deepcopy(source)
+    run.update(
+        id=uuid.uuid4().hex[:12],
+        created=now(),
+        status="running",
+        selected=None,
+        retry_of=source_id,
+    )
+    run.pop("error", None)
+    run.pop("finished", None)
+    step = dict(
+        loop=source["steps"][-1]["loop"],
+        inputs=copy.deepcopy(source["steps"][-1]["inputs"]),
+        candidates=list(source["steps"][-1]["candidates"]),
+        trace={},
+        status="assessing",
+    )
+    run["steps"] = [step]
+    project.data["policy_runs"].append(run)
+    project.save()
+    judge = runtime_factory(project.folder, run["policy_model"])
+    try:
+        await decide_step(project, run, step, judge, emit)
+        if run["status"] == "running":
+            run["status"] = "complete"
+    except BaseException as exc:
+        run.update(
+            status="stopped" if isinstance(exc, asyncio.CancelledError) else "failed",
+            error=str(exc),
+        )
+        step["status"] = run["status"]
+        raise
+    finally:
+        judge.close()
+        run["finished"] = now()
+        project.save()
+    return run
+
+
+def summary(run):
+    steps = []
+    for step in run.get("steps", []):
+        outcomes = {}
+        reasons = {}
+        chosen = step.get("decision", {}).get("selected")
+        for assessment in step.get("assessments", []):
+            key = assessment["candidate"]
+            records = assessment["records"]
+            if any(r["status"] == "failed" for r in records):
+                outcome = "assessment error"
+            elif any(r["status"] != "complete" for r in records):
+                outcome = "assessing" if run["status"] == "running" else "not assessed"
+            elif not assessment.get("eligible"):
+                outcome = "criteria not met"
+            elif key == chosen:
+                outcome = "chosen"
+            elif "decision" in step:
+                outcome = "not chosen"
+            else:
+                outcome = "choice error" if run["status"] == "failed" else "eligible"
+            outcomes[key] = outcome
+            reasons[key] = "\n".join(
+                r.get("error") or r.get("result", {}).get("reason", "") for r in records
+            )
+        for review in step.get("decision", {}).get("reviews", []):
+            key = review["node"]
+            reasons[key] = (
+                reasons.get(key, "") + "\nChoice: " + review.get("reason", "")
+            )
+        steps.append(
+            dict(
+                loop=step["loop"],
+                status=step["status"],
+                candidates=step.get("candidates", []),
+                outcomes=outcomes,
+                reasons=reasons,
+            )
+        )
+    return {
+        k: run.get(k)
+        for k in ("id", "status", "selected", "created", "retry_of", "loops", "error")
+    } | dict(steps=steps)

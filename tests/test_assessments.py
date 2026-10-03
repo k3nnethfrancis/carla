@@ -204,3 +204,17 @@ async def test_separate_mode_rejects_multiple_records_in_one_call():
     )
     with pytest.raises(ValueError, match="one behavior per call"):
         await assessments.assess_group([record, copy.deepcopy(record)], None)
+
+
+def test_evidence_maps_whitespace_to_original_and_rejects_invention():
+    text = "visitor:    Hello\n  world."
+    result = assessments.validate_result(
+        dict(passed=True, reason="Supported", evidence="visitor: Hello world."), text
+    )
+    assert result["evidence"] == text
+    assert text[result["evidence_start"] : result["evidence_end"]] == text
+    assert result["reported_evidence"] == "visitor: Hello world."
+    with pytest.raises(ValueError, match="evidence"):
+        assessments.validate_result(
+            dict(passed=True, reason="No", evidence="criteria: Hello world."), text
+        )

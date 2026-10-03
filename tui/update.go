@@ -128,7 +128,7 @@ func (m *model) perform(id string) tea.Cmd {
 			m.status = "Open a simulation run first"
 			return nil
 		}
-		return m.send("simulator.inspect", map[string]any{"run": m.simulation.ID})
+		return m.openSelectionResults()
 	}
 	if documentAction(id) && !(id == "branch" && len(m.actionNodeIDs()) > 0) && !(m.section == 3 && (id == "branch" || id == "rename")) && (m.targetRow().kind != "node" || m.targetRow().id != m.currentID() || m.pending) {
 		m.status = "Select a branch and wait for its preview before /" + id
@@ -178,6 +178,9 @@ func (m *model) perform(id string) tea.Cmd {
 	case "snapshot":
 		return m.send("snapshot", nil)
 	case "inspect":
+		if p := m.documentSelectionAttempt(); p.ID != "" {
+			return m.openSelectionAttempt(p)
+		}
 		return m.send("inspect", nil)
 	case "edit":
 		return m.beginEdit("document")

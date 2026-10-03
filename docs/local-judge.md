@@ -20,7 +20,7 @@ repository:
 
 Requires `uv` and internet access for the initial installation and model download.
 Wait for `Application startup complete`, then stop that setup process with Ctrl+C.
-Carla subsequently starts the cached judge automatically when a local monitoring
+Carla subsequently starts the prepared judge automatically when a local monitoring
 or evaluation request needs it. No server address or port is required.
 
 The installer pins OpenJev and the
@@ -30,8 +30,12 @@ Carla's GGUF registry is unchanged. Allow about **17 GB of disk space** plus run
 installation space, and at least **16 GB free RAM for the classifier alone**.
 The generator, its KV cache, and other applications need additional memory.
 
-Automatic startup is cache-only: both the model and `uv` dependency environment
-must already be installed. Missing dependencies produce an installation message,
+Setup creates a persistent Python environment under
+`~/.local/share/character-lab/runtimes/openjev-a0ddd7d9-v1` (or under
+`CARLA_DATA_DIR`). Its resolved packages are recorded in `installed.txt`.
+Carla launches that Python directly: startup never resolves dependencies again.
+Use `./scripts/local-judge.sh --setup-only` to prepare it without leaving a server running.
+Automatic startup is offline: both the model and prepared runtime must exist. Missing dependencies produce an installation message,
 not a background download. If the offline Python cache is incomplete, rerun the
 setup script to repair it; cached weights are reused. Failed startups are held for
 60 seconds so each heartbeat does not launch another failing process. The worker disables model routing and credential use;

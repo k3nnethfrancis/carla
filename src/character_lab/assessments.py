@@ -7,6 +7,7 @@ shortened here, and raw responses remain attached to their frozen call records.
 
 import copy
 import json
+import re
 
 from . import templates
 from .monitor import classify
@@ -66,14 +67,21 @@ def validate_result(result, text):
     if not isinstance(result.get("reason"), str) or not result["reason"].strip():
         raise ValueError("Judge must explain the result")
     quote = result.get("evidence")
-    if not isinstance(quote, str) or not quote.strip() or quote not in text:
-        raise ValueError(
-            "Judge evidence must be an exact excerpt from the evaluated text"
-        )
+    match = None
+    if isinstance(quote, str) and quote.strip():
+        match = re.search(re.escape(quote), text)
+        if match is None:
+            match = re.search(
+                r"\s+".join(re.escape(word) for word in quote.split()), text
+            )
+    if match is None:
+        raise ValueError("Judge evidence must be an excerpt from the evaluated text")
     return {
         **result,
-        "evidence_start": text.index(quote),
-        "evidence_end": text.index(quote) + len(quote),
+        "reported_evidence": quote,
+        "evidence": match.group(),
+        "evidence_start": match.start(),
+        "evidence_end": match.end(),
     }
 
 

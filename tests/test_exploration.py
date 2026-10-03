@@ -147,7 +147,7 @@ async def test_failed_assessments_never_advance_or_become_negative_judgments(tmp
     async def emit(*args):
         pass
 
-    with pytest.raises(ValueError, match="assessments failed"):
+    with pytest.raises(ValueError, match="assessment errors"):
         await explore(
             project, 1, dict(path=str(model_file)), Judge, batch, advance, emit
         )
@@ -156,6 +156,37 @@ async def test_failed_assessments_never_advance_or_become_negative_judgments(tmp
     assert record["status"] == "failed" and "result" not in record
     assert record["error"] == "context window exceeded"
     assert run["status"] == "failed" and run["selected"] is None
+    from character_lab.exploration import retry, summary
+
+    original = copy.deepcopy(run)
+    project.data["policy_spec"] = "Changed after run; must not affect retry"
+
+    class Recovered(Judge):
+        async def judge(self, messages, trace):
+            payload = json.loads(messages[1]["content"])
+            if "candidates" in payload:
+                return dict(
+                    selected="a",
+                    reason="Useful",
+                    reviews=[
+                        dict(
+                            node="a",
+                            decision="explore",
+                            reason="Useful",
+                            evidence="A full candidate",
+                        )
+                    ],
+                )
+            return dict(passed=True, reason="Useful", evidence="A full candidate")
+
+    retried = await retry(project, run["id"], Recovered, emit)
+    assert run == original
+    assert retried["retry_of"] == run["id"]
+    assert retried["spec"] == run["spec"]
+    assert retried["steps"][0]["inputs"] == run["steps"][0]["inputs"]
+    assert retried["selected"] == "a"
+    assert summary(retried)["steps"][0]["outcomes"] == {"a": "chosen"}
+    assert summary(run)["steps"][0]["outcomes"] == {"a": "assessment error"}
 
 
 @pytest.mark.asyncio
@@ -197,3 +228,19 @@ async def test_cancellation_stops_pending_behavior_calls_and_retains_complete_re
     assert [r["status"] for r in records] == ["complete", "stopped", "stopped"]
     assert records[0]["result"]["passed"] is True
     assert run["status"] == "stopped"
+
+
+@pytest.mark.asyncio
+async def test_retry_command_dispatches_background_job_and_obeys_busy_guard():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from character_lab.service import Session
+
+    session = SimpleNamespace(busy=False, project=None, retry_selection=AsyncMock())
+    await Session.execute(session, "policy.retry", {"run": "saved"}, "request")
+    await session.job
+    session.retry_selection.assert_awaited_once_with("saved", "request")
+    session.busy = True
+    with pytest.raises(ValueError, match="Stop the active"):
+        await Session.execute(session, "policy.retry", {"run": "saved"}, "request")

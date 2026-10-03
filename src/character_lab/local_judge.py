@@ -3,7 +3,6 @@
 import asyncio
 import os
 import platform
-import shutil
 import signal
 import tempfile
 import time
@@ -13,6 +12,12 @@ import httpx
 
 PACKAGE = "openjev[mlx] @ git+https://github.com/razorback16/openjev@a0ddd7d928298eccef2c17153b00b5636b6d996a"
 SETUP = "Run ./scripts/local-judge.sh once to install the local judge (about 17 GB), then stop it and retry."
+
+
+def runtime_python():
+    from .workspaces import HOME
+
+    return HOME / "runtimes" / "openjev-a0ddd7d9-v1" / "bin" / "python"
 
 
 class LocalJudgeError(RuntimeError):
@@ -38,11 +43,9 @@ class LocalJudge:
             await self.close()
             if platform.system() != "Darwin" or platform.machine() != "arm64":
                 raise LocalJudgeError("Managed DiffusionGemma requires Apple Silicon.")
-            uv = shutil.which("uv")
-            if not uv:
-                raise LocalJudgeError(
-                    "Install uv to run the local DiffusionGemma judge."
-                )
+            python = runtime_python()
+            if not python.is_file():
+                raise LocalJudgeError("Local judge runtime is not prepared. " + SETUP)
             env = dict(
                 os.environ,
                 UV_OFFLINE="1",
@@ -53,15 +56,7 @@ class LocalJudge:
             self.log = tempfile.TemporaryFile()
             try:
                 self.process = await asyncio.create_subprocess_exec(
-                    uv,
-                    "run",
-                    "--offline",
-                    "--no-project",
-                    "--python",
-                    "3.12",
-                    "--with",
-                    PACKAGE,
-                    "python",
+                    str(python),
                     str(Path(__file__).with_name("local_judge_worker.py")),
                     env=env,
                     stdout=asyncio.subprocess.PIPE,

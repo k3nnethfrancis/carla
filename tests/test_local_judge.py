@@ -61,7 +61,9 @@ async def test_parallel_start_reuses_one_process_and_shutdown_owns_it(monkeypatc
     monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
     monkeypatch.setattr(local_judge.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(local_judge.platform, "machine", lambda: "arm64")
-    monkeypatch.setattr(local_judge.shutil, "which", lambda _: "/bin/uv")
+    monkeypatch.setattr(
+        local_judge, "runtime_python", lambda: local_judge.Path(__file__)
+    )
     signals = []
     monkeypatch.setattr(
         local_judge.os, "killpg", lambda pid, sig: signals.append((pid, sig))
@@ -83,6 +85,8 @@ async def test_parallel_start_reuses_one_process_and_shutdown_owns_it(monkeypatc
         == ["http://127.0.0.1:43219"] * 2
     )
     spawn.assert_awaited_once()
+    assert spawn.call_args.args[0] == str(local_judge.runtime_python())
+    assert "--with" not in spawn.call_args.args
     assert spawn.call_args.kwargs["env"]["UV_OFFLINE"] == "1"
     assert spawn.call_args.kwargs["start_new_session"] is True
     await manager.close()
@@ -109,7 +113,9 @@ async def test_start_failure_cleans_up_owned_process(monkeypatch):
     monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
     monkeypatch.setattr(local_judge.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(local_judge.platform, "machine", lambda: "arm64")
-    monkeypatch.setattr(local_judge.shutil, "which", lambda _: "/bin/uv")
+    monkeypatch.setattr(
+        local_judge, "runtime_python", lambda: local_judge.Path(__file__)
+    )
     manager = local_judge.LocalJudge()
     with pytest.raises(
         local_judge.LocalJudgeError, match="dependencies are missing"

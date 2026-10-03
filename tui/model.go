@@ -48,7 +48,18 @@ type annotation struct {
 	ID, Node, Quote, Verdict, Note string
 	Start, End                     int
 }
-type policyRun struct{ ID, Status, Selected string }
+type policyStep struct {
+	Candidates        []string
+	Loop              int
+	Status            string
+	Outcomes, Reasons map[string]string
+}
+type policyRun struct {
+	ID, Status, Selected, Error string
+	RetryOf                     string `json:"retry_of"`
+	Loops                       int
+	Steps                       []policyStep
+}
 type monitorResult struct {
 	EndOfTurn     bool `json:"end_of_turn"`
 	Phase         string
@@ -74,6 +85,8 @@ type simulationConversation struct {
 	Turns      []simulationTurn
 }
 type simulationRun struct {
+	PolicyRun             string `json:"policy_run"`
+	Loop                  int
 	Label                 string `json:"label"`
 	Title                 string `json:"title"`
 	ShortLabel            string `json:"short_label"`
