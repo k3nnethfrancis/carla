@@ -18,17 +18,18 @@ func TestSelectionResultsUseLatestAttemptAndKeepGenerationStatus(t *testing.T) {
 	if len(items) != 1 || items[0].Status != "complete · chosen" || !strings.Contains(items[0].Title, "L1 · B1") {
 		t.Fatal(items)
 	}
-	m.openSelectionResults()
-	if m.dialog.args["run"] != "retry" {
-		t.Fatal("opened old attempt")
-	}
+	m.openInspection([]byte(`{"kind":"selection","id":"retry","status":"complete","steps":[{"loop":1}]}`))
+	m.dialog.index = 3
+	m.submitDialog()
+	m.dialog.index = 1
+	m.submitDialog()
 	m.dialog.index = len(m.dialog.rows) - 1
 	m.submitDialog()
-	if m.dialog.rows[0].id != "cancel" {
-		t.Fatal("retry must require confirmation")
+	if m.dialog.args["run"] != "retry" || m.dialog.rows[0].id != "cancel" {
+		t.Fatal("retry must confirm the inspected attempt")
 	}
 	m.submitDialog()
-	if m.dialog.kind != "selection-results" {
-		t.Fatal("cancel lost results")
+	if m.dialog.kind != "inspection" {
+		t.Fatal("cancel lost inspected attempt")
 	}
 }

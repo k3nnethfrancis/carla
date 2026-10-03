@@ -432,11 +432,7 @@ func (m *model) conversationDocument(width int) string {
 		return "Select a conversation to open it, or select a Loom to view its grid."
 	}
 	c := m.simulation.Conversations[m.gridSelection]
-	text := m.conversationTurns(c.Turns, width)
-	if failure := conversationFailure(m.simulation, c); failure != "" {
-		text += "\n\n\n" + m.accent("#A84F39", "#DB937C").Render(ansi.Wrap(safe(failure), width, ""))
-	}
-	return text
+	return m.conversationTurns(c.Turns, width)
 }
 
 // Render live and frozen conversations with the same role labels and spacing.
@@ -458,10 +454,6 @@ func (m *model) conversationTurns(turns []simulationTurn, width int) string {
 		heading := style.Bold(true).Render(ansi.Wrap(safe(fmt.Sprintf("%02d  %s", i+1, name)), width, ""))
 		body := style.Render(ansi.Wrap(safe(t.Text), width, ""))
 		block := heading + "\n\n" + body
-		if t.Monitor.Status != "" {
-			info := strings.TrimPrefix(monitorSummary(t.Monitor), "Policy: ")
-			block += "\n\n" + m.accent("#79628C", "#B8A0CB").Render(ansi.Wrap("// policy · "+safe(info), width, ""))
-		}
 		if len(t.Flags) > 0 {
 			block += "\n" + dim.Render(ansi.Wrap("// generation · "+safe(strings.Join(t.Flags, ", ")), width, ""))
 		}
@@ -560,6 +552,9 @@ func (m *model) conversationHeading(width int) string {
 	conversation := m.simulation.Conversations[m.gridSelection]
 	title = conversationName(conversation, false)
 	if status := safe(conversationStatus(conversation)); status != "" {
+		title += " · " + status
+	}
+	if status := conversationMonitorStatus(conversation); status != "" && (status != "monitoring complete" || conversationFlags(conversation) == "") {
 		title += " · " + status
 	}
 	title = ansi.Truncate(title, width, "…")

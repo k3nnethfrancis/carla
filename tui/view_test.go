@@ -1385,7 +1385,7 @@ func TestDocumentMonitorUpdatesAndActivity(t *testing.T) {
 		t.Fatal(label)
 	}
 	frame := ansi.Strip(m.View().Content)
-	if !strings.Contains(frame, "1 active docs") || !strings.Contains(frame, "looping 90%") {
+	if !strings.Contains(frame, "1 active docs") || !strings.Contains(frame, "monitoring complete · 1 warn") {
 		t.Fatal(frame)
 	}
 	m.data.Nodes[0].Status = "complete"

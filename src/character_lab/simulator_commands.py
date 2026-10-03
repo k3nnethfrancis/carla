@@ -10,6 +10,7 @@ from uuid import uuid4
 from . import (
     credentials,
     evaluation_sets,
+    inspection,
     monitor,
     operational_policies,
     policy_overrides,
@@ -216,15 +217,7 @@ async def dispatch(session, command, args, request_id):
         run = next(
             r for r in p.data.get("simulation_runs", []) if r["id"] == args["run"]
         )
-        record = dict(run)
-        record["selection"] = next(
-            (
-                r
-                for r in p.data.get("policy_runs", [])
-                if r["id"] == run.get("policy_run")
-            ),
-            None,
-        )
+        record = inspection.simulation(p, run, args.get("conversation"))
         await session.emit("inspection", record, request_id)
         return
     if command in {"simulator.run", "simulator.preview"}:

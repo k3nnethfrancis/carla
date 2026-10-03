@@ -167,7 +167,7 @@ Add a local UTF-8 .txt or .md document to the shared Library. Title defaults to 
 
 ## /inspect
 
-Inspect saved generation inputs and provenance. For Loom selection, open outcomes and judge reasons, exact judge or generation traces, and Retry selection. Retry asks for confirmation, uses frozen candidates and policy, saves a new attempt, and generates no text. In Evaluate, inspect the saved evaluation record.
+Browse saved generation and policy evidence: Overview, Generation, Monitoring, Selection and Evaluations. Read summaries first; open individual requests, responses or Raw data for exact JSON and token events. Missing historical evidence is labeled as not recorded. Retry selection asks for confirmation, uses frozen candidates and policy, saves a new attempt, and generates no text.
 
 ## /keep
 

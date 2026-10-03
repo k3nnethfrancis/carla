@@ -103,12 +103,19 @@ func (m *model) perform(id string) tea.Cmd {
 		return nil
 	}
 	if id == "inspect" && m.section == 3 {
+		if args, ok := m.conversationTarget(); ok {
+			return m.send("simulator.inspect", args)
+		}
+		if row := m.targetRow(); row.kind == "simulation" {
+			return m.send("simulator.inspect", map[string]any{"run": row.id})
+		}
 		if m.simulation == nil {
 			m.status = "Open a simulation run first"
 			return nil
 		}
-		return m.openSelectionResults()
+		return m.send("simulator.inspect", map[string]any{"run": m.simulation.ID})
 	}
+
 	if documentAction(id) && !(id == "branch" && len(m.actionNodeIDs()) > 0) && !(m.section == 3 && (id == "branch" || id == "rename")) && (m.targetRow().kind != "node" || m.targetRow().id != m.currentID() || m.pending) {
 		m.status = "Select a branch and wait for its preview before /" + id
 		return m.previewTarget()
@@ -157,9 +164,6 @@ func (m *model) perform(id string) tea.Cmd {
 	case "snapshot":
 		return m.send("snapshot", nil)
 	case "inspect":
-		if p := m.documentSelectionAttempt(); p.ID != "" {
-			return m.openSelectionAttempt(p)
-		}
 		return m.send("inspect", nil)
 	case "edit":
 		return m.beginEdit("document")
@@ -387,6 +391,9 @@ func (m *model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch key {
 		case "nav.back":
+			if m.backFromInspection() {
+				return m, nil
+			}
 			if m.simulatorBack() {
 				return m, nil
 			}

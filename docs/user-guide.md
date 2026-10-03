@@ -34,6 +34,30 @@ See the [README](../README.md#quick-start) for installation and model setup.
 A conversation conditioned on anthology text is an experiment with a base model,
 not a newly trained model. Carla currently ends at dataset curation/export.
 
+## Inspect a generation or judgment
+
+`/inspect` opens a structured view of the focused document or conversation:
+**Overview**, **Generation**, **Monitoring**, **Selection**, **Evaluations**, and
+**Raw data**. Start with Overview to see what actually ran. Saved policy evidence
+is historical; changing a policy now does not change those results.
+
+Generation shows the exact prompt, output and settings for each saved generation.
+Monitoring shows checks and errors. Selection shows attempts, candidates and judge
+assessments, including paths that were not selected. Evaluations links the saved
+judgments of that version. Open an individual record for its details; raw JSON
+and token-stream events are available explicitly rather than filling the initial
+inspector screen.
+
+Monitoring results are metadata, never part of the document or conversation text.
+A title such as **complete · monitoring error** means generation completed but a
+monitoring check failed. Use Inspect for the cause and any successful checks.
+A saved warning or error remains attached to that generation as evidence; it does
+not mean a judge is still running.
+
+Document continuations opt into judging with `--monitoring on`, `--selection on`
+(with alternatives and explicit loops), or `--eval "policy name"`. The saved
+Simulator policy switches do not enable judging for document continuations.
+
 ## Navigate and edit
 
 - Tab/Shift+Tab move between panes and the command bar; arrows move within a pane.
