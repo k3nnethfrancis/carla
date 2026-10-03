@@ -215,3 +215,12 @@ Run labels lead with the saved dataset or item name, followed by the policy and 
 Loom selection outcomes and saved-candidate retries are described in [Loom selection](loom-selection.md). Use `/inspect` on a selected result to inspect or retry judging without regenerating text.
 
 The [generated command reference](command-reference.md) is checked against the same registry used by help and completion.
+
+### Inspect saved work
+
+`/inspect` starts with readable generation and policy evidence, separated into
+Overview, Generation, Monitoring, Selection, Evaluations and Raw data. Open a
+section and a saved call to read its prompt, result or error. Token-stream events
+and full JSON are explicit drill-downs. A monitoring error is separate from the
+generation status and is not inserted into document text. See the
+[user guide](user-guide.md#inspect-a-generation-or-judgment) for the workflow.

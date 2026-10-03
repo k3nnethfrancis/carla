@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -44,7 +43,7 @@ func (m *model) gridItems() []loomTile {
 				if n.ID == items[i].ID {
 					items[i].Title = documentStatusLabel(n, items[i].Title)
 					if info := monitorSummary(n.Monitor); info != "" {
-						items[i].Text += "\n\n" + info
+						items[i].Status = strings.Trim(items[i].Status+" · "+info, " ·")
 					}
 				}
 			}
@@ -83,13 +82,7 @@ func (m *model) gridItems() []loomTile {
 				speaker = "Character"
 			}
 			fmt.Fprintf(&body, "%s\n%s\n", speaker, t.Text)
-			if info := monitorSummary(t.Monitor); info != "" {
-				fmt.Fprintln(&body, info)
-			}
 			fmt.Fprintln(&body)
-		}
-		if error := conversationFailure(run, c); error != "" {
-			fmt.Fprintln(&body, error)
 		}
 		title := conversationName(c, false)
 		summary := m.selectionRunSummary(target.Run)
@@ -98,8 +91,14 @@ func (m *model) gridItems() []loomTile {
 			title = fmt.Sprintf("L%d · B%d · %s", summary.Loop, summary.AlternativeIndex+1, title)
 		}
 		status := conversationStatus(c)
+		if info := conversationMonitorStatus(c); info != "" {
+			status += " · " + info
+		}
 		if outcome != "" {
 			status += " · " + outcome
+		}
+		if flags := conversationFlags(c); flags != "" {
+			status += " · " + flags
 		}
 
 		if m.conversationSelected(target.Run, c.Index) {
@@ -112,12 +111,6 @@ func (m *model) gridItems() []loomTile {
 	return items
 }
 
-func conversationFailure(run *simulationRun, c simulationConversation) string {
-	if run != nil && c.Status == "failed" && run.Error != "" {
-		return "Generation error: " + run.Error
-	}
-	return ""
-}
 func (m *model) gridVisible() bool {
 	return m.loomGrid && m.editing == "" && len(m.gridItems()) > 1
 }
@@ -329,32 +322,61 @@ func (m *model) gridKey(key string) (tea.Cmd, bool) {
 	return nil, true
 }
 
+// Compact persisted metadata; full results and errors belong in Inspect.
 func monitorSummary(result monitorResult) string {
-	if result.Status == "" {
+	label := ""
+	switch result.Status {
+	case "":
 		return ""
+	case "unavailable", "failed", "error":
+		label = "monitoring error"
+	case "partial":
+		label = "monitoring incomplete"
+	default:
+		label = "monitoring " + result.Status
 	}
-	if result.Status != "complete" && result.Status != "partial" {
-		return "Monitor: " + result.Status + " " + result.Error
-	}
-	keys := []string{}
-	for key := range result.Scores {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	parts := []string{}
-	if result.Status == "partial" {
-		parts = append(parts, "partial · "+result.Error)
-	}
-	if result.Phase == "partial" && !result.EndOfTurn {
-		parts = append(parts, fmt.Sprintf("in progress · %d tokens", result.Tokens))
-	}
-	for _, key := range keys {
-		parts = append(parts, fmt.Sprintf("%s %.0f%%", key, result.Scores[key]*100))
-	}
+	warn, stop := 0, 0
 	for _, d := range result.Detections {
-		parts = append(parts, "! "+d.Name+" · "+d.Action)
+		switch d.Action {
+		case "warn":
+			warn++
+		case "stop":
+			stop++
+		}
 	}
-	return "Policy: " + strings.Join(parts, " · ")
+	if warn > 0 {
+		label += fmt.Sprintf(" · %d warn", warn)
+	}
+	if stop > 0 {
+		label += fmt.Sprintf(" · %d stop", stop)
+	}
+	return label
+}
+
+func conversationMonitorStatus(c simulationConversation) string {
+	status := monitorResult{}
+	rank := 0
+	for _, turn := range c.Turns {
+		for _, check := range append([]monitorResult{turn.Monitor}, turn.MonitorChecks...) {
+			n := 1
+			switch check.Status {
+			case "":
+				n = 0
+			case "partial":
+				n = 2
+			case "checking", "queued", "running":
+				n = 3
+			case "unavailable", "failed", "error":
+				n = 4
+			}
+			if n >= rank && n > 0 {
+				status, rank = check, n
+			}
+		}
+	}
+	// Behavior flags are summarized separately from status in the title.
+	status.Detections = nil
+	return monitorSummary(status)
 }
 
 func gridConversation(id string) (conversationParent, bool) {

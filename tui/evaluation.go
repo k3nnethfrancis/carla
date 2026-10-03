@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/charmbracelet/x/ansi"
@@ -229,15 +228,14 @@ func (m *model) evalAction(id string) tea.Cmd {
 		m.reflow()
 		return m.editor.Focus()
 	case "inspect":
+		if m.targetRow().kind == "eval-run" && m.evalRun != nil && m.evalRun.ID == m.targetRow().id {
+			m.openInspection(m.evalRunRaw)
+			return nil
+		}
 		if m.evaluation == nil || m.evaluation.ID != m.targetRow().id {
 			return m.previewTarget()
 		}
-		var pretty bytes.Buffer
-		json.Indent(&pretty, m.evaluationRaw, "", "  ")
-		m.inspection = pretty.String()
-		m.showInspector = true
-		m.focus = 2
-		m.reflow()
+		m.openInspection(m.evaluationRaw)
 		return nil
 	case "eval":
 		return m.openEval("/eval")

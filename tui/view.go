@@ -500,7 +500,7 @@ func (m *model) View() tea.View {
 			body = m.document.View() + "\n" + "Source · " + m.aiStyle().Render("AI") + " · " + m.humanStyle().Render("Human edits")
 			if (m.section == 1 || m.section == 2) && m.data.Current != nil {
 				if info := monitorSummary(m.data.Current.Monitor); info != "" {
-					body = m.document.View() + "\n" + dim.Render(safe(info))
+					title += " · " + safe(info)
 				}
 			}
 			if m.section == 3 || m.section == 4 {

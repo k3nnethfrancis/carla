@@ -23,7 +23,7 @@ func TestConversationViewerIsolationAndEscapePath(t *testing.T) {
 	m := simulatorFixture()
 	m.openGridTile(1)
 	text := ansi.Strip(m.conversationDocument(70))
-	if strings.Contains(text, "ONLY FIRST") || !strings.Contains(text, "ONLY SECOND") || !strings.Contains(text, "// policy") {
+	if strings.Contains(text, "ONLY FIRST") || !strings.Contains(text, "ONLY SECOND") || strings.Contains(text, "// policy") {
 		t.Fatal(text)
 	}
 	m.reflow()
@@ -49,17 +49,17 @@ func TestConversationViewerIsolationAndEscapePath(t *testing.T) {
 	}
 }
 
-func TestFailedConversationRetainsCauseInGridAndDocument(t *testing.T) {
+func TestFailedConversationKeepsErrorOutsideTranscript(t *testing.T) {
 	m := simulatorFixture()
 	m.simulation.Status, m.simulation.Error = "failed", "Input needs 8213 tokens; context is 8192."
 	m.simulation.Conversations[0].Status = "failed"
 	items := m.gridItems()
-	if !strings.Contains(items[0].Text, m.simulation.Error) || strings.Contains(items[1].Text, m.simulation.Error) {
-		t.Fatal("error missing from failed tile or incorrectly attached to completed sibling", items)
+	if strings.Contains(items[0].Text, m.simulation.Error) || strings.Contains(items[1].Text, m.simulation.Error) || items[0].Status != "failed" {
+		t.Fatal("error mixed into transcript or failed status missing", items)
 	}
 	m.openGridTile(0)
-	if !strings.Contains(ansi.Strip(m.conversationDocument(80)), m.simulation.Error) {
-		t.Fatal("opened trace hides generation cause")
+	if strings.Contains(ansi.Strip(m.conversationDocument(80)), m.simulation.Error) || !strings.Contains(m.conversationHeading(80), "failed") {
+		t.Fatal("opened trace mixes in error or hides status")
 	}
 }
 func TestConversationTreeAndTargets(t *testing.T) {

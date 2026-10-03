@@ -278,6 +278,9 @@ type model struct {
 	previewChangePending        bool
 	previewSelectionPending     bool
 	inspection                  string
+	inspectionParent            *dialog
+	inspectionOrigin            int
+	evalRunRaw                  json.RawMessage
 	showInspector               bool
 	editor                      textarea.Model
 	editing                     string
@@ -653,6 +656,7 @@ func (m *model) apply(e event) tea.Cmd {
 			m.document.GotoTop()
 		}
 		m.evalRun = &run
+		m.evalRunRaw = append(json.RawMessage(nil), e.Data...)
 		m.pending = false
 		m.reflow()
 		return nil
@@ -1008,6 +1012,7 @@ func (m *model) apply(e event) tea.Cmd {
 			m.evaluation = nil
 			m.evalViewedID = ""
 			m.evaluationRaw = nil
+			m.evalRunRaw = nil
 			m.evalSelection = map[string]bool{}
 			m.evalFilter = ""
 			m.loomTiles = nil
@@ -1032,6 +1037,7 @@ func (m *model) apply(e event) tea.Cmd {
 			m.section = 0
 			m.filter = ""
 			m.inspection = ""
+			m.inspectionParent = nil
 			m.showInspector = false
 			m.status = "Saved locally · " + m.data.Workspace.Path
 			if len(m.data.Nodes) > 0 {
@@ -1042,6 +1048,7 @@ func (m *model) apply(e event) tea.Cmd {
 		if oldID != m.currentID() {
 			m.commandDocument = ""
 			m.inspection = ""
+			m.inspectionParent = nil
 			m.showInspector = false
 			// Reveal a newly generated or externally opened node inside its tree.
 			parents := map[string]string{}
@@ -1171,16 +1178,7 @@ func (m *model) apply(e event) tea.Cmd {
 		}
 	case "inspection":
 		m.pending = false
-		var out strings.Builder
-		var data any
-		json.Unmarshal(e.Data, &data)
-		pretty, _ := json.MarshalIndent(data, "", "  ")
-		out.Write(pretty)
-		m.inspection = out.String()
-		m.showInspector = true
-		m.focus = 2
-		m.reflow()
-		m.inspector.GotoTop()
+		m.openInspection(e.Data)
 	case "error":
 		if m.editRequest != "" && e.ID != "" && e.ID != m.editRequest {
 			return nil

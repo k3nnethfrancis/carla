@@ -376,6 +376,11 @@ func (m *model) filterDialog(msg tea.KeyPressMsg) bool {
 // Closing an auxiliary command such as Help restores a suspended picker/editor.
 func (m *model) closeDialog() tea.Cmd {
 	d := m.dialog
+	if d != nil && d.kind == "inspection" && d.parent == nil {
+		m.focus = m.inspectionOrigin
+		m.showInspector = false
+		m.inspectionParent = nil
+	}
 	if d != nil && d.kind == "judge-prompt-confirm" {
 		return m.resumeJudgePromptDraft()
 	}

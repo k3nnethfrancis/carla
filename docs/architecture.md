@@ -285,3 +285,12 @@ Editable Evals policies allow zero judges while drafting and exactly one to run.
 The wire field remains `judges` for historical compatibility. Legacy multi-judge
 policies require an explicit replacement, which archives their prior settings in
 `previous_judges`. Frozen multi-judge run evidence remains supported by the harness.
+
+### Inspection boundary
+
+`inspection.py` builds read-only views of existing generation, monitoring,
+selection and evaluation evidence. The TUI presents these as navigable sections,
+with raw records and token events available on demand. Inspection never starts
+judging or changes a historical result. Saved monitoring metadata is rendered as
+a compact status beside document/conversation titles, separately from the source
+and generated text; detailed judge output belongs in the inspector.

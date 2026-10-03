@@ -74,6 +74,9 @@ func (m *model) commandChoices() []action {
 	if m.section == 4 && len(m.evaluationIDs()) > 0 {
 		actions = append(actions, action{id: "keep", label: "Mark selected items for training"}, action{id: "remove", label: "Remove selected items from this collection"}, action{id: "notes", label: "Edit evaluation note"}, action{id: "inspect", label: "Exact evaluated input and judge result"})
 	}
+	if m.section == 4 && m.targetRow().kind == "eval-run" {
+		actions = append(actions, action{id: "inspect", label: "Inspect saved evaluation run and judge evidence"})
+	}
 	if m.removableEvaluationCollection() != "" {
 		actions = append(actions, action{id: "remove", label: "Remove this data collection · sources and Runs remain"})
 	}

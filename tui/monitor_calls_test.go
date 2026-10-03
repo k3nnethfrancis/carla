@@ -80,9 +80,12 @@ func TestMonitorCallSetupGate(t *testing.T) {
 		}
 	}
 }
-func TestMonitorPartialShowsScores(t *testing.T) {
+func TestMonitorPartialStatusKeepsDetailsInInspector(t *testing.T) {
 	text := monitorSummary(monitorResult{Status: "partial", Error: "spiraling: timeout", Scores: map[string]float64{"looping": .9}})
-	for _, want := range []string{"partial", "spiraling: timeout", "looping 90%"} {
+	if strings.Contains(text, "timeout") || strings.Contains(text, "90%") {
+		t.Fatal(text)
+	}
+	for _, want := range []string{"monitoring incomplete"} {
 		if !strings.Contains(text, want) {
 			t.Fatal(text)
 		}

@@ -21,6 +21,7 @@ from . import (
     evaluation_sets,
     exploration,
     exports,
+    inspection,
     operational_policies,
     policy_overrides,
     simulator,
@@ -584,33 +585,11 @@ class Session:
             tmp.write_text(json.dumps(bindings, indent=2) + "\n")
             tmp.replace(path)
         elif command == "inspect":
-            if args.get("run"):
-                record = next(
-                    r for r in p.data["policy_runs"] if r["id"] == args["run"]
-                )
-            else:
-                node = self.current()
-                ancestor = node
-                while not ancestor.get("trace") and ancestor.get("parent"):
-                    ancestor = p.node(ancestor["parent"])
-                record = dict(
-                    node=node,
-                    generation=ancestor,
-                    origins=p.origins(node["id"]),
-                    selection_runs=[
-                        r
-                        for r in p.data.get("policy_runs", [])
-                        if any(
-                            node["id"] in step.get("candidates", [])
-                            for step in r.get("steps", [])
-                        )
-                    ],
-                    annotations=[
-                        a
-                        for a in p.data.get("annotations", [])
-                        if a["node"] == node["id"]
-                    ],
-                )
+            record = (
+                inspection.selection(p, args["run"])
+                if args.get("run")
+                else inspection.document(p, self.current())
+            )
             await self.emit("inspection", record, request_id)
             return
         elif command in {"continue", "grow"} and "action" in args:

@@ -95,6 +95,9 @@ func (d *dialog) add(label, value string) {
 	d.fields = append(d.fields, field{label, i})
 }
 func (m *model) submitDialog() tea.Cmd {
+	if m.dialog != nil && m.dialog.kind == "inspection" {
+		return m.submitInspection()
+	}
 	if m.dialog != nil && m.dialog.kind == "selection-results" {
 		return m.submitSelectionResults()
 	}
