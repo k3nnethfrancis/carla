@@ -229,6 +229,21 @@ async def test_cancellation_stops_pending_behavior_calls_and_retains_complete_re
     assert records[0]["result"]["passed"] is True
     assert run["status"] == "stopped"
 
+    from character_lab.exploration import retry
+
+    original = copy.deepcopy(run)
+    with pytest.raises(asyncio.CancelledError):
+        await retry(project, run["id"], Judge, unused)
+    retried = project.data["policy_runs"][-1]
+    records = retried["steps"][0]["assessments"][0]["records"]
+    assert [r["status"] for r in records] == ["complete", "stopped", "stopped"]
+    assert records[0]["result"]["passed"] is True
+    assert retried["status"] == retried["steps"][0]["status"] == "stopped"
+    assert retried["finished"]
+    assert run == original
+    saved = json.loads(project.path.read_text())
+    assert saved["policy_runs"][-1] == retried
+
 
 @pytest.mark.asyncio
 async def test_retry_command_dispatches_background_job_and_obeys_busy_guard():

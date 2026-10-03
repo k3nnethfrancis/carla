@@ -24,6 +24,26 @@ DEFAULT_MODEL = {
 }
 
 
+async def release_for_selection(runtime):
+    """Unload our generator, but never compete with an externally owned server.
+
+    A retry may happen before any generation in this session, so an unowned runtime
+    can mean either an idle endpoint or an external model. Probe without loading it.
+    """
+    if runtime.process is None or runtime.process.poll() is not None:
+        async with httpx.AsyncClient(timeout=3, trust_env=False) as client:
+            try:
+                response = await client.get(runtime.model["url"] + "/health")
+            except httpx.ConnectError:
+                pass
+            else:
+                if response.status_code in {200, 503}:
+                    raise ValueError(
+                        "Stop the externally managed generator before switching to selection"
+                    )
+    runtime.close()
+
+
 class Runtime:
     def __init__(self, folder, model=None):
         self.model = model or DEFAULT_MODEL.copy()

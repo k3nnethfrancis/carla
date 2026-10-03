@@ -9,6 +9,7 @@ import (
 
 func TestSimulatorStreamAndConfiguration(t *testing.T) {
 	m := fixture()
+	m.awaitingSimulation = true // This stream follows an explicit run request.
 	m.width, m.height = 120, 36
 	m.section = 3
 	data, _ := json.Marshal(simulationRun{ID: "run", Status: "running", Conversations: []simulationConversation{{Index: 0, Turns: []simulationTurn{{Role: "character", Model: localModel{Name: "Base"}, Status: "generating"}}}}})
@@ -136,6 +137,7 @@ func TestOpeningConfigurationAndPromptEditor(t *testing.T) {
 
 func TestConcurrentSimulationTokensAndCapacity(t *testing.T) {
 	m := fixture()
+	m.awaitingSimulation = true // This stream follows an explicit run request.
 	m.data.Busy = true
 	data, _ := json.Marshal(simulationRun{ID: "batch", Conversations: []simulationConversation{
 		{Index: 0, Turns: []simulationTurn{{Role: "character"}}},

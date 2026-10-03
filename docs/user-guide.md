@@ -74,7 +74,9 @@ universal filesystem-delete command. See [commands](commands.md) for exact scope
 
 One-output Loom continues the selected target. A larger count splits alternatives.
 `--loops N` repeats continuation on those outputs. Selection defaults to Off;
-enable it under `/policy` to select a whole alternative and split again between loops.
+enable it under `/policy` for Simulator, or pass `--selection on` for document
+Looms, to select a whole alternative and split again between loops. Selection
+requires at least two alternatives and explicit `--loops N`; one loop selects once.
 The selector may choose none, ending exploration with its explanation retained.
 Monitoring is separately optional; only enabled Stop actions stop flagged output.
 A token ceiling limits an individual generation, not the number of later turns.
@@ -120,9 +122,9 @@ Use `carla --version` with bug reports.
 | --- | --- |
 | Generation cannot start | GGUF exists; `llama-server` is on PATH and supports the flags in [model configuration](configuration.md#models). Check workspace `model-server.log`. |
 | Out of memory / very slow batches | Lower configured context/output budgets or choose a smaller model. `Max` can reserve all remaining context and serialize work. Carla does not silently shrink budgets. |
-| Multi-loop Loom cannot start | Configure the separate instruct policy model and selection spec. A one-loop Loom does not need a selector. |
+| Loom selection cannot start | Configure the selection judge and behaviors, and use two or more alternatives with explicit `--loops N`. Selection Off continues all outputs and needs no selector. |
 | Wrong conversation is continued | Inspect the checked target; `/clear` starts fresh. Hover is not selection. |
-| Evaluation opens but cannot run | Add nonempty Data, configure and activate a Policy, then use `/eval`. Local judges currently use the configured policy model. |
+| Evaluation opens but cannot run | Configure an Evals policy’s judge and enabled behaviors. In Branches or Simulator, select saved content and use `/eval [policy]`. In Evaluate, choose a dataset and policy in New run. |
 | Local judge unavailable | Complete the one-time cache setup with `scripts/local-judge.sh`, then select DiffusionGemma under `/policy`. Carla manages the local server automatically. See [local judge setup](local-judge.md). |
 | Jev authentication/provider error | Check saved credential versus launching environment, provider access and quota. Saving a key does not validate it. |
 | Workspace already open | Close the owning Carla process; each workspace permits one writer. Do not edit its JSON while running. |

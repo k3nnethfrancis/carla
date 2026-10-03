@@ -413,28 +413,6 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// A review can attach to a selected passage in the editor without injecting that
-// feedback into the base-model prompt. Offsets refer to the saved edited version.
-func (m *model) reviewSelection() tea.Cmd {
-	if m.editing != "document" {
-		return nil
-	}
-	text := m.editor.Value()
-	start, end := 0, len([]rune(text))
-	if a, b, ok := m.editor.Selection(); ok {
-		start = textOffset(text, a.Row, a.Col)
-		end = textOffset(text, b.Row, b.Col)
-	}
-	d := &dialog{kind: "review", title: "Review selected passage", args: map[string]any{"node": m.editNode, "text": text}}
-	d.add("Verdict (unreviewed / promising / pass)", "promising")
-	d.add("Note", "")
-	d.add("Start character", strconv.Itoa(start))
-	d.add("End character", strconv.Itoa(end))
-	m.dialog = d
-	m.reflow()
-	return d.fields[0].input.Focus()
-}
-
 func newInput() textinput.Model {
 	i := textinput.New()
 	i.SetVirtualCursor(true)

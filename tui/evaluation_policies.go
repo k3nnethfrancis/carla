@@ -137,7 +137,11 @@ func (m *model) submitEvaluationPolicy(d *dialog) tea.Cmd {
 		}
 		cmd := m.saveDialog(d, "evaluation.policy.save", map[string]any{"name": name, "judges": []evaluationJudge{}, "behaviors": []evaluationBehavior{}})
 		if cmd != nil {
-			m.evalPolicyCreating = true
+			m.evalPolicyCreating = m.dialogRequest
+			m.evalPolicyExisting = make(map[string]bool, len(m.data.EvaluationPolicies))
+			for _, policy := range m.data.EvaluationPolicies {
+				m.evalPolicyExisting[policy.ID] = true
+			}
 		}
 		return cmd
 	}

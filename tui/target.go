@@ -228,12 +228,6 @@ func (m *model) collectionCount() int {
 	}
 	return 1
 }
-func (m *model) collectionAction() string {
-	if m.section == 2 {
-		return "remove"
-	}
-	return "keep"
-}
 
 // The displayed action and the mutation must use the same visible selection.
 // Notes hides batch selection, so only its open document is an action target.

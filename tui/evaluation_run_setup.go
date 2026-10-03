@@ -78,7 +78,7 @@ func (m *model) openEvaluationRunSetup(draft *evaluationRunDraft, parent *dialog
 	}
 	m.dialog = &dialog{kind: "eval-run-config", title: "New evaluation run", parent: parent, args: map[string]any{"draft": draft}, rows: []row{
 		{id: "dataset", label: "Dataset · " + dataset, preview: "Saved documents and conversation traces to assess. Choose the dataset for this run."},
-		{id: "policy", label: "Policy · " + policy, preview: "Use an existing Evals policy. Edit reusable judges and behaviors through /policy → Evals."},
+		{id: "policy", label: "Policy · " + policy, preview: "Use an existing Evals policy. Configure its judge and behaviors through /policy → Evals."},
 		{id: "scope", label: "Data · " + scope, preview: "All items includes previously evaluated data. To assess a subset, select items in Data with SPACE, then use /eval."},
 		{id: "training", label: "On pass · " + onPass, preview: "For this run only: record results, or also mark passing items for training. No model training is started."},
 		{id: "start", label: "▶ Start run", preview: "Run the chosen policy on this data. Results preserve the inputs and policy used. ESC cancels setup."},

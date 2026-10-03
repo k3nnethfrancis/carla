@@ -385,3 +385,61 @@ async def test_judge_stream_reports_real_deltas_and_retains_partial_output(
     assert received == chunks
     assert trace["raw_response"] == "".join(chunks)
     assert len(trace["response_chunks"]) >= 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "idle",
+        "external",
+        "loading",
+        "managed",
+        "timeout",
+        "dead_external",
+        "dead_idle",
+        "dead_timeout",
+    ],
+)
+async def test_selection_handoff_unloads_owned_model_and_blocks_external(
+    tmp_path, monkeypatch, endpoint
+):
+    from unittest.mock import Mock
+
+    from character_lab.runtime import Runtime, release_for_selection
+
+    runtime = Runtime(tmp_path)
+    runtime.close = Mock()
+    runtime.process = (
+        Mock(poll=Mock(return_value=None if endpoint == "managed" else 0))
+        if endpoint == "managed" or endpoint.startswith("dead_")
+        else None
+    )
+    requests = []
+
+    def handle(request):
+        requests.append(request)
+        if endpoint in {"idle", "dead_idle"}:
+            raise httpx.ConnectError("No server", request=request)
+        if endpoint in {"timeout", "dead_timeout"}:
+            raise httpx.ReadTimeout("Server did not respond", request=request)
+        return httpx.Response(503 if endpoint == "loading" else 200)
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(handle), **kwargs),
+    )
+    if endpoint in {"timeout", "dead_timeout"}:
+        with pytest.raises(httpx.ReadTimeout):
+            await release_for_selection(runtime)
+        runtime.close.assert_not_called()
+    elif endpoint in {"external", "loading", "dead_external"}:
+        with pytest.raises(ValueError, match="externally managed generator"):
+            await release_for_selection(runtime)
+        runtime.close.assert_not_called()
+    else:
+        await release_for_selection(runtime)
+        runtime.close.assert_called_once()
+    assert len(requests) == (0 if endpoint == "managed" else 1)

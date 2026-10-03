@@ -2,9 +2,7 @@ package main
 
 import (
 	tea "charm.land/bubbletea/v2"
-	"fmt"
 	"strings"
-	"time"
 )
 
 // The palette is a temporary layer, not another document editing mode.
@@ -215,9 +213,12 @@ func (m *model) refreshConfig() {
 }
 func (m *model) saveDialog(d *dialog, command string, args map[string]any) tea.Cmd {
 	// Keep validation-sensitive forms open until their own backend reply arrives.
-	if command == "evaluation.collection.delete" || d.kind == "eval-run-config" || d.kind == "eval-collection-new" || len(d.fields) > 0 && d.args["field"] == "monitor_local_model" {
+	if command == "evaluation.collection.delete" || d.kind == "eval-run-config" || d.kind == "eval-collection-new" || d.kind == "eval-policy-new" || len(d.fields) > 0 && d.args["field"] == "monitor_local_model" {
 		id, cmd := m.dispatch(command, args)
 		if cmd != nil {
+			if d.args == nil {
+				d.args = map[string]any{}
+			}
 			delete(d.args, "error")
 			m.dialogRequest, m.savingDialog = id, d
 		}
@@ -327,20 +328,6 @@ func documentLabel(n node) string {
 		}
 	}
 	return n.Kind + " · " + n.ID[:min(6, len(n.ID))]
-}
-func runLabel(r runSummary) string {
-	date := r.Created
-	if t, err := time.Parse(time.RFC3339Nano, date); err == nil {
-		date = t.Local().Format("Jan 2 15:04")
-	}
-	status := strings.ReplaceAll(r.Status, "_", " ")
-	if r.Status == "needs_review" {
-		status = "finished / early stops"
-	}
-	if r.PolicyStops > 0 {
-		status += fmt.Sprintf(" / %d policy stops", r.PolicyStops)
-	}
-	return fmt.Sprintf("%s · %s · %d conv · %s", date, status, r.Count, simulationName(r.Title, "", r.Label, r.ID))
 }
 func filterRows(rows []row, query string) []row {
 	if strings.TrimSpace(query) == "" {

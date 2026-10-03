@@ -58,7 +58,7 @@ func parseGenerationOptions(input, id string) (generationOptions, error) {
 	}
 	seen := map[string]bool{}
 	fail := func() (generationOptions, error) {
-		return out, fmt.Errorf("use /loom 5 --tokens 1024 --loops 4 (both accept --tokens, --eval, --model, --selection on|off and --monitoring on|off; Simulator also accepts --turns N, --visitor and --visitor-model); token ranges are not supported")
+		return out, fmt.Errorf("use /loom 5 --tokens 1024 --loops 4 (both accept --tokens, --eval, --model and --monitoring on|off; /loom accepts --selection on|off, /continue accepts only --selection off; Simulator also accepts --turns N, --visitor and --visitor-model); token ranges are not supported")
 	}
 	for i := 1; i < len(fields); i++ {
 		key, value, inline := strings.Cut(fields[i], "=")

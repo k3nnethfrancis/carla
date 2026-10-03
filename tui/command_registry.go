@@ -170,7 +170,11 @@ func (m *model) commandArguments(id string) []string {
 			args = append(args, "--turns N", "--visitor \"text\"", "--visitor-model alias")
 		}
 		args = append(args, "--eval \"name\"")
-		args = append(args, "--selection on|off", "--monitoring on|off", "--loops N")
+		selection := "--selection off"
+		if id == "loom" {
+			selection = "--selection on|off"
+		}
+		args = append(args, selection, "--monitoring on|off", "--loops N")
 		return args
 	case "eval":
 		return []string{"[\"policy name\"]", "--train-on-pass true|false"}
@@ -184,23 +188,6 @@ func (m *model) commandArguments(id string) []string {
 		}
 	}
 	return nil
-}
-
-func (m *model) commandHelp(id string) string {
-	text := commandDescriptions[id]
-	if args := m.commandArguments(id); len(args) > 0 {
-		text += "\n\n/" + commandName(action{id: id}) + " " + strings.Join(args, " · ")
-	}
-	if id == "loom" {
-		text += "\n\nCount can also be written --count N or -n N. Flags accept --flag=value and any order; examples put --loops last. --eval chooses an assessment policy and runs after generation, without changing generation prompts. One output continues the current target. Two or more split alternatives. With selection Off, split once and continue all outputs. With selection On, choose a winner each loop and split again from it."
-	}
-	if id == "loom" || id == "continue" {
-		text += "\n\nDocument judging defaults Off; Simulator inherits saved policy settings. --monitoring on|off overrides the monitor for this run; on requires a configured provider. --selection on|off overrides selection for this run. Selection needs /loom with at least two alternatives and an explicit --loops N. With --loops 1 it records the selected winner; additional loops continue from the winner. /continue cannot enable selection. These flags never save policy settings."
-	}
-	if id == "configure" && m.section == 3 {
-		text += "\n\nSettings: turns, character_tokens, visitor_tokens, character_alias, visitor_alias, character_context, visitor_context, openings, character_settings, visitor_settings, prompts. Direct prompt shortcuts: visitor_brief, character_template, visitor_template."
-	}
-	return text
 }
 
 func (m *model) helpText(id string) string {

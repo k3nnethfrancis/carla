@@ -142,8 +142,8 @@ capacity reservation. Warn and monitor-provider errors do not stop generation.
 ## Frontend
 
 `tui/` owns command routing, contextual completion, keybindings, tree selection,
-conversation grids and the document editor. Library, Branches, Anthology and
-Simulator are the main views. Notes belong to documents. The terminal supplies
+conversation grids and the document editor. Library, Branches, Anthology,
+Simulator and Evaluate are the main views. Notes belong to documents. The terminal supplies
 light/dark base colors; provenance and speaker roles use distinct accents.
 Narrow terminals collapse panels; below 60 × 18 only a resize/quit view is shown.
 
@@ -151,7 +151,7 @@ See [commands](commands.md) for the command contract. `exploration.py` owns repe
 batches and evidence-backed selection; document and conversation generators own
 their outputs. `stream_monitor.py` shares bounded monitoring across both.
 
-See `service.py` for backend commands, `tui/command.go` for command descriptions,
+See `service.py` for backend commands, `tui/command_registry.go` for command names, descriptions, help and completion metadata,
 and tests alongside each subsystem for its executable behavioral contract.
 
 ## Model onboarding

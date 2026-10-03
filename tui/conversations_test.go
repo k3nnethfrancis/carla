@@ -140,6 +140,7 @@ func TestConversationEditDraftAndCustomVisitor(t *testing.T) {
 
 func TestNewLoomSelectsItsTreeRowOnce(t *testing.T) {
 	m := fixture()
+	m.awaitingSimulation = true // This stream follows an explicit run request.
 	m.section = 3
 	m.selected = 1
 	data := json.RawMessage(`{"id":"new-run","status":"running","conversations":[{"index":0},{"index":1}]}`)

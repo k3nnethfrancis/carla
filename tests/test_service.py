@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,7 +15,7 @@ from character_lab.workspaces import Workspaces, acquire
 class FakeRuntime:
     def __init__(self, folder, model):
         self.model = model
-        self.process = object()
+        self.process = SimpleNamespace(poll=lambda: None)
         self.closed = False
 
     async def preflight(self, prompt, settings):
@@ -1077,3 +1078,68 @@ async def test_rename_children_uses_ancestry_not_text_replacement(session):
     )
     assert child["label"] == "continue-1-doc-1"
     assert grandchild["text"] == "Edited"
+
+
+@pytest.mark.asyncio
+async def test_selection_retry_releases_generator_before_loading_frozen_judge(session):
+    s = session
+    root = s.project.add("A seed", kind="source")
+    await s.execute("continue", {"node": root["id"], "count": 2, "loops": 2}, "loom")
+    await s.job
+    source = s.project.data["policy_runs"][-1]
+    frozen_nodes = json.loads(json.dumps(s.project.data["nodes"]))
+    frozen_source = json.loads(json.dumps(source))
+    # A later document generation leaves its model resident before retry.
+    s.runtime.closed = False
+    loaded = []
+
+    def judge_factory(folder, model):
+        assert s.runtime.closed, "Generator must be released before creating judge"
+        loaded.append(model)
+        return FakeRuntime(folder, model)
+
+    s.runtime_factory = judge_factory
+    await s.execute("policy.retry", {"run": source["id"]}, "retry")
+    await s.job
+    retried = s.project.data["policy_runs"][-1]
+    assert loaded == [source["policy_model"]]
+    assert retried["status"] == "complete"
+    assert retried["retry_of"] == source["id"]
+    assert s.project.data["nodes"] == frozen_nodes
+    assert source == frozen_source
+
+
+@pytest.mark.asyncio
+async def test_selection_retry_refuses_external_generator_without_changing_saved_run(
+    session, monkeypatch
+):
+    from unittest.mock import Mock
+
+    import httpx
+
+    s = session
+    root = s.project.add("A seed", kind="source")
+    await s.execute("continue", {"node": root["id"], "count": 2, "loops": 2}, "loom")
+    await s.job
+    source = s.project.data["policy_runs"][-1]
+    original = json.loads(json.dumps(s.project.data["policy_runs"]))
+    s.runtime.process = None
+    s.runtime.closed = False
+    s.runtime_factory = Mock(side_effect=AssertionError("Judge must not load"))
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200)), **kwargs
+        ),
+    )
+    await s.execute("policy.retry", {"run": source["id"]}, "retry")
+    await s.job
+    s.runtime_factory.assert_not_called()
+    assert not s.runtime.closed
+    assert s.project.data["policy_runs"] == original
+    assert any(
+        kind == "error" and "externally managed generator" in data["message"]
+        for kind, data, _ in s.events
+    )

@@ -90,6 +90,7 @@ func TestNestedSubsetsOfOneRunKeepTheirOwnRows(t *testing.T) {
 
 func TestGroupGridDisplaysAllRunsAndOpensExactLeaf(t *testing.T) {
 	m := simulatorFixture()
+	m.awaitingSimulation = true // This stream follows an explicit run request.
 	m.simulation = nil
 	m.data.SimulationRuns = nil
 	for i, id := range []string{"a", "b"} {

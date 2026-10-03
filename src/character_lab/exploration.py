@@ -8,6 +8,7 @@ import asyncio
 import copy
 import json
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 from . import assessments, templates
@@ -62,6 +63,35 @@ async def assess_candidate(project, candidate, run, judge, assessment):
     assessment["eligible"] = all(
         r["status"] == "complete" and r["result"]["passed"] for r in records
     )
+
+
+@contextmanager
+def selection_attempt(project, run, runtime_factory):
+    """Original runs and retries share terminal state and judge ownership."""
+    judge = None
+    try:
+        judge = runtime_factory(project.folder, run["policy_model"])
+        yield judge
+    except BaseException as exc:
+        run.update(
+            status="stopped" if isinstance(exc, asyncio.CancelledError) else "failed",
+            error=str(exc),
+        )
+        if run["steps"]:
+            run["steps"][-1]["status"] = run["status"]
+        for step in run["steps"]:
+            for assessment in step.get("assessments", []):
+                for record in assessment["records"]:
+                    if record["status"] in {"queued", "running"}:
+                        record["status"] = run["status"]
+        raise
+    finally:
+        try:
+            if judge is not None:
+                judge.close()
+        finally:
+            run["finished"] = now()
+            project.save()
 
 
 async def explore(project, loops, model, runtime_factory, batch, advance, emit):
@@ -120,8 +150,7 @@ async def explore(project, loops, model, runtime_factory, batch, advance, emit):
     templates.validate_choice(run["prompt"])
     project.data.setdefault("policy_runs", []).append(run)
     project.save()
-    judge = runtime_factory(project.folder, run["policy_model"])
-    try:
+    with selection_attempt(project, run, runtime_factory) as judge:
         for index in range(loops):
             step = dict(
                 loop=index + 1, parent=run["selected"], status="generating", trace={}
@@ -142,24 +171,6 @@ async def explore(project, loops, model, runtime_factory, batch, advance, emit):
             await advance(run["selected"])
         else:
             run["status"] = "complete"
-    except BaseException as exc:
-        run.update(
-            status="stopped" if isinstance(exc, asyncio.CancelledError) else "failed",
-            error=str(exc),
-        )
-        if run["steps"]:
-            run["steps"][-1]["status"] = run["status"]
-        if isinstance(exc, asyncio.CancelledError):
-            for step in run["steps"]:
-                for assessment in step.get("assessments", []):
-                    for record in assessment["records"]:
-                        if record["status"] in {"queued", "running"}:
-                            record["status"] = "stopped"
-        raise
-    finally:
-        judge.close()
-        run["finished"] = now()
-        project.save()
     await emit(
         "operation", dict(stage=run["status"], message="Loom loops: " + run["status"])
     )
@@ -288,22 +299,10 @@ async def retry(project, source_id, runtime_factory, emit):
     run["steps"] = [step]
     project.data["policy_runs"].append(run)
     project.save()
-    judge = runtime_factory(project.folder, run["policy_model"])
-    try:
+    with selection_attempt(project, run, runtime_factory) as judge:
         await decide_step(project, run, step, judge, emit)
         if run["status"] == "running":
             run["status"] = "complete"
-    except BaseException as exc:
-        run.update(
-            status="stopped" if isinstance(exc, asyncio.CancelledError) else "failed",
-            error=str(exc),
-        )
-        step["status"] = run["status"]
-        raise
-    finally:
-        judge.close()
-        run["finished"] = now()
-        project.save()
     return run
 
 

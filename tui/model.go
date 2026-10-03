@@ -204,7 +204,8 @@ type model struct {
 	evalRun                     *evaluationRun
 	evalCollection              string
 	evalCreating                string
-	evalPolicyCreating          bool
+	evalPolicyCreating          string
+	evalPolicyExisting          map[string]bool
 	behaviorDraft               *loomDimension
 	behaviorEditID              string
 	behaviorCreating            string
@@ -619,9 +620,6 @@ func (m *model) apply(e event) tea.Cmd {
 		if err := json.Unmarshal(e.Data, &run); err != nil {
 			return func() tea.Msg { return failure{err} }
 		}
-		if m.evalRun == nil || m.evalRun.ID != run.ID {
-			m.document.GotoTop()
-		}
 		if m.evalRun != nil && m.evalRun.ID == run.ID && run.Status == "running" {
 			run.Progress = m.evalRun.Progress
 		}
@@ -650,6 +648,9 @@ func (m *model) apply(e event) tea.Cmd {
 		// Background updates must not replace a different run the user opened.
 		if run.Live && !run.Opened && m.evalRun != nil && m.evalRun.ID != run.ID {
 			return nil
+		}
+		if m.evalRun == nil || m.evalRun.ID != run.ID {
+			m.document.GotoTop()
 		}
 		m.evalRun = &run
 		m.pending = false
@@ -767,7 +768,7 @@ func (m *model) apply(e event) tea.Cmd {
 				m.data.SimulationRuns = append(m.data.SimulationRuns, runSummary{Label: run.Label, Title: run.Title, ShortLabel: run.ShortLabel, OperationTitle: run.OperationTitle, AlternativeTitle: run.AlternativeTitle, OperationLabel: run.OperationLabel, OperationShortLabel: run.OperationShortLabel, AlternativeLabel: run.AlternativeLabel, AlternativeShortLabel: run.AlternativeShortLabel, ID: run.ID, Count: len(run.Conversations), Status: run.Status, Conversations: run.Conversations, Parent: run.Parent, AlternativeScope: run.AlternativeScope, SourceScope: run.SourceScope, AlternativeGroup: run.AlternativeGroup, AlternativeIndex: run.AlternativeIndex, AlternativeCount: run.AlternativeCount})
 			}
 		}
-		newView := run.Opened || m.simulation == nil && (m.awaitingSimulation || m.simSelection == nil)
+		newView := run.Opened || m.simulation == nil && m.awaitingSimulation
 		preserveSelection := m.preserveSimulationSelection
 		if newView {
 			m.awaitingSimulation = false
@@ -903,6 +904,7 @@ func (m *model) apply(e event) tea.Cmd {
 			return func() tea.Msg { return failure{err} }
 		}
 		m.pending = false
+		openCreatedPolicy := m.evalPolicyCreating != "" && e.ID == m.evalPolicyCreating && m.dialog == m.savingDialog
 		if m.dialogRequest != "" && e.ID == m.dialogRequest {
 			if m.dialog == m.savingDialog {
 				if m.savingDialog.kind == "eval-run-config" {
@@ -961,11 +963,17 @@ func (m *model) apply(e event) tea.Cmd {
 			m.behaviorDraft = nil
 		}
 		m.refreshConfig()
-		if m.evalPolicyCreating {
-			m.evalPolicyCreating = false
-			parent := m.dialog
-			m.openEvaluationPolicy(m.data.ActiveEvaluationPolicy)
-			m.dialog.parent = parent
+		if m.evalPolicyCreating != "" && e.ID == m.evalPolicyCreating {
+			m.evalPolicyCreating = ""
+			for _, policy := range m.data.EvaluationPolicies {
+				if openCreatedPolicy && !m.evalPolicyExisting[policy.ID] {
+					parent := m.dialog
+					m.openEvaluationPolicy(policy.ID)
+					m.dialog.parent = parent
+					break
+				}
+			}
+			m.evalPolicyExisting = nil
 		}
 		if m.evalCreating != "" && m.evalCreating == e.ID {
 			m.evalCreating = ""
@@ -1183,7 +1191,10 @@ func (m *model) apply(e event) tea.Cmd {
 		m.keySaving = false
 		m.restoringView = false
 		m.behaviorCreating = ""
-		m.evalPolicyCreating = false
+		if e.ID == "" || e.ID == m.evalPolicyCreating {
+			m.evalPolicyCreating = ""
+			m.evalPolicyExisting = nil
+		}
 		var err struct{ Message string }
 		json.Unmarshal(e.Data, &err)
 		m.pending = false

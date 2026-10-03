@@ -70,8 +70,18 @@ func TestOmittedLoopsStayAbsentFromSimulatorPlan(t *testing.T) {
 func TestGenerationHelpExplainsPolicyOverrides(t *testing.T) {
 	m := fixture()
 	for _, command := range []string{"loom", "continue"} {
-		text := m.commandHelp(command)
-		for _, want := range []string{"--selection on|off", "--monitoring on|off", "--loops 1", "never save"} {
+		text := m.helpText(command)
+		selection := "--selection off"
+		if command == "loom" {
+			selection = "--selection on|off"
+		}
+		if !strings.Contains(text, selection) || !strings.Contains(strings.Join(m.commandArguments(command), " "), selection) {
+			t.Fatal("help and completion must expose supported selection mode", command, text)
+		}
+		if command == "continue" && strings.Contains(strings.Join(m.commandArguments(command), " "), "--selection on") {
+			t.Fatal("continue cannot enable selection")
+		}
+		for _, want := range []string{"--monitoring on|off", "Flags affect only this run"} {
 			if !strings.Contains(text, want) {
 				t.Fatal(command, want, text)
 			}

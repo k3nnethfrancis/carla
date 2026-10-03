@@ -31,7 +31,7 @@ from .exploration import explore, require_selector
 from .model_metadata import native_context
 from .models import available_judges, available_models
 from .policy import DEFAULT_PROMPT, DEFAULT_SPEC, default_model
-from .runtime import Runtime
+from .runtime import Runtime, release_for_selection
 from .scheduling import parallel_map
 from .stream_monitor import DocumentMonitor
 from .workspaces import Workspaces, acquire
@@ -958,12 +958,7 @@ class Session:
             candidates = await self.generate(
                 "continue", parent, prefix, settings, count, nested=True
             )
-            # A selector cannot compete with an externally owned model server.
-            if self.runtime.process is None:
-                raise ValueError(
-                    "Stop the externally managed generator before switching to selection"
-                )
-            self.runtime.close()
+            await release_for_selection(self.runtime)
             for candidate in candidates:
                 candidate.update(policy_run=run_id, loop=index + 1)
             self.project.save()
@@ -1208,6 +1203,7 @@ class Session:
             await self.emit(kind, data, request_id)
 
         try:
+            await release_for_selection(self.runtime)
             await exploration.retry(self.project, run_id, self.runtime_factory, emit)
             await emit(
                 "operation",

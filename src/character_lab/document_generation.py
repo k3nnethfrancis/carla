@@ -9,6 +9,7 @@ from dataclasses import replace
 
 from . import document_actions, evaluation_sets, policy_overrides, simulator
 from .exploration import explore
+from .runtime import release_for_selection
 
 
 async def start(session, args, request_id, eval_plan):
@@ -144,11 +145,7 @@ async def run(
         )
         generated.extend(outputs)
         if policy_id:
-            if session.runtime.process is None:
-                raise ValueError(
-                    "Stop the externally managed generator before switching to selection"
-                )
-            session.runtime.close()
+            await release_for_selection(session.runtime)
             for node in outputs:
                 node.update(policy_run=policy_id, loop=index + 1)
             p.save()
