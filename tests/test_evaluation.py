@@ -329,7 +329,9 @@ async def test_collections_add_run_attach_and_preserve_original_evidence(lab):
     assert s.events[-1][1]["evidence"] == []
     assert len(s.events[-1][1]["judgments"]) == 1
     define(s, id=definition["id"], spec="New criteria")
-    assert sets.item_summary(s.project, group, item)["status"] == "evidence"
+    assert (
+        sets.item_summary(s.project, group, item)["status"] == "complete"
+    )  # policy owns its copied behavior
     assert s.project.data["evaluations"] == original
 
 
@@ -403,6 +405,7 @@ async def test_loom_evaluation_chain_and_preflight(lab, monkeypatch):
 
     s = lab
     monkeypatch.setattr(Judge, "stream", FakeRuntime.stream, raising=False)
+    monkeypatch.setattr(Judge, "preflight", FakeRuntime.preflight, raising=False)
     definition = define(s)
     group = await collection(s, definition)
     node = s.project.add("Seed")
@@ -414,30 +417,27 @@ async def test_loom_evaluation_chain_and_preflight(lab, monkeypatch):
         "continue", {"node": node["id"], "count": 2, "eval": "Voice"}, "chain"
     )
     await s.job
-    assert len(group["items"]) == 2
-    assert all(i["judgments"] for i in group["items"])
+    assert group["items"] == []
+    assert len(s.project.data["evaluations"]) == 2
     assert all(r["passed"] for r in s.project.data["evaluations"])
     assert not s.busy
 
 
 @pytest.mark.asyncio
-async def test_simulator_chain_freezes_conversations_and_runs_all_judges(
-    lab, monkeypatch
-):
+async def test_simulator_chain_freezes_conversations_and_runs_policy(lab, monkeypatch):
     from test_service import FakeRuntime
-
-    from character_lab import evaluation_sets as sets
 
     s = lab
     monkeypatch.setattr(Judge, "stream", FakeRuntime.stream, raising=False)
-    first, second = define(s), define(s, name="Another rubric")
+    monkeypatch.setattr(Judge, "preflight", FakeRuntime.preflight, raising=False)
+    first = define(s)
     group = await collection(s, first)
     await s.execute(
         "evaluation.collection.save",
         {
             "id": group["id"],
             "name": group["name"],
-            "judges": [first["id"], second["id"]],
+            "judges": [first["id"]],
         },
         "judges",
     )
@@ -455,11 +455,9 @@ async def test_simulator_chain_freezes_conversations_and_runs_all_judges(
     )
     await s.execute("simulator.run", {"count": 2, "eval": group["name"]}, "chain")
     await s.job
-    assert len(group["items"]) == 2
-    assert all(len(item["judgments"]) == 2 for item in group["items"])
-    assert all(
-        sets.item_summary(s.project, group, item)["passed"] for item in group["items"]
-    )
+    assert group["items"] == []
+    assert len(s.project.data["evaluations"]) == 2
+    assert all(r["passed"] for r in s.project.data["evaluations"])
     statuses = [data["busy"] for kind, data, _ in s.events if kind == "state"]
     # Once generation starts, ownership stays held through judging until final snapshot.
     first_busy = statuses.index(True)
@@ -586,3 +584,52 @@ def test_group_selection_evidence_attaches_by_set_not_leaf(tmp_path):
     evaluation_sets.attach_policy_evidence(p, item)
     assert len(item["evidence"]) == 1
     assert item["evidence"][0]["scope"] == "candidate set"
+
+
+@pytest.mark.asyncio
+async def test_remove_collection_preserves_evidence_and_stays_removed(lab):
+    from character_lab import evaluation_sets
+
+    s = lab
+    node = s.project.add("Exact source material")
+    group = await collection(s, define(s))
+    item = evaluation_sets.add_capture(
+        group, evaluation.capture(s.project, {"node": node["id"]})
+    )
+    await s.execute(
+        "evaluation.collection.run",
+        {"collection": group["id"], "items": [item["id"]]},
+        "run",
+    )
+    await s.job
+    before = copy.deepcopy(s.project.data)
+    for key in (None, "missing"):
+        with pytest.raises(ValueError):
+            await s.execute(
+                "evaluation.collection.delete", {"collection": key}, "invalid"
+            )
+        assert s.project.data == before
+    second = await collection(s, define(s, name="Other"), "Other")
+    await s.execute(
+        "evaluation.collection.active", {"collection": group["id"]}, "active"
+    )
+    await s.execute(
+        "evaluation.collection.delete", {"collection": group["id"]}, "delete"
+    )
+    assert s.project.data["active_evaluation"] == second["id"]
+    assert (
+        s.project.data["removed_evaluation_sets"][0]["collection"]
+        == before["evaluation_sets"][0]
+    )
+    await s.execute(
+        "evaluation.collection.delete", {"collection": second["id"]}, "delete-last"
+    )
+    assert s.project.data["active_evaluation"] == ""
+    for key in ("nodes", "evaluations", "evaluation_runs"):
+        assert s.project.data[key] == before[key]
+    policies = copy.deepcopy(s.project.data["evaluation_policies"])
+    reloaded = Project(s.project.folder)
+    evaluation_sets.migrate(reloaded)
+    assert reloaded.data["evaluation_sets"] == []
+    assert reloaded.data["evaluation_policies"] == policies
+    assert len(reloaded.data["removed_evaluation_sets"]) == 2

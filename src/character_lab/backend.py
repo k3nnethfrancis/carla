@@ -42,7 +42,7 @@ async def serve(args):
     folder = Path(folder).expanduser().resolve()
     models = load_models(args.models) if args.models else None
     policy_model = (
-        load_models(args.policy_model, "instruct")[0] if args.policy_model else None
+        load_models(args.policy_model, "instruct") if args.policy_model else None
     )
     secret = secrets.token_urlsafe(32)
     done = asyncio.Event()

@@ -161,7 +161,15 @@ func (m *model) simulationLoomPlan(options generationOptions) (map[string]any, s
 		label += " · send visitor message to each"
 	}
 	if options.Loops > 1 {
-		label += fmt.Sprintf(" · %d loops", options.Loops)
+		selection := m.data.SelectionEnabled
+		if options.Selection != nil {
+			selection = *options.Selection
+		}
+		if selection {
+			label += fmt.Sprintf(" · %d loops: choose a winner, split again", options.Loops)
+		} else {
+			label += fmt.Sprintf(" · %d loops: split once, continue all", options.Loops)
+		}
 	}
 	args := map[string]any{}
 	options.apply(args)

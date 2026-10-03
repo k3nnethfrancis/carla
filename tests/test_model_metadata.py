@@ -25,3 +25,11 @@ def test_native_context_from_gguf_header(tmp_path):
     path.write_bytes(b"invalid")
     assert native_context({"path": str(path)}) is None
     assert native_context({"path": str(tmp_path / "missing")}) is None
+
+
+def test_context_default_respects_smaller_models(monkeypatch):
+    from character_lab import model_metadata
+
+    for native, expected in [(32768, 10240), (4096, 4096), (None, 10240)]:
+        monkeypatch.setattr(model_metadata, "native_context", lambda model: native)
+        assert model_metadata.default_context({}) == expected

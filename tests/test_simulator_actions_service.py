@@ -21,6 +21,81 @@ async def configure(s):
 
 
 @pytest.mark.asyncio
+async def test_simulator_loop_reports_underlying_context_error(session, monkeypatch):
+    await configure(session)
+    error = "Input needs 8213 tokens plus 641 requested output tokens; context is 8192. Select less text. Nothing was truncated."
+
+    async def overflow(self, prompt, settings, trace):
+        trace.update(prompt_tokens=8213, context_capacity=8192)
+        raise ValueError(error)
+        yield  # This replacement has the runtime's async-generator interface.
+
+    monkeypatch.setattr(FakeRuntime, "stream", overflow)
+    await session.execute(
+        "simulator.run", dict(action="loom", count=2, turns=3, loops=2), "overflow"
+    )
+    await session.job
+    runs = session.project.data["simulation_runs"]
+    assert len(runs) == 1 and runs[0]["status"] == "failed"
+    assert runs[0]["error"] == error
+    assert len(runs[0]["conversations"]) == 2
+    assert any(
+        kind == "error" and error in data["message"] for kind, data, _ in session.events
+    )
+    assert not session.busy
+
+
+@pytest.mark.asyncio
+async def test_fresh_context_preflight_leaves_no_failed_runs(session, monkeypatch):
+    await configure(session)
+    calls = []
+
+    async def reject(self, prompt, settings):
+        calls.append((prompt, settings))
+        raise ValueError("Input needs 8213 tokens; context is 8192")
+
+    monkeypatch.setattr(FakeRuntime, "preflight", reject)
+    await session.execute(
+        "simulator.run", dict(action="loom", count=2, turns=3, loops=2), "check"
+    )
+    await session.job
+    assert len(calls) == 1 and "A synthetic anthology." in calls[0][0]
+    assert not session.project.data.get("simulation_runs")
+    assert any(
+        kind == "error" and "8213" in data["message"]
+        for kind, data, _ in session.events
+    )
+    assert not session.busy
+
+
+@pytest.mark.asyncio
+async def test_simulator_context_edits_selected_model_without_retargeting_generator(
+    session,
+):
+    await configure(session)
+    models = session.project.data["models"]
+    models.append({**models[0], "alias": "second", "context": 8192})
+    original = session.runtime.model["alias"]
+    await session.execute(
+        "simulator.configure",
+        dict(character_alias="second", visitor_alias="second", character_context=32768),
+        "context",
+    )
+    assert models[-1]["context"] == 32768
+    assert session.runtime.model["alias"] == original
+    assert session.state()["model_contexts"]["second"]["configured"] == 32768
+    await session.execute("simulator.configure", dict(visitor_context=0), "native")
+    assert models[-1]["context"] == 0
+    with pytest.raises(ValueError, match="same model"):
+        await session.execute(
+            "simulator.configure",
+            dict(character_context=8192, visitor_context=16384),
+            "conflict",
+        )
+    assert models[-1]["context"] == 0
+
+
+@pytest.mark.asyncio
 async def test_session_group_loops_select_entire_alternatives(session):
     s = session
     await configure(s)
@@ -94,8 +169,8 @@ async def test_continue_evaluates_only_changed_heads_preserving_prior_evidence(
     )
     await s.job
     group = s.project.data["evaluation_sets"][-1]
-    assert len(group["items"]) == 2
-    before_items = copy.deepcopy(group["items"])
+    assert group["items"] == []
+    before_items = copy.deepcopy(s.project.data["evaluations"])
     before_evals = copy.deepcopy(s.project.data["evaluations"])
     run = s.project.data["simulation_runs"][0]
     await s.execute(
@@ -111,12 +186,12 @@ async def test_continue_evaluates_only_changed_heads_preserving_prior_evidence(
     )
     await s.job
     assert len(s.project.data["simulation_runs"]) == 1
-    assert len(group["items"]) == 3
-    assert group["items"][:2] == before_items
+    assert group["items"] == []
+    assert len(s.project.data["evaluations"]) == 3
     assert s.project.data["evaluations"][:2] == before_evals
-    new = group["items"][-1]
+    new = s.project.data["evaluations"][-1]
     assert new["target"] == before_items[1]["target"]
-    assert new["snapshot_hash"] != before_items[1]["snapshot_hash"]
+    assert new["content_hash"] != before_items[1]["content_hash"]
     assert "My chosen question" in new["text"]
     assert len(new["source"]["conversation"]["turns"]) == 4
     assert new["source"]["revision"] == 1

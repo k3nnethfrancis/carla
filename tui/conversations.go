@@ -153,7 +153,15 @@ func (m *model) simulationRows() []row {
 		if m.collapsed[group] {
 			arrow = "▸ "
 		}
-		rows = append(rows, row{id: group, kind: "simulation-group", depth: depth, label: mark + arrow + fmt.Sprintf("%s · %d branches", simulationName(r.OperationTitle, r.OperationShortLabel, r.OperationLabel, fmt.Sprintf("loom-%d", loomNumber(r))), r.AlternativeCount)})
+		loopLabel := ""
+		if r.Loop > 0 {
+			p := m.selectionAttempt(r.PolicyRun)
+			loopLabel = fmt.Sprintf("loop %d/%d · ", r.Loop, p.Loops)
+			if p.Status == "failed" {
+				loopLabel += "selection blocked · "
+			}
+		}
+		rows = append(rows, row{id: group, kind: "simulation-group", depth: depth, label: mark + arrow + loopLabel + fmt.Sprintf("%s · %d branches", simulationName(r.OperationTitle, r.OperationShortLabel, r.OperationLabel, fmt.Sprintf("loom-%d", loomNumber(r))), r.AlternativeCount)})
 		if m.collapsed[group] {
 			for _, peer := range runs {
 				if peer.AlternativeGroup == group {
@@ -176,6 +184,9 @@ func (m *model) simulationRows() []row {
 			for _, peer := range runs {
 				if peer.AlternativeGroup == group && peer.AlternativeIndex == alternative {
 					branchName = simulationName(peer.AlternativeTitle, peer.AlternativeShortLabel, peer.AlternativeLabel, branchName)
+					if outcome := m.selectionOutcome(peer); outcome != "" {
+						branchName += " · " + outcome
+					}
 					break
 				}
 			}
@@ -421,8 +432,17 @@ func (m *model) conversationDocument(width int) string {
 		return "Select a conversation to open it, or select a Loom to view its grid."
 	}
 	c := m.simulation.Conversations[m.gridSelection]
+	text := m.conversationTurns(c.Turns, width)
+	if failure := conversationFailure(m.simulation, c); failure != "" {
+		text += "\n\n\n" + m.accent("#A84F39", "#DB937C").Render(ansi.Wrap(safe(failure), width, ""))
+	}
+	return text
+}
+
+// Render live and frozen conversations with the same role labels and spacing.
+func (m *model) conversationTurns(turns []simulationTurn, width int) string {
 	var blocks []string
-	for i, t := range c.Turns {
+	for i, t := range turns {
 		style := m.humanStyle().Bold(false)
 		if t.Role == "character" {
 			style = m.aiStyle()
@@ -443,7 +463,7 @@ func (m *model) conversationDocument(width int) string {
 			block += "\n\n" + m.accent("#79628C", "#B8A0CB").Render(ansi.Wrap("// policy · "+safe(info), width, ""))
 		}
 		if len(t.Flags) > 0 {
-			block += "\n" + dim.Render(ansi.Wrap("// generation · "+strings.Join(t.Flags, ", "), width, ""))
+			block += "\n" + dim.Render(ansi.Wrap("// generation · "+safe(strings.Join(t.Flags, ", ")), width, ""))
 		}
 		blocks = append(blocks, block)
 	}

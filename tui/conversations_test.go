@@ -48,6 +48,20 @@ func TestConversationViewerIsolationAndEscapePath(t *testing.T) {
 		t.Fatal("second conversation leaked")
 	}
 }
+
+func TestFailedConversationRetainsCauseInGridAndDocument(t *testing.T) {
+	m := simulatorFixture()
+	m.simulation.Status, m.simulation.Error = "failed", "Input needs 8213 tokens; context is 8192."
+	m.simulation.Conversations[0].Status = "failed"
+	items := m.gridItems()
+	if !strings.Contains(items[0].Text, m.simulation.Error) || strings.Contains(items[1].Text, m.simulation.Error) {
+		t.Fatal("error missing from failed tile or incorrectly attached to completed sibling", items)
+	}
+	m.openGridTile(0)
+	if !strings.Contains(ansi.Strip(m.conversationDocument(80)), m.simulation.Error) {
+		t.Fatal("opened trace hides generation cause")
+	}
+}
 func TestConversationTreeAndTargets(t *testing.T) {
 	m := simulatorFixture()
 	m.data.SimulationRuns = []runSummary{
@@ -126,6 +140,7 @@ func TestConversationEditDraftAndCustomVisitor(t *testing.T) {
 
 func TestNewLoomSelectsItsTreeRowOnce(t *testing.T) {
 	m := fixture()
+	m.awaitingSimulation = true // This stream follows an explicit run request.
 	m.section = 3
 	m.selected = 1
 	data := json.RawMessage(`{"id":"new-run","status":"running","conversations":[{"index":0},{"index":1}]}`)

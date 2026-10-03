@@ -212,7 +212,7 @@ func TestSectionsHelpAndBranchTree(t *testing.T) {
 	for _, size := range [][2]int{{60, 18}, {80, 24}, {144, 42}} {
 		m.width, m.height = size[0], size[1]
 		m.openHelp()
-		if len(m.dialog.rows) < 25 {
+		if len(m.helpAllRows()) < 25 {
 			t.Fatal("help missing commands")
 		}
 		for i, r := range m.dialog.rows {
@@ -451,7 +451,7 @@ func TestContinueShortcutUsesDocumentCursor(t *testing.T) {
 			t.Fatal("shortcut did not send generation")
 		}
 		done := make(chan tea.Msg, 1)
-		go func() { done <- cmd() }()
+		go func() { done <- runPrimaryCommand(cmd) }()
 		var request struct {
 			Command string
 			Args    struct {
@@ -550,7 +550,7 @@ func TestLongDialogDescriptionFits(t *testing.T) {
 	m.width, m.height = 60, 18
 	m.dialog = &dialog{kind: "help", title: "Details", rows: []row{{label: "Selected item", preview: strings.Repeat("description ", 14) + "LAST DETAIL"}}}
 	frame := ansi.Strip(m.View().Content)
-	if !strings.Contains(frame, "LAST DETAIL") || !strings.Contains(frame, "ESC return") {
+	if !strings.Contains(frame, "… ENTER to open") || !strings.Contains(frame, "ESC return") {
 		t.Fatal("description or footer cut off", frame)
 	}
 }
@@ -703,7 +703,7 @@ func TestSlashGenerationPreservesCursorAndDraft(t *testing.T) {
 				t.Fatal("command did not execute")
 			}
 			done := make(chan tea.Msg, 1)
-			go func() { done <- cmd() }()
+			go func() { done <- runPrimaryCommand(cmd) }()
 			var request struct {
 				Command string
 				Args    struct {
@@ -788,7 +788,7 @@ func TestLoomCountParsingAndCursorRequest(t *testing.T) {
 		t.Fatal("loom did not run")
 	}
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	var request struct {
 		Args struct {
 			Count, Offset int
@@ -847,7 +847,7 @@ func TestWorkspaceChangeClearsDocumentState(t *testing.T) {
 	next.Workspace.Path = "/different-workspace"
 	payload, _ := json.Marshal(next)
 	m.apply(event{Type: "state", Data: payload})
-	if m.editing != "" || m.editNode != "" || m.commandDocument != "" || m.editor.Value() != "" || m.inspection != "" || m.showInspector || len(m.collapsed) != 0 {
+	if m.editing != "" || m.editNode != "" || m.commandDocument != "" || m.editor.Value() != "" || m.inspection != "" || m.showInspector || m.collapsed["old"] {
 		t.Fatal("document state leaked across workspaces")
 	}
 }
@@ -908,7 +908,7 @@ func TestSettingsShowResolvedDefault(t *testing.T) {
 	m.data.ModelContext = 0
 	m.data.Settings.Tokens = -1
 	m.openDialog("settings")
-	if m.dialog.fields[3].input.Value() != "Default" || !strings.Contains(m.dialog.fields[3].label, "32,768 tokens") {
+	if m.dialog.fields[3].input.Value() != "Max" || !strings.Contains(m.dialog.fields[3].label, "32,768 tokens") {
 		t.Fatal("missing actual model default")
 	}
 	if m.dialog.fields[0].input.Value() != "Max" {
@@ -929,24 +929,24 @@ func TestSettingsPickersAndSteppers(t *testing.T) {
 	}
 	d.field = 0
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if len(d.rows) == 0 || d.rows[0].id != "Max" {
-		t.Fatal("output picker absent")
+	if !d.adjusting {
+		t.Fatal("value editor absent")
 	}
-	d.index = 0
+	m.dialogKey(tea.KeyPressMsg{Code: 'm', Text: "m"})
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if d.fields[0].input.Value() != "Max" || d.adjusting {
 		t.Fatal("selection not applied")
 	}
 	d.field = 2
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	for i := 0; i < 20; i++ {
-		m.dialogKey(tea.KeyPressMsg{Code: tea.KeyRight})
+	for i := 0; i < 110; i++ {
+		m.dialogKey(tea.KeyPressMsg{Code: tea.KeyUp})
 	}
 	if d.fields[2].input.Value() != "1.00" {
 		t.Fatal("top-p upper bound")
 	}
-	for i := 0; i < 20; i++ {
-		m.dialogKey(tea.KeyPressMsg{Code: tea.KeyLeft})
+	for i := 0; i < 110; i++ {
+		m.dialogKey(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
 	if d.fields[2].input.Value() != "0.00" {
 		t.Fatal("top-p lower bound")
@@ -957,8 +957,11 @@ func TestSettingsPickersAndSteppers(t *testing.T) {
 	}
 	d.field = 3
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if !strings.Contains(d.rows[0].label, "32,768") {
-		t.Fatal("default count missing")
+	m.dialogKey(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
+	m.dialogKey(tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+	m.dialogKey(tea.KeyPressMsg{Code: '1', Text: "10240"})
+	if d.fields[3].input.Value() != "10240" {
+		t.Fatal("exact context editing failed")
 	}
 }
 
@@ -1128,7 +1131,7 @@ func TestExistingNoteSaveUpdatesInPlace(t *testing.T) {
 		t.Fatal("missing save")
 	}
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	var request struct {
 		Command string
 		Args    map[string]any

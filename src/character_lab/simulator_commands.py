@@ -11,6 +11,7 @@ from . import (
     credentials,
     evaluation_sets,
     monitor,
+    operational_policies,
     policy_overrides,
     simulator,
     simulator_actions,
@@ -22,10 +23,42 @@ async def dispatch(session, command, args, request_id):
     p = session.project
     if command == "loom-policy.key":
         credentials.save_openrouter_key(args.get("key"))
+        if args.get("activate", True) is False:
+            if args.get("policy_id"):
+                saved = next(
+                    (
+                        x
+                        for x in p.data["operational_policies"]["monitoring"]
+                        if x["id"] == args["policy_id"]
+                    ),
+                    None,
+                )
+                if saved is None:
+                    raise ValueError("Policy not found")
+                await operational_policies.dispatch(
+                    session,
+                    "operational.policy.save",
+                    dict(
+                        purpose="monitoring",
+                        id=saved["id"],
+                        name=saved["name"],
+                        config={
+                            "monitor_mode": "off"
+                            if args.get("preserve_disabled")
+                            else "jev",
+                            "monitor_provider": "jev",
+                        },
+                    ),
+                    request_id,
+                )
+                return
+            await session.snapshot(request_id)
+            return
         config = simulator.configuration(p, session.runtime.model["alias"])
         config["monitor_mode"] = "jev"
         config["monitor_provider"] = "jev"
         p.data["simulator_config"] = config
+        operational_policies.sync(session, "monitoring")
         p.save()
         await session.snapshot(request_id)
         return
@@ -60,6 +93,12 @@ async def dispatch(session, command, args, request_id):
         args = {"monitor_dimensions": items}
         command = "simulator.configure"
     if command == "simulator.configure":
+        args = dict(args)
+        contexts = {
+            role: args.pop(role + "_context")
+            for role in ("character", "visitor")
+            if role + "_context" in args
+        }
         if args.get("monitor_mode") == "jev" and not credentials.openrouter_key()[0]:
             raise ValueError(
                 "Configure an OpenRouter API key in /policy → Monitoring first"
@@ -67,7 +106,25 @@ async def dispatch(session, command, args, request_id):
         config = {**simulator.configuration(p, session.runtime.model["alias"]), **args}
         policy_overrides.remember_provider(config, p.data.get("simulator_config", {}))
         simulator.validate(config, p, session.validate_settings)
+        changes = {}
+        for role, context in contexts.items():
+            if type(context) is not int or context < 0:
+                raise ValueError(
+                    "Context must be a nonnegative integer; 0 (Max) uses the model's native context"
+                )
+            alias = config[role + "_alias"]
+            if alias in changes and changes[alias] != context:
+                raise ValueError(
+                    "Speakers using the same model share its context setting"
+                )
+            changes[alias] = context
+        for model in p.data["models"]:
+            if model["alias"] in changes:
+                if session.runtime.model["alias"] == model["alias"]:
+                    session.runtime.close()
+                model["context"] = changes[model["alias"]]
         p.data["simulator_config"] = config
+        operational_policies.sync(session, "monitoring")
         p.save()
         await session.snapshot(request_id)
         return
@@ -128,6 +185,7 @@ async def dispatch(session, command, args, request_id):
                     | {
                         "opened": True,
                         "grid_group": scope.get("id", ""),
+                        "browsed": bool(args.get("preview")),
                     },
                     request_id,
                 )
@@ -146,7 +204,11 @@ async def dispatch(session, command, args, request_id):
         await session.emit(
             "simulation",
             simulator.view(run)
-            | {"opened": True, "open_conversation": args.get("conversation")},
+            | {
+                "opened": True,
+                "open_conversation": args.get("conversation"),
+                "browsed": bool(args.get("preview")),
+            },
             request_id,
         )
         return
@@ -240,11 +302,12 @@ async def dispatch(session, command, args, request_id):
             p.data.get("selection_enabled", False),
             action or "loom",
             config.get("alternatives", config["conversations"]),
-            session.policy_model,
+            session.selection_model(),
+            behaviors=p.data.get("selection_behaviors"),
         )
         config = policy_overrides.monitoring(config, args)
         if action is None and config["loops"] > 1:
-            require_selector(session.policy_model)
+            require_selector(session.selection_model())
         simulator.validate(config, p, session.validate_settings)
         if not config["documents"] and not config.get("preview") and not seed:
             raise ValueError("Select at least one anthology document in Simulator")

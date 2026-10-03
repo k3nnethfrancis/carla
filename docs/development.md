@@ -146,3 +146,21 @@ Before changing visibility or publishing a release:
   in the README. Publish the intended reviewed `main` revision.
 
 Documentation completion does not itself change repository visibility.
+
+## Command documentation
+
+`tui/command_registry.go` owns command names, compatibility aliases, default action
+labels/bindings, descriptions and argument/help text. Help and command completion
+reuse it. Contextual availability and execution remain with their existing handlers;
+this registry does not duplicate the backend command parser.
+
+After changing metadata, regenerate the reference:
+
+```sh
+cd tui
+CARLA_UPDATE_COMMAND_DOCS=1 go test -run TestCommandReferenceMatchesRegistry
+```
+
+Normal tests verify that `docs/command-reference.md` matches the registry and every
+registered action has a canonical description. Keep README's first-experiment
+walkthrough short and link to the reference for the full command scope.

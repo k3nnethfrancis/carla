@@ -41,6 +41,14 @@ async def test_output_budget_uses_actual_loaded_context(
     trace = {}
     if expected is None:
         with pytest.raises(ValueError, match="Nothing was truncated"):
+            await runtime.preflight("test", settings)
+        assert not requests
+    else:
+        budget = await runtime.preflight("test", settings)
+        assert budget == {"prompt_tokens": 4, "context_capacity": 32768}
+        assert not requests
+    if expected is None:
+        with pytest.raises(ValueError, match="Nothing was truncated"):
             _ = [text async for text in runtime.stream("test", settings, trace)]
         assert not requests
     else:
@@ -306,3 +314,132 @@ async def test_managed_server_startup_and_cleanup(tmp_path, monkeypatch, outcome
         runtime.close()
     assert all(p.terminated for p in spawned)
     assert all(p.waited for p in spawned)
+
+
+@pytest.mark.asyncio
+async def test_native_context_does_not_silently_shrink(runtime_server, monkeypatch):
+    from character_lab import runtime as module
+
+    runtime, requests = runtime_server(lambda: httpx.Response(200), capacity=8192)
+    runtime.model["context"] = 0
+    monkeypatch.setattr(module, "native_context", lambda model: 32768)
+    with pytest.raises(ValueError, match="server loaded 8192"):
+        await runtime.preflight("prompt", dict(n_predict=512))
+    assert "/completion" not in requests
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("finish", ["stop", "length", None])
+async def test_judge_stream_reports_real_deltas_and_retains_partial_output(
+    tmp_path, monkeypatch, finish
+):
+    chunks = ['{"passed":', 'true,"reason":"clear","evidence":"text"}']
+    received = []
+    real_client = httpx.AsyncClient
+
+    def handle(request):
+        if request.url.path == "/apply-template":
+            return httpx.Response(200, json={"prompt": "text"})
+        if request.url.path == "/tokenize":
+            return httpx.Response(200, json={"tokens": [1]})
+        if request.url.path == "/props":
+            return httpx.Response(
+                200, json={"default_generation_settings": {"n_ctx": 4096}}
+            )
+        assert json.loads(request.content)["stream"] is True
+        events = [
+            {"choices": [{"delta": {"content": t}, "finish_reason": None}]}
+            for t in chunks
+        ]
+        if finish:
+            events.append({"choices": [{"delta": {}, "finish_reason": finish}]})
+        return httpx.Response(
+            200,
+            text="".join("data: " + json.dumps(e) + "\n\n" for e in events)
+            + "data: [DONE]\n\n",
+        )
+
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kw: real_client(transport=httpx.MockTransport(handle), **kw),
+    )
+    runtime = Runtime(tmp_path)
+    runtime.process = object()
+
+    async def ready():
+        pass
+
+    async def progress(text):
+        received.append(text)
+
+    monkeypatch.setattr(runtime, "ensure", ready)
+    runtime.on_judge_token = progress
+    trace = {}
+    if finish == "stop":
+        result = await runtime.judge([{"role": "user", "content": "text"}], trace)
+        assert result["passed"] is True
+    else:
+        with pytest.raises(ValueError, match="partial output retained"):
+            await runtime.judge([], trace)
+    assert received == chunks
+    assert trace["raw_response"] == "".join(chunks)
+    assert len(trace["response_chunks"]) >= 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "idle",
+        "external",
+        "loading",
+        "managed",
+        "timeout",
+        "dead_external",
+        "dead_idle",
+        "dead_timeout",
+    ],
+)
+async def test_selection_handoff_unloads_owned_model_and_blocks_external(
+    tmp_path, monkeypatch, endpoint
+):
+    from unittest.mock import Mock
+
+    from character_lab.runtime import Runtime, release_for_selection
+
+    runtime = Runtime(tmp_path)
+    runtime.close = Mock()
+    runtime.process = (
+        Mock(poll=Mock(return_value=None if endpoint == "managed" else 0))
+        if endpoint == "managed" or endpoint.startswith("dead_")
+        else None
+    )
+    requests = []
+
+    def handle(request):
+        requests.append(request)
+        if endpoint in {"idle", "dead_idle"}:
+            raise httpx.ConnectError("No server", request=request)
+        if endpoint in {"timeout", "dead_timeout"}:
+            raise httpx.ReadTimeout("Server did not respond", request=request)
+        return httpx.Response(503 if endpoint == "loading" else 200)
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(handle), **kwargs),
+    )
+    if endpoint in {"timeout", "dead_timeout"}:
+        with pytest.raises(httpx.ReadTimeout):
+            await release_for_selection(runtime)
+        runtime.close.assert_not_called()
+    elif endpoint in {"external", "loading", "dead_external"}:
+        with pytest.raises(ValueError, match="externally managed generator"):
+            await release_for_selection(runtime)
+        runtime.close.assert_not_called()
+    else:
+        await release_for_selection(runtime)
+        runtime.close.assert_called_once()
+    assert len(requests) == (0 if endpoint == "managed" else 1)

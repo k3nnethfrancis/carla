@@ -40,7 +40,7 @@ func TestCommandGuideFollowsHighlightedChoice(t *testing.T) {
 		if a.id == "branch" && hints != "" {
 			t.Fatal("fork advertised generation flags", hints)
 		}
-		if m.commandHelp(a.id) == "" {
+		if m.helpText(m.canonicalCommand(a.id)) == "" {
 			t.Fatal("missing description", a.id)
 		}
 	}

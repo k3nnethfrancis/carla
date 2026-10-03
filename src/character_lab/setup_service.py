@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from . import model_setup as setup
+from . import operational_policies
 from .models import available_models
 
 
@@ -84,7 +85,24 @@ async def dispatch(session, command, args, request_id):
                 session.runtime = session.runtime_factory(session.project.folder, model)
                 session.project.save()
             else:
-                session.policy_model = model
+                # Adding an Evals judge must not retarget an existing Selection
+                # policy. Only first-time setup fills its empty model slot.
+                selected = session.selection_model()
+                unconfigured = any(
+                    operational_policies.model_key(m)
+                    == operational_policies.model_key(selected)
+                    and not m.get("path")
+                    for m in session.judge_models
+                )
+                session.judge_models = [
+                    m
+                    for m in session.judge_models
+                    if m.get("path") and m.get("alias") != model["alias"]
+                ] + [model]
+                if unconfigured:
+                    session.policy_model = model
+                    operational_policies.reconcile_model(session.project, model)
+                session.project.save()
             await emit(dict(stage="complete", name=model["name"]))
         except asyncio.CancelledError:
             await emit(dict(stage="cancelled"))

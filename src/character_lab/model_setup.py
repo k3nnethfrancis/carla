@@ -13,6 +13,7 @@ from urllib.parse import unquote, urlparse
 
 from huggingface_hub import HfApi, hf_hub_download
 
+from .model_metadata import default_context
 from .models import load_models
 from .workspaces import HOME, acquire
 
@@ -126,10 +127,6 @@ def register(path, name, kind, source):
             return next(
                 m for m in existing if Path(m["path"]).resolve() == path.resolve()
             )
-        if kind == "instruct" and existing:
-            raise ValueError(
-                "A Grow policy model is already configured; edit policy-model.json to replace it"
-            )
         used = set()
         for config, role in [
             (HOME / "models.json", "base"),
@@ -146,14 +143,12 @@ def register(path, name, kind, source):
             path=str(path),
             port=port,
             url=f"http://127.0.0.1:{port}",
-            context=8192,
+            context=default_context({"path": str(path)}),
             gpu_layers=99,
             source=source,
         )
         temp = registry.with_suffix(".tmp")
-        temp.write_text(
-            json.dumps([*existing, model] if kind == "base" else model, indent=2) + "\n"
-        )
+        temp.write_text(json.dumps([*existing, model], indent=2) + "\n")
         temp.replace(registry)
     return model
 

@@ -9,6 +9,7 @@ import (
 
 func TestSimulatorStreamAndConfiguration(t *testing.T) {
 	m := fixture()
+	m.awaitingSimulation = true // This stream follows an explicit run request.
 	m.width, m.height = 120, 36
 	m.section = 3
 	data, _ := json.Marshal(simulationRun{ID: "run", Status: "running", Conversations: []simulationConversation{{Index: 0, Turns: []simulationTurn{{Role: "character", Model: localModel{Name: "Base"}, Status: "generating"}}}}})
@@ -23,7 +24,7 @@ func TestSimulatorStreamAndConfiguration(t *testing.T) {
 		t.Fatal("Max exposed as sentinel")
 	}
 	m.openSimulatorConfig()
-	if len(m.dialog.rows) != 10 {
+	if len(m.dialog.rows) != 5 {
 		t.Fatal("missing simulator controls")
 	}
 	if strings.Join(sectionNames, " ") != "Library Branches Anthology Simulator Evaluate" {
@@ -67,7 +68,7 @@ func TestConfigEscapeReturnsOneLevel(t *testing.T) {
 	}
 
 	m.data.SimulatorConfig = map[string]any{"character_settings": map[string]any{"n_predict": float64(512)}}
-	m.openSimulatorConfig()
+	m.openSimulatorSettings("sampling-group")
 	root := m.dialog
 	for i, r := range root.rows {
 		if r.id == "character_settings" {
@@ -111,7 +112,7 @@ func TestOpeningConfigurationAndPromptEditor(t *testing.T) {
 		}
 	}
 	m.submitDialog()
-	if m.dialog.kind != "sim-openings" || len(m.dialog.rows) != 5 {
+	if m.dialog.kind != "sim-openings" || len(m.dialog.rows) != 4 {
 		t.Fatal("missing opening controls")
 	}
 	openings := m.dialog
@@ -136,6 +137,7 @@ func TestOpeningConfigurationAndPromptEditor(t *testing.T) {
 
 func TestConcurrentSimulationTokensAndCapacity(t *testing.T) {
 	m := fixture()
+	m.awaitingSimulation = true // This stream follows an explicit run request.
 	m.data.Busy = true
 	data, _ := json.Marshal(simulationRun{ID: "batch", Conversations: []simulationConversation{
 		{Index: 0, Turns: []simulationTurn{{Role: "character"}}},

@@ -35,7 +35,7 @@ func TestSimulatorLoomRoutesCountAndTokenOverride(t *testing.T) {
 		t.Fatal("no simulator command")
 	}
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	var request struct {
 		Command string
 		Args    struct {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -12,6 +13,7 @@ import (
 // Definitions and result snapshots belong to Python; these structs only render
 // them and carry explicit user actions back across the protocol.
 type evaluator struct {
+	JudgeName                                     string `json:"judge_name"`
 	ID, Name, Kind, Spec, Prompt, Model, Endpoint string
 	Revision                                      int
 	Threshold                                     float64
@@ -31,55 +33,34 @@ type evaluationRecord struct {
 	Training                                   bool
 	Definition                                 evaluator
 	Result                                     struct {
-		Passed           bool
-		Reason, Evidence string
-		Probability      *float64
+		Passed             bool
+		Reason, Evidence   string
+		Probability        *float64
+		Observed           *bool
+		Expected           string
+		DesiredProbability *float64 `json:"desired_probability"`
 	}
 	Source json.RawMessage
 	Trace  json.RawMessage
 }
 
-func (e evaluator) args() map[string]any {
-	return map[string]any{"id": e.ID, "name": e.Name, "kind": e.Kind, "spec": e.Spec, "prompt": e.Prompt, "model": e.Model, "threshold": e.Threshold, "endpoint": e.Endpoint}
-}
-func (m *model) evaluator(id string) evaluator {
-	for _, e := range m.data.Evaluators {
-		if e.ID == id {
-			return e
-		}
-	}
-	return evaluator{}
-}
 func (m *model) openPolicy() tea.Cmd {
+	monitoring, selection := "Off", "Off"
+	mode, _ := m.data.SimulatorConfig["monitor_mode"].(string)
+	if mode == "jev" || mode == "diffusion" {
+		monitoring = "On"
+	}
+	if m.data.SelectionEnabled {
+		selection = "On"
+	}
 	m.dialog = &dialog{kind: "policy", title: "Policy", rows: []row{
-		{id: "monitor", label: "Monitoring", preview: "Monitor document continuations and character replies; warn or explicitly stop. Shared across Branches and Simulator."},
-		{id: "selection", label: "Selection", preview: selectionTriggerHelp},
-		{id: "evaluators", label: "Evals", preview: evaluationJudgesHelp},
+		{id: "monitor", label: "Monitoring · " + monitoring, preview: "Configure shared monitoring rules. Simulator uses saved On/Off; document Looms require --monitoring on."},
+		{id: "selection", label: "Selection · " + selection, preview: "Each Loom loop judges 2+ alternatives against your behaviors and picks a qualifying branch. The next loop grows from that winner. Other paths stay saved. No qualifying branch: stop. Use --loops."},
+		{id: "evaluators", label: "Evals", preview: "Configure reusable behaviors and models to assess saved documents and conversations."},
 	}}
 	return nil
 }
-func (m *model) openEvaluators() tea.Cmd {
-	d := &dialog{kind: "eval-definitions", title: "Evaluation judges"}
-	for _, e := range m.data.Evaluators {
-		d.rows = append(d.rows, row{id: e.ID, label: e.Name + " · " + judgeLabel(e.Kind), preview: e.Spec})
-	}
-	d.rows = append(d.rows, row{id: "new", label: "+ New judge", preview: "Define criteria and a model, then add this judge to a named evaluation in Evaluate > Configure."})
-	m.dialog = d
-	return nil
-}
-func (m *model) openEvaluator(id string) tea.Cmd {
-	e := m.evaluator(id)
-	rows := []row{{id: "name", label: e.Name, preview: "Rename judge"}, {id: "kind", label: "Judge · " + judgeLabel(e.Kind)}, {id: "model", label: "Model · " + e.Model}, {id: "spec", label: "Criteria", preview: e.Spec}}
-
-	if e.Kind == "llm" {
-		rows = append(rows, row{id: "prompt", label: "Judge prompt", preview: e.Prompt})
-	} else {
-		rows = append(rows, row{id: "threshold", label: fmt.Sprintf("Pass threshold · %.0f%%", e.Threshold*100), preview: "P(criteria met). Model estimate, not calibrated certainty."})
-	}
-	rows = append(rows, row{id: "delete", label: "Delete definition…", preview: "Historical results retain their frozen definition."})
-	m.dialog = &dialog{kind: "eval-definition", title: fmt.Sprintf("%s · revision %d", e.Name, e.Revision), rows: rows, args: map[string]any{"id": id}}
-	return nil
-}
+func (m *model) openEvaluators() tea.Cmd { return m.openEvaluationPolicies() }
 func (m *model) evaluationIDs() []string {
 	var ids []string
 	for _, e := range m.collectionItems() {
@@ -145,56 +126,44 @@ func (m *model) openEval(input string) tea.Cmd {
 		m.status = err.Error()
 		return nil
 	}
-	if name == "" {
-		name = m.data.ActiveEvaluation
-		if m.section == 4 && m.evalCollection != "" {
-			name = m.evalCollection
-		}
-	}
-	var group *evaluationCollection
-	for i := range m.data.EvaluationSets {
-		c := &m.data.EvaluationSets[i]
-		if c.ID == name || c.Name == name {
-			group = c
-			break
-		}
-	}
-	if group == nil {
-		m.status = "Choose an active evaluation in Evaluate, or use /eval name"
-		return nil
-	}
-	args := map[string]any{"collection": group.ID, "train_on_pass": auto}
 	if m.section == 4 {
-		ids := m.evaluationIDs()
-		if len(ids) == 0 {
-			for _, item := range m.collectionItems() {
-				if item.Status != "complete" {
-					ids = append(ids, item.ID)
-				}
+		var train *bool
+		words, _ := generationWords(input)
+		for _, word := range words {
+			if word == "--train-on-pass" || strings.HasPrefix(word, "--train-on-pass=") {
+				train = &auto
 			}
 		}
-		if len(ids) == 0 {
-			m.status = "Select items or add material to this evaluation first"
-			return nil
-		}
-		if m.evalCollection != group.ID {
-			m.status = "Open that evaluation and add the items first"
-			return nil
-		}
-		args["items"] = ids
-	} else {
-		targets := m.evaluationTargets()
-		if len(targets) == 0 {
-			m.status = "Select a document or conversation first"
-			return nil
-		}
-		args["targets"] = targets
+		return m.newEvaluationRun(name, train)
 	}
+	if name == "" {
+		name = m.data.ActiveEvaluationPolicy
+	}
+	policy := m.findEvaluationPolicy(name)
+	if policy == nil {
+		m.status = "Choose a policy in Evaluate → Policies, or use /eval policy-name"
+		return nil
+	}
+	args := map[string]any{"policy": policy.ID}
+	words, _ := generationWords(input)
+	for _, word := range words {
+		if word == "--train-on-pass" || strings.HasPrefix(word, "--train-on-pass=") {
+			args["train_on_pass"] = auto
+		}
+	}
+	targets := m.evaluationTargets()
+	if len(targets) == 0 {
+		m.status = "Select a document or conversation first"
+		return nil
+	}
+	args["targets"] = targets
+
 	cmd := m.send("evaluation.collection.run", args)
 	if cmd != nil {
 		m.dialog = nil
 		m.section = 4
-		m.enterCollection(group.ID)
+		m.evalArea = "runs"
+		m.enterCollection("")
 	}
 	return cmd
 }
@@ -214,12 +183,16 @@ func evaluationStatus(e evaluationSummary) string {
 	return "FAIL"
 }
 func (m *model) evaluationRows() []row { return m.collectionRows() }
-func (m *model) evaluationView(width int) string {
+func (m *model) evaluationView(width int) (text string) {
+	defer func() { text = ansi.Wrap(text, width, "") }()
+	if m.evalArea == "runs" {
+		return m.evaluationRunView(width)
+	}
 	if m.evaluation == nil || m.evaluation.ID != m.targetRow().id {
 		if c := m.currentEvaluation(); c != nil {
-			return c.Name + "\n\nAdd saved documents, conversations or existing judgments. Adding does not run inference.\n\nRun selected or pending items with /eval. Configure this evaluation with /config.\nSPACE selects · ENTER opens · /keep marks for training"
+			return safe(c.Name) + "\n\nAdd · saved documents, conversations or existing judgments.\nSettings · rename or remove this dataset.\n/eval configures a new run for this dataset or selected items.\nSPACE selects · ENTER opens · /keep marks for training"
 		}
-		return "Evaluations\n\nOpen a named collection to see its items and judgments, or create one.\nThe active evaluation is used by /eval from documents and conversations."
+		return "Evaluate\n\nData · saved documents and conversation traces.\nPolicies · judges and the behaviors they assess.\nRuns · recorded assessments with exact inputs and policy.\n+ New run · choose a dataset and policy before starting."
 	}
 	return m.collectionItemView(m.evaluation, width)
 }
@@ -239,6 +212,9 @@ func (m *model) evalAction(id string) tea.Cmd {
 	case "keep", "untrain":
 		return m.send("evaluation.item.annotate", map[string]any{"collection": m.evalCollection, "ids": ids, "training": id == "keep"})
 	case "remove":
+		if collection := m.removableEvaluationCollection(); collection != "" {
+			return m.confirmRemoveCollection(collection)
+		}
 		return m.send("evaluation.collection.remove", map[string]any{"collection": m.evalCollection, "ids": ids})
 	case "snapshot":
 		return m.exportItems()
@@ -271,38 +247,14 @@ func (m *model) evalAction(id string) tea.Cmd {
 
 // All forms reuse Carla's existing parent/back stack and correlated saves.
 func (m *model) submitEvaluation(d *dialog) tea.Cmd {
-	if strings.HasPrefix(d.kind, "eval-collection") || d.kind == "eval-judges" || d.kind == "eval-add-items" {
-		return m.submitCollection(d)
+	if strings.HasPrefix(d.kind, "eval-run-") {
+		return m.submitEvaluationRun(d)
 	}
-	if len(d.fields) > 0 {
-		if d.kind == "eval-new" {
-			if strings.TrimSpace(d.fields[0].input.Value()) == "" {
-				m.status = "Enter a name"
-				return nil
-			}
-			if d.args["kind"] == "llm" && len(m.data.SelectorModels) == 0 {
-				m.status = "Configure a local policy model first"
-				return nil
-			}
-			m.editing = "evaluation-new-spec"
-			m.editReturn = d
-			m.dialog = nil
-			m.editor.SetValue("")
-			m.focus = 1
-			m.reflow()
-			return m.editor.Focus()
-		}
-		e := m.evaluator(d.args["id"].(string))
-		args := e.args()
-		field := d.args["field"].(string)
-		value := d.fields[0].input.Value()
-		if strings.TrimSpace(value) == "" {
-			m.status = "Enter a value"
-			d.args["error"] = m.status
-			return nil
-		}
-		args[field] = value
-		return m.saveDialog(d, "evaluation.configure", args)
+	if strings.HasPrefix(d.kind, "eval-policy") {
+		return m.submitEvaluationPolicy(d)
+	}
+	if strings.HasPrefix(d.kind, "eval-collection") || d.kind == "eval-add-items" {
+		return m.submitCollection(d)
 	}
 	if len(d.rows) == 0 {
 		return nil
@@ -318,95 +270,12 @@ func (m *model) submitEvaluation(d *dialog) tea.Cmd {
 	case "policy":
 		switch r.id {
 		case "monitor":
-			return parent(m.openLoomPolicy())
+			return parent(m.openOperationalPolicies("monitoring"))
 		case "selection":
-			return parent(m.openSelectionConfig())
+			return parent(m.openOperationalPolicies("selection"))
 		default:
-			return parent(m.openEvaluators())
+			return parent(m.openEvaluationPolicies())
 		}
-	case "eval-definitions":
-		if r.id == "new" {
-			m.dialog = &dialog{kind: "eval-new-kind", title: "Judge", parent: d, rows: []row{{id: "llm", label: "Local LLM", preview: "Prompt, criteria, boolean pass and quoted evidence."}, {id: "diffusion", label: "DiffusionGemma (local)", preview: "Local OpenJev classifier. Behavior spec and probability threshold; no API key."}, {id: "jev", label: "Jev via OpenRouter", preview: "Behavior spec and probability threshold. Uses OPENROUTER_API_KEY."}}}
-			return nil
-		}
-		return parent(m.openEvaluator(r.id))
-	case "eval-new-kind":
-		n := &dialog{kind: "eval-new", title: "New judge", parent: d.parent, args: map[string]any{"kind": r.id}}
-		n.add("Name", "")
-		m.dialog = n
-		return n.fields[0].input.Focus()
-	case "eval-definition":
-		e := m.evaluator(d.args["id"].(string))
-		switch r.id {
-		case "threshold":
-			m.numberConfig("evaluation", "threshold", e.Threshold*100, e.ID)
-			m.dialog.title = "Pass probability · ↑↓ 1% · ←→ 10%"
-			m.dialog.parent = d
-			return nil
-		case "spec", "prompt":
-			m.evalEditingID = e.ID
-			m.editing = "evaluation-" + r.id
-			m.editReturn = d
-			m.dialog = nil
-			text := e.Spec
-			if r.id == "prompt" {
-				text = e.Prompt
-			}
-			m.editor.SetValue(text)
-			m.focus = 1
-			m.reflow()
-			return m.editor.Focus()
-		case "kind":
-			m.dialog = &dialog{kind: "eval-kind", title: "Judge", parent: d, args: d.args, rows: []row{{id: "llm", label: "Local LLM"}, {id: "diffusion", label: "DiffusionGemma (local)"}, {id: "jev", label: "Jev via OpenRouter"}}}
-			return nil
-		case "model":
-			if e.Kind == "llm" {
-				n := &dialog{kind: "eval-model", title: "Local judge", parent: d, args: d.args}
-				for _, model := range m.data.SelectorModels {
-					n.rows = append(n.rows, row{id: model.Alias, label: model.Name})
-				}
-				m.dialog = n
-				return nil
-			}
-		case "delete":
-			m.dialog = &dialog{kind: "eval-delete", title: "Delete definition? Results are retained", parent: d, args: d.args, rows: []row{{id: "cancel", label: "Cancel"}, {id: "delete", label: "Delete definition"}}}
-			return nil
-		}
-		n := &dialog{kind: "eval-field", title: r.label, parent: d, args: map[string]any{"id": e.ID, "field": r.id}}
-		value := e.Name
-		if r.id == "model" {
-			value = e.Model
-		}
-		if r.id == "threshold" {
-			value = fmt.Sprint(e.Threshold * 100)
-		}
-		n.add(r.label, value)
-		m.dialog = n
-		return n.fields[0].input.Focus()
-	case "eval-kind", "eval-model":
-		e := m.evaluator(d.args["id"].(string))
-		args := e.args()
-		if d.kind == "eval-model" {
-			args["model"] = r.id
-		} else {
-			args["kind"] = r.id
-			if r.id == "diffusion" {
-				args["model"] = m.simString("monitor_local_model")
-				args["endpoint"] = "auto"
-			} else if r.id == "jev" {
-				args["model"] = m.simString("monitor_model")
-			} else if len(m.data.SelectorModels) > 0 {
-				args["model"] = m.data.SelectorModels[0].Alias
-			}
-		}
-		return m.saveDialog(d, "evaluation.configure", args)
-	case "eval-delete":
-		if r.id == "cancel" {
-			m.dialog = d.parent
-			return nil
-		}
-		m.dialog = d.parent.parent
-		return m.send("evaluation.definition.delete", d.args)
 	case "eval-filter":
 		m.evalFilter = r.id
 		m.evalSelection = map[string]bool{}

@@ -25,8 +25,9 @@ See the [README](../README.md#quick-start) for installation and model setup.
 6. Use `/clear`, then `/loom 3 --turns 2 --tokens 512` for three fresh conversations.
    Each adds two Character replies, with Visitor messages between them. Open a
    conversation to inspect its text, prompts, settings and policy evidence.
-7. In **Evaluate**, create a named evaluation and configure its judges. Add the
-   saved conversations, then run them. Review evidence, mark desired training
+7. In **Evaluate → Data**, add saved conversations to a collection. In
+   **Policies**, add behaviors and judge settings, and choose the active policy. Run `/eval`
+   on the data and inspect **Runs**. Review evidence, mark desired training
    items with the collection controls and use `/export` to save the selected items or collection. The [evaluation guide](evaluations.md)
    covers reuse, reruns, pass rules and metadata.
 
@@ -73,7 +74,9 @@ universal filesystem-delete command. See [commands](commands.md) for exact scope
 
 One-output Loom continues the selected target. A larger count splits alternatives.
 `--loops N` repeats continuation on those outputs. Selection defaults to Off;
-enable it under `/policy` to select a whole alternative and split again between loops.
+enable it under `/policy` for Simulator, or pass `--selection on` for document
+Looms, to select a whole alternative and split again between loops. Selection
+requires at least two alternatives and explicit `--loops N`; one loop selects once.
 The selector may choose none, ending exploration with its explanation retained.
 Monitoring is separately optional; only enabled Stop actions stop flagged output.
 A token ceiling limits an individual generation, not the number of later turns.
@@ -98,7 +101,9 @@ model registry, keybindings and credentials live at application level.
 - `project.json` and the stream journal preserve saved branches and partial work.
   Crash recovery is not a guarantee against disk failure or power loss.
 - Startup restores the last tab/document with the command bar focused. It does
-  not restore editing mode or checked Loom targets. Exit recovery drafts are
+  not restore editing mode or checked Loom targets. Branches and Simulator start
+  collapsed, revealing only the ancestors of the saved item; without a valid saved
+  item, their trees stay collapsed. Exit recovery drafts are
   separate from committed versions; inspect them before deleting recovery data.
 - `/export` writes selected items or the current collection under `exports/`, with
   a versioned JSON manifest and text reading copies. Conversations retain structured
@@ -117,9 +122,9 @@ Use `carla --version` with bug reports.
 | --- | --- |
 | Generation cannot start | GGUF exists; `llama-server` is on PATH and supports the flags in [model configuration](configuration.md#models). Check workspace `model-server.log`. |
 | Out of memory / very slow batches | Lower configured context/output budgets or choose a smaller model. `Max` can reserve all remaining context and serialize work. Carla does not silently shrink budgets. |
-| Multi-loop Loom cannot start | Configure the separate instruct policy model and selection spec. A one-loop Loom does not need a selector. |
+| Loom selection cannot start | Configure the selection judge and behaviors, and use two or more alternatives with explicit `--loops N`. Selection Off continues all outputs and needs no selector. |
 | Wrong conversation is continued | Inspect the checked target; `/clear` starts fresh. Hover is not selection. |
-| Evaluation opens but cannot run | Create/select a collection, assign judges, add nonempty items and use Run or `/eval`. Local judges currently use the configured policy model. |
+| Evaluation opens but cannot run | Configure an Evals policy’s judge and enabled behaviors. In Branches or Simulator, select saved content and use `/eval [policy]`. In Evaluate, choose a dataset and policy in New run. |
 | Local judge unavailable | Complete the one-time cache setup with `scripts/local-judge.sh`, then select DiffusionGemma under `/policy`. Carla manages the local server automatically. See [local judge setup](local-judge.md). |
 | Jev authentication/provider error | Check saved credential versus launching environment, provider access and quota. Saving a key does not validate it. |
 | Workspace already open | Close the owning Carla process; each workspace permits one writer. Do not edit its JSON while running. |

@@ -61,7 +61,9 @@ async def test_parallel_start_reuses_one_process_and_shutdown_owns_it(monkeypatc
     monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
     monkeypatch.setattr(local_judge.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(local_judge.platform, "machine", lambda: "arm64")
-    monkeypatch.setattr(local_judge.shutil, "which", lambda _: "/bin/uv")
+    monkeypatch.setattr(
+        local_judge, "runtime_python", lambda: local_judge.Path(__file__)
+    )
     signals = []
     monkeypatch.setattr(
         local_judge.os, "killpg", lambda pid, sig: signals.append((pid, sig))
@@ -83,6 +85,8 @@ async def test_parallel_start_reuses_one_process_and_shutdown_owns_it(monkeypatc
         == ["http://127.0.0.1:43219"] * 2
     )
     spawn.assert_awaited_once()
+    assert spawn.call_args.args[0] == str(local_judge.runtime_python())
+    assert "--with" not in spawn.call_args.args
     assert spawn.call_args.kwargs["env"]["UV_OFFLINE"] == "1"
     assert spawn.call_args.kwargs["start_new_session"] is True
     await manager.close()
@@ -98,13 +102,35 @@ async def test_start_failure_cleans_up_owned_process(monkeypatch):
 
     process = Process()
     process.stdout.feed_eof()
-    monkeypatch.setattr(
-        asyncio, "create_subprocess_exec", AsyncMock(return_value=process)
-    )
+
+    attempts = []
+
+    async def spawn(*args, **kwargs):
+        attempts.append(args)
+        kwargs["stderr"].write(b"Network connectivity is disabled\n")
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
     monkeypatch.setattr(local_judge.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(local_judge.platform, "machine", lambda: "arm64")
-    monkeypatch.setattr(local_judge.shutil, "which", lambda _: "/bin/uv")
+    monkeypatch.setattr(
+        local_judge, "runtime_python", lambda: local_judge.Path(__file__)
+    )
     manager = local_judge.LocalJudge()
-    with pytest.raises(local_judge.LocalJudgeError, match="install"):
+    with pytest.raises(
+        local_judge.LocalJudgeError, match="dependencies are missing"
+    ) as error:
         await manager.ensure()
+    diagnostic = local_judge.Path(str(error.value).split("Startup log: ", 1)[1])
+    assert diagnostic.read_text() == "Network connectivity is disabled\n"
+    with pytest.raises(local_judge.LocalJudgeError, match="dependencies are missing"):
+        await manager.ensure()
+    assert len(attempts) == 1
+    manager.retry_at = 0
+    with pytest.raises(local_judge.LocalJudgeError) as retry:
+        await manager.ensure()
+    assert len(attempts) == 2
+    local_judge.Path(str(retry.value).split("Startup log: ", 1)[1]).unlink()
+    assert diagnostic.stat().st_mode & 0o077 == 0
+    diagnostic.unlink()
     assert manager.process is None and manager.log is None

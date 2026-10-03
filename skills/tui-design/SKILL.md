@@ -14,7 +14,8 @@ This is contributor guidance, never a prompt for a character or selector model.
 - `tui/`: Bubble Tea **v2**, Bubbles v2 and Lip Gloss v2. Use the APIs in `go.mod`;
   don't copy v1 `View() string` examples into this v2 application.
 - `model.go`, `update.go`, `view.go`: UI state, event handling and layout/rendering.
-- `command.go`, `bindings.go`, `help.go`: completion, customizable bindings and help.
+- `command_registry.go`: shared command names, aliases, descriptions and help text.
+- `command.go`, `bindings.go`, `help.go`: completion, customizable bindings and help views.
 - `navigation_context.go`, `target.go`: focused context, page restoration and targets.
 - `document.go`, `branches.go`, `notes.go`: document navigation and lineage.
 - `loom_grid.go`, `conversations.go`, `simulator.go`: streaming comparison and traces.

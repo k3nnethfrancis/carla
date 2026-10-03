@@ -43,27 +43,27 @@ func TestLongSpecScrollResizeAndSave(t *testing.T) {
 }
 
 func TestNewEvaluationUsesMultilineSpecEditor(t *testing.T) {
-	m := policyFixture()
+	m := evalFixture()
 	m.width, m.height = 100, 30
-	parent := &dialog{kind: "eval-definitions"}
-	d := &dialog{kind: "eval-new", parent: parent, args: map[string]any{"kind": "jev"}}
-	d.add("Name", "Long criteria")
-	m.dialog = d
+	m.openPolicyBehaviors("policy")
+	m.dialog.index = len(m.dialog.rows) - 1
 	m.submitDialog()
-	if m.dialog != nil || m.editing != "evaluation-new-spec" || m.editor.Height() < 5 {
+	m.dialog.fields[0].input.SetValue("Long criteria")
+	m.submitDialog()
+	if m.dialog != nil || m.editing != "policy-behavior-new" || m.editor.Height() < 5 {
 		t.Fatal("single-line creation spec")
 	}
 	spec := strings.Repeat("Criterion\n", 80)
 	m.editor.SetValue(spec)
 	req := captureCommand(t, m, m.saveEditor)
-	var actual string
-	json.Unmarshal(req.Args["spec"], &actual)
-	if req.Command != "evaluation.configure" || actual != spec {
+	var behaviors []evaluationBehavior
+	json.Unmarshal(req.Args["behaviors"], &behaviors)
+	if req.Command != "evaluation.policy.save" || behaviors[len(behaviors)-1].Spec != spec {
 		t.Fatal("criteria truncated")
 	}
 	data, _ := json.Marshal(m.data)
 	m.apply(event{Type: "state", ID: req.ID, Data: data})
-	if m.editing != "" || m.dialog == nil || m.dialog.kind != "eval-definitions" {
-		t.Fatal("save did not return to evaluations")
+	if m.editing != "" || m.dialog == nil || m.dialog.kind != "eval-policy-behaviors" {
+		t.Fatal("save did not return to judge behaviors")
 	}
 }

@@ -31,6 +31,11 @@ type node struct {
 	Kept                                                         bool
 	Origins                                                      []origin
 }
+type modelContext struct {
+	Configured int `json:"configured"`
+	Native     int `json:"native"`
+}
+
 type localModel struct{ Name, Alias string }
 type settings struct {
 	Count       int     `json:"count"`
@@ -43,7 +48,18 @@ type annotation struct {
 	ID, Node, Quote, Verdict, Note string
 	Start, End                     int
 }
-type policyRun struct{ ID, Status, Selected string }
+type policyStep struct {
+	Candidates        []string
+	Loop              int
+	Status            string
+	Outcomes, Reasons map[string]string
+}
+type policyRun struct {
+	ID, Status, Selected, Error string
+	RetryOf                     string `json:"retry_of"`
+	Loops                       int
+	Steps                       []policyStep
+}
 type monitorResult struct {
 	EndOfTurn     bool `json:"end_of_turn"`
 	Phase         string
@@ -69,6 +85,9 @@ type simulationConversation struct {
 	Turns      []simulationTurn
 }
 type simulationRun struct {
+	Browsed               bool
+	PolicyRun             string `json:"policy_run"`
+	Loop                  int
 	Label                 string `json:"label"`
 	Title                 string `json:"title"`
 	ShortLabel            string `json:"short_label"`
@@ -106,38 +125,47 @@ type documentSet struct {
 	Action         string
 }
 type state struct {
-	SelectionEnabled bool                   `json:"selection_enabled"`
-	DocumentHeads    map[string]string      `json:"document_heads"`
-	DocumentSetHeads map[string]string      `json:"document_set_heads"`
-	DocumentSets     []documentSet          `json:"document_sets"`
-	EvaluationSets   []evaluationCollection `json:"evaluation_sets"`
-	ActiveEvaluation string                 `json:"active_evaluation"`
-	MonitorKeySource string                 `json:"monitor_key_source"`
-	Evaluators       []evaluator
-	Evaluations      []evaluationSummary
-	EvaluationPrompt string `json:"evaluation_prompt"`
-	Workspace        workspace
-	Workspaces       []workspace
-	Selected         []string
-	Nodes            []node
-	Current          *node
-	Models           []localModel
-	ModelAlias       string `json:"model_alias"`
-	ModelContext     int    `json:"model_context"`
-	NativeContext    int    `json:"native_context"`
-	Settings         settings
-	PolicySpec       string `json:"policy_spec"`
-	PolicyPrompt     string `json:"policy_prompt"`
-	PolicyModel      string `json:"policy_model"`
-	Annotations      []annotation
-	SimulatorConfig  map[string]any    `json:"simulator_config"`
-	SimulationRuns   []runSummary      `json:"simulation_runs"`
-	GrowSettings     settings          `json:"grow_settings"`
-	SelectorModels   []localModel      `json:"selector_models"`
-	PolicyRuns       []policyRun       `json:"policy_runs"`
-	Bindings         map[string]string `json:"bindings"`
-	ActiveNode       string            `json:"active_node"`
-	Busy             bool
+	BehaviorLibrary           []libraryBehavior              `json:"behavior_library"`
+	OperationalPolicies       map[string][]operationalPolicy `json:"operational_policies"`
+	ActiveOperationalPolicies map[string]string              `json:"active_operational_policies"`
+	SelectionEnabled          bool                           `json:"selection_enabled"`
+	DocumentHeads             map[string]string              `json:"document_heads"`
+	DocumentSetHeads          map[string]string              `json:"document_set_heads"`
+	DocumentSets              []documentSet                  `json:"document_sets"`
+	EvaluationPolicies        []evaluationPolicy             `json:"evaluation_policies"`
+	ActiveEvaluationPolicy    string                         `json:"active_evaluation_policy"`
+	EvaluationRuns            []evaluationRun                `json:"evaluation_runs"`
+	EvaluationSets            []evaluationCollection         `json:"evaluation_sets"`
+	ActiveEvaluation          string                         `json:"active_evaluation"`
+	MonitorKeySource          string                         `json:"monitor_key_source"`
+	Evaluators                []evaluator
+	Evaluations               []evaluationSummary
+	EvaluationPrompt          string `json:"evaluation_prompt"`
+	Workspace                 workspace
+	Workspaces                []workspace
+	Selected                  []string
+	Nodes                     []node
+	Current                   *node
+	Models                    []localModel
+	ModelAlias                string                  `json:"model_alias"`
+	ModelContext              int                     `json:"model_context"`
+	NativeContext             int                     `json:"native_context"`
+	ModelContexts             map[string]modelContext `json:"model_contexts"`
+	Settings                  settings
+	PolicySpec                string `json:"policy_spec"`
+	PolicyPrompt              string `json:"policy_prompt"`
+	SelectionAssessmentPrompt string `json:"selection_assessment_prompt"`
+	SelectionCallMode         string `json:"selection_call_mode"`
+	PolicyModel               string `json:"policy_model"`
+	Annotations               []annotation
+	SimulatorConfig           map[string]any    `json:"simulator_config"`
+	SimulationRuns            []runSummary      `json:"simulation_runs"`
+	GrowSettings              settings          `json:"grow_settings"`
+	SelectorModels            []localModel      `json:"selector_models"`
+	PolicyRuns                []policyRun       `json:"policy_runs"`
+	Bindings                  map[string]string `json:"bindings"`
+	ActiveNode                string            `json:"active_node"`
+	Busy                      bool
 }
 type row struct {
 	id, label, kind, preview string
@@ -164,6 +192,7 @@ type dialog struct {
 type loomTile struct{ ID, Title, Text, Status string }
 
 type model struct {
+	labelScroll                 labelScrollState
 	branchScroll                int
 	branchScrollRow             string
 	pendingDocumentNodes        map[string]bool
@@ -171,8 +200,12 @@ type model struct {
 	pendingDocumentSelection    map[string]bool
 	pendingDocumentGroups       map[string][]string
 	pendingDocumentSet          string
+	evalArea                    string
+	evalRun                     *evaluationRun
 	evalCollection              string
-	evalCreating                bool
+	evalCreating                string
+	evalPolicyCreating          string
+	evalPolicyExisting          map[string]bool
 	behaviorDraft               *loomDimension
 	behaviorEditID              string
 	behaviorCreating            string
@@ -293,6 +326,7 @@ func (m *model) dispatch(command string, args map[string]any) (string, tea.Cmd) 
 	if m.pending {
 		return "", nil
 	}
+	command, args = m.routeOperationalMutation(command, args)
 	m.pending = true
 	return m.client.request(command, args)
 }
@@ -383,7 +417,7 @@ func (m *model) activate() tea.Cmd {
 	m.selected = min(m.selected, len(rows)-1)
 	r := rows[m.selected]
 	switch r.kind {
-	case "eval-collection", "eval-create", "eval-back", "eval-config", "eval-add", "eval-execute":
+	case "eval-area", "eval-run", "eval-policy", "eval-policy-new", "eval-collection", "eval-create", "eval-back", "eval-config", "eval-add", "eval-new-run":
 		return m.evaluationCollectionAction(r.kind, r.id)
 	case "evaluation":
 		m.focus = 1
@@ -475,13 +509,14 @@ func (m *model) beginEdit(kind string) tea.Cmd {
 	} else if kind == "monitor_spec" {
 		text = m.dimension(m.behaviorEditID).Spec
 	} else if kind == "policy_spec" {
-		text = m.data.PolicySpec
-	} else if kind == "policy_prompt" {
-		text = m.data.PolicyPrompt
+		text = m.selectionSpec()
+	} else if kind == "policy_prompt" || kind == "selection_assessment_prompt" {
+		text = m.selectionString(kind)
 	} else if m.data.Current == nil {
 		return nil
 	}
 	m.editing = kind
+	text = explicitTemplate(kind, text)
 	m.editNode = m.currentID()
 	m.editor.SetValue(text)
 	m.editor.CursorEnd()
@@ -489,7 +524,7 @@ func (m *model) beginEdit(kind string) tea.Cmd {
 	m.reflow()
 	return m.editor.Focus()
 }
-func (m *model) saveEditor() tea.Cmd {
+func (m *model) persistEditor() tea.Cmd {
 	if m.pending || m.data.Busy {
 		return nil
 	}
@@ -506,29 +541,17 @@ func (m *model) saveEditor() tea.Cmd {
 		}
 		return m.submitEditor("loom-policy.update", args)
 	}
-	if kind == "evaluation-new-spec" {
-		if strings.TrimSpace(text) == "" {
-			m.status = "Enter criteria before saving"
-			return nil
-		}
-		d := m.editReturn
-		args := map[string]any{"name": d.fields[0].input.Value(), "spec": text, "kind": d.args["kind"], "prompt": m.data.EvaluationPrompt, "threshold": 0.8, "model": m.simString("monitor_model")}
-		if args["kind"] == "diffusion" {
-			args["model"] = m.simString("monitor_local_model")
-			args["endpoint"] = "auto"
-		}
-		if args["kind"] == "llm" {
-			args["model"] = m.data.SelectorModels[0].Alias
-		}
-		return m.submitEditor("evaluation.configure", args)
+	if kind == "operational-selection-new" {
+		return m.saveOperationalSelectionDraft(text)
 	}
-	if strings.HasPrefix(kind, "evaluation-") {
-		if kind == "evaluation-note" {
-			return m.submitEditor("evaluation.item.annotate", map[string]any{"collection": m.evalCollection, "ids": []string{m.evalEditingID}, "note": text})
-		}
-		args := m.evaluator(m.evalEditingID).args()
-		args[strings.TrimPrefix(kind, "evaluation-")] = text
-		return m.submitEditor("evaluation.configure", args)
+	if kind == "library-spec" {
+		return m.saveLibraryEditor(text)
+	}
+	if strings.HasPrefix(kind, "policy-") {
+		return m.savePolicyEditor(text)
+	}
+	if kind == "evaluation-note" {
+		return m.submitEditor("evaluation.item.annotate", map[string]any{"collection": m.evalCollection, "ids": []string{m.evalEditingID}, "note": text})
 	}
 	if kind == "conversation" && strings.TrimSpace(text) == "" {
 		m.status = "Write a message before saving"
@@ -579,6 +602,60 @@ func (m *model) branch() tea.Cmd {
 }
 func (m *model) apply(e event) tea.Cmd {
 	switch e.Type {
+	case "evaluation_progress":
+		var progress evaluationProgress
+		if err := json.Unmarshal(e.Data, &progress); err != nil {
+			return nil
+		}
+		if m.evalRun != nil && m.evalRun.ID == progress.Run {
+			if m.evalRun.Progress.Record == progress.Record {
+				progress.Text = m.evalRun.Progress.Text + progress.Text
+			}
+			m.evalRun.Progress = progress
+			m.reflow()
+		}
+		return nil
+	case "evaluation_run":
+		var run evaluationRun
+		if err := json.Unmarshal(e.Data, &run); err != nil {
+			return func() tea.Msg { return failure{err} }
+		}
+		if m.evalRun != nil && m.evalRun.ID == run.ID && run.Status == "running" {
+			run.Progress = m.evalRun.Progress
+		}
+		found := false
+		for i := range m.data.EvaluationRuns {
+			if m.data.EvaluationRuns[i].ID == run.ID {
+				m.data.EvaluationRuns[i] = run
+				found = true
+				break
+			}
+		}
+		if !found {
+			m.data.EvaluationRuns = append(m.data.EvaluationRuns, run)
+		}
+		if run.Opened {
+			m.section, m.evalArea, m.evalCollection = 4, "runs", ""
+			m.filter, m.evalFilter = "", ""
+			m.focus = 1
+			for i, r := range m.rows() {
+				if r.id == run.ID {
+					m.selected = i
+					break
+				}
+			}
+		}
+		// Background updates must not replace a different run the user opened.
+		if run.Live && !run.Opened && m.evalRun != nil && m.evalRun.ID != run.ID {
+			return nil
+		}
+		if m.evalRun == nil || m.evalRun.ID != run.ID {
+			m.document.GotoTop()
+		}
+		m.evalRun = &run
+		m.pending = false
+		m.reflow()
+		return nil
 	case "evaluation":
 		var record evaluationRecord
 		if err := json.Unmarshal(e.Data, &record); err != nil {
@@ -650,6 +727,33 @@ func (m *model) apply(e event) tea.Cmd {
 			m.simulationViews = map[string]*simulationRun{}
 		}
 		m.simulationViews[run.ID] = &run
+		if run.Browsed {
+			m.pending = false
+			r := m.targetRow()
+			matches := r.kind == "simulation" && r.id == run.ID || r.kind == "simulation-group" && r.id == run.GridGroup
+			if target, ok := gridConversation(r.id); ok && r.kind == "conversation" {
+				matches = target.Run == run.ID && run.OpenConversation != nil && target.Conversation == *run.OpenConversation
+			}
+			if m.section != 3 || m.focus != 0 || m.dialog != nil || m.editing != "" {
+				return nil
+			}
+			if !matches {
+				return m.previewTarget()
+			}
+			m.simulation = &run
+			m.gridGroup = run.GridGroup
+			m.conversationOpen = run.OpenConversation != nil || len(run.Conversations) == 1 && run.GridGroup == ""
+			m.gridSelection = 0
+			if run.OpenConversation != nil {
+				m.gridSelection = *run.OpenConversation
+			}
+			m.loomGrid = !m.conversationOpen
+			m.gridPinned = false
+			m.document.GotoTop()
+			m.reflow()
+			return nil
+		}
+
 		if !run.Opened {
 			updated := false
 			for i := range m.data.SimulationRuns {
@@ -664,7 +768,7 @@ func (m *model) apply(e event) tea.Cmd {
 				m.data.SimulationRuns = append(m.data.SimulationRuns, runSummary{Label: run.Label, Title: run.Title, ShortLabel: run.ShortLabel, OperationTitle: run.OperationTitle, AlternativeTitle: run.AlternativeTitle, OperationLabel: run.OperationLabel, OperationShortLabel: run.OperationShortLabel, AlternativeLabel: run.AlternativeLabel, AlternativeShortLabel: run.AlternativeShortLabel, ID: run.ID, Count: len(run.Conversations), Status: run.Status, Conversations: run.Conversations, Parent: run.Parent, AlternativeScope: run.AlternativeScope, SourceScope: run.SourceScope, AlternativeGroup: run.AlternativeGroup, AlternativeIndex: run.AlternativeIndex, AlternativeCount: run.AlternativeCount})
 			}
 		}
-		newView := run.Opened || m.simulation == nil && (m.awaitingSimulation || m.simSelection == nil)
+		newView := run.Opened || m.simulation == nil && m.awaitingSimulation
 		preserveSelection := m.preserveSimulationSelection
 		if newView {
 			m.awaitingSimulation = false
@@ -687,7 +791,8 @@ func (m *model) apply(e event) tea.Cmd {
 			m.gridPinned = true
 			m.focus = 1
 		}
-		if run.Opened && m.restoringView {
+		restored := run.Opened && m.restoringView
+		if restored {
 			m.restoringView = false
 			m.focus, m.sectionFocus = 3, false
 			m.command.Focus()
@@ -710,7 +815,7 @@ func (m *model) apply(e event) tea.Cmd {
 		if run.Opened || newView || m.simulation != nil && m.simulation.ID == run.ID {
 			m.simulation = &run
 		}
-		if newView && !m.conversationOpen {
+		if newView && !m.conversationOpen && !restored {
 			m.selectLoomRow()
 		}
 		if newView && m.conversationOpen {
@@ -799,15 +904,28 @@ func (m *model) apply(e event) tea.Cmd {
 			return func() tea.Msg { return failure{err} }
 		}
 		m.pending = false
+		openCreatedPolicy := m.evalPolicyCreating != "" && e.ID == m.evalPolicyCreating && m.dialog == m.savingDialog
 		if m.dialogRequest != "" && e.ID == m.dialogRequest {
 			if m.dialog == m.savingDialog {
-				m.dialog = m.savingDialog.parent
+				if m.savingDialog.kind == "eval-run-config" {
+					m.dialog = nil
+					m.section = 4
+					m.evalArea = "runs"
+					m.enterCollection("")
+				} else if m.savingDialog.kind == "eval-collection-delete" {
+					m.dialog = nil
+					m.evalArea = "data"
+					m.enterCollection("")
+					m.status = "Collection removed · sources and Runs retained"
+				} else {
+					m.dialog = m.savingDialog.parent
+				}
 			}
 			m.dialogRequest, m.savingDialog = "", nil
 		}
 		if m.editRequest != "" {
 			if e.ID == m.editRequest {
-				if m.editing == "evaluation-new-spec" && m.editReturn != nil {
+				if m.editReturn != nil && (m.editing == "operational-selection-new" || m.editing == "policy-behavior-new" || (m.editing == "library-spec" && m.editReturn.kind == "behavior-library-new")) {
 					m.editReturn = m.editReturn.parent
 				}
 				m.enterLoom = m.editing == "document"
@@ -845,9 +963,22 @@ func (m *model) apply(e event) tea.Cmd {
 			m.behaviorDraft = nil
 		}
 		m.refreshConfig()
-		if m.evalCreating {
-			m.evalCreating = false
+		if m.evalPolicyCreating != "" && e.ID == m.evalPolicyCreating {
+			m.evalPolicyCreating = ""
+			for _, policy := range m.data.EvaluationPolicies {
+				if openCreatedPolicy && !m.evalPolicyExisting[policy.ID] {
+					parent := m.dialog
+					m.openEvaluationPolicy(policy.ID)
+					m.dialog.parent = parent
+					break
+				}
+			}
+			m.evalPolicyExisting = nil
+		}
+		if m.evalCreating != "" && m.evalCreating == e.ID {
+			m.evalCreating = ""
 			m.enterCollection(m.data.ActiveEvaluation)
+			m.openCollectionItems()
 		}
 		if createdBehavior != "" && m.dialog != nil && m.dialog.kind == "loom-policy-behaviors" {
 			for i, r := range m.dialog.rows {
@@ -872,6 +1003,8 @@ func (m *model) apply(e event) tea.Cmd {
 			m.behaviorDraft = nil
 			m.behaviorCreating = ""
 			m.evalCollection = ""
+			m.evalArea = ""
+			m.evalRun = nil
 			m.evaluation = nil
 			m.evalViewedID = ""
 			m.evaluationRaw = nil
@@ -990,6 +1123,9 @@ func (m *model) apply(e event) tea.Cmd {
 				return m.previewTarget()
 			}
 		}
+		if m.section == 4 && m.evalArea == "runs" {
+			return m.previewTarget()
+		}
 	case "token":
 		var t struct{ Node, Text string }
 		json.Unmarshal(e.Data, &t)
@@ -1055,6 +1191,10 @@ func (m *model) apply(e event) tea.Cmd {
 		m.keySaving = false
 		m.restoringView = false
 		m.behaviorCreating = ""
+		if e.ID == "" || e.ID == m.evalPolicyCreating {
+			m.evalPolicyCreating = ""
+			m.evalPolicyExisting = nil
+		}
 		var err struct{ Message string }
 		json.Unmarshal(e.Data, &err)
 		m.pending = false

@@ -2,9 +2,7 @@ package main
 
 import (
 	tea "charm.land/bubbletea/v2"
-	"fmt"
 	"strings"
-	"time"
 )
 
 // The palette is a temporary layer, not another document editing mode.
@@ -19,6 +17,8 @@ type pagePosition struct {
 	notes                                    bool
 }
 type runSummary struct {
+	PolicyRun             string `json:"policy_run"`
+	Loop                  int
 	Label                 string `json:"label"`
 	Title                 string `json:"title"`
 	ShortLabel            string `json:"short_label"`
@@ -108,12 +108,34 @@ func (m *model) refreshConfig() {
 		return
 	}
 	switch d.kind {
+	case "policy":
+		m.openPolicy()
+	case "behavior-library":
+		m.openBehaviorLibrary()
+	case "behavior-library-item":
+		m.openLibraryBehavior(d.args["id"].(string))
+	case "operational-policy-list":
+		m.openOperationalPolicies(d.args["purpose"].(string))
+	case "eval-policy-list":
+		m.openEvaluationPolicies()
+	case "eval-policy-config":
+		m.openEvaluationPolicy(d.args["id"].(string))
+	case "eval-policy-judge":
+		m.openPolicyJudge(d.args["id"].(string), d.args["judge"].(int))
+	case "eval-policy-behaviors":
+		m.openPolicyBehaviors(d.args["id"].(string))
+	case "eval-policy-behavior":
+		m.openPolicyBehavior(d.args["id"].(string), d.args["behavior"].(int))
 	case "eval-collection-config":
 		m.openConfig()
 	case "eval-definitions":
 		m.openEvaluators()
-	case "eval-definition":
-		m.openEvaluator(d.args["id"].(string))
+	case "loom-policy-actions-list":
+		m.openMonitorActions()
+	case "loom-policy-actions":
+		m.openMonitorAction(d.args["id"].(string))
+	case "loom-policy-judge":
+		m.openMonitorJudge()
 	case "loom-policy-behaviors":
 		m.openBehaviors()
 	case "loom-policy":
@@ -125,14 +147,39 @@ func (m *model) refreshConfig() {
 	case "sim-openings":
 		m.openOpeningConfig()
 	case "sim-config":
+		if group, ok := d.args["settings_group"].(string); ok {
+			m.openSimulatorSettings(group)
+		} else if d.title == "Prompts" {
+			m.openSimulatorPrompts()
+		} else if d.title == "Context limits" {
+			m.openSimulatorContexts()
+		} else {
+			m.openConfig()
+		}
+	case "loom-config":
 		m.openConfig()
 	case "sim-speakers":
 		m.speakerPicker()
 	case "grow-config":
-		if d.title == "Selection policy" {
+		if d.args["selection_behavior"] != nil {
+			m.openSelectionBehavior()
+			break
+		}
+		switch d.title {
+		case "Selection judge":
+			m.openSelectionJudge()
+		case "Selection behaviors":
+			m.openSelectionBehaviors()
+		case "Selection criteria", "Selection behavior":
+			m.openSelectionBehavior()
+		case "Selection policy":
 			m.openSelectionConfig()
-		} else {
-			m.openGrowConfig()
+		default:
+			if strings.HasPrefix(d.title, "Selection policy") {
+				m.openSelectionConfig()
+			} else {
+				m.openGrowConfig()
+			}
 		}
 	case "sim-sampling":
 		m.openSampling(d.args["group"].(string))
@@ -140,6 +187,14 @@ func (m *model) refreshConfig() {
 		return
 	}
 	m.dialog.parent = d.parent
+	for _, key := range []string{"operational_purpose", "operational_id", "selection_behavior"} {
+		if value, ok := d.args[key]; ok {
+			if m.dialog.args == nil {
+				m.dialog.args = map[string]any{}
+			}
+			m.dialog.args[key] = value
+		}
+	}
 	// Keep a filtered choice stable when its saved value refreshes the panel.
 	if d.query != "" {
 		m.dialog.query = d.query
@@ -157,10 +212,13 @@ func (m *model) refreshConfig() {
 	}
 }
 func (m *model) saveDialog(d *dialog, command string, args map[string]any) tea.Cmd {
-	// Keep the local model field visible until backend validation succeeds.
-	if len(d.fields) > 0 && d.args["field"] == "monitor_local_model" {
+	// Keep validation-sensitive forms open until their own backend reply arrives.
+	if command == "evaluation.collection.delete" || d.kind == "eval-run-config" || d.kind == "eval-collection-new" || d.kind == "eval-policy-new" || len(d.fields) > 0 && d.args["field"] == "monitor_local_model" {
 		id, cmd := m.dispatch(command, args)
 		if cmd != nil {
+			if d.args == nil {
+				d.args = map[string]any{}
+			}
 			delete(d.args, "error")
 			m.dialogRequest, m.savingDialog = id, d
 		}
@@ -191,7 +249,14 @@ func (m *model) openSampling(group string) tea.Cmd {
 	d := &dialog{kind: "sim-sampling", title: strings.TrimSuffix(group, "_settings") + " sampling", args: map[string]any{"group": group}}
 	values, _ := m.data.SimulatorConfig[group].(map[string]any)
 	for _, key := range []string{"n_predict", "temperature", "top_p"} {
-		d.rows = append(d.rows, row{id: key, label: samplingLabel(key) + " · " + samplingValue(key, values[key])})
+		if key == "n_predict" && group != "opening_settings" {
+			continue // Speaker token limits are first-level configuration controls.
+		}
+		d.rows = append(d.rows, row{id: key, label: samplingLabel(key) + " · " + samplingValue(key, values[key]), preview: map[string]string{
+			"n_predict":   "Maximum new tokens for a generated opening.",
+			"temperature": "Higher values increase variation; lower values favor likely continuations.",
+			"top_p":       "Sample from tokens covering this cumulative probability (0–1).",
+		}[key]})
 	}
 	m.dialog = d
 	return nil
@@ -264,20 +329,6 @@ func documentLabel(n node) string {
 	}
 	return n.Kind + " · " + n.ID[:min(6, len(n.ID))]
 }
-func runLabel(r runSummary) string {
-	date := r.Created
-	if t, err := time.Parse(time.RFC3339Nano, date); err == nil {
-		date = t.Local().Format("Jan 2 15:04")
-	}
-	status := strings.ReplaceAll(r.Status, "_", " ")
-	if r.Status == "needs_review" {
-		status = "finished / early stops"
-	}
-	if r.PolicyStops > 0 {
-		status += fmt.Sprintf(" / %d policy stops", r.PolicyStops)
-	}
-	return fmt.Sprintf("%s · %s · %d conv · %s", date, status, r.Count, simulationName(r.Title, "", r.Label, r.ID))
-}
 func filterRows(rows []row, query string) []row {
 	if strings.TrimSpace(query) == "" {
 		return rows
@@ -300,7 +351,7 @@ func filterRows(rows []row, query string) []row {
 }
 func (m *model) filterDialog(msg tea.KeyPressMsg) bool {
 	d := m.dialog
-	if len(d.fields) > 0 || d.kind == "keys" || d.kind == "delete" || (strings.HasPrefix(d.kind, "setup-") && d.kind != "setup-files") {
+	if len(d.fields) > 0 || d.kind == "judge-prompt-confirm" || d.kind == "keys" || d.kind == "delete" || (strings.HasPrefix(d.kind, "setup-") && d.kind != "setup-files") {
 		return false
 	}
 	if msg.Code != tea.KeyBackspace && (msg.Text == "" || msg.Mod != 0) {
@@ -325,6 +376,9 @@ func (m *model) filterDialog(msg tea.KeyPressMsg) bool {
 // Closing an auxiliary command such as Help restores a suspended picker/editor.
 func (m *model) closeDialog() tea.Cmd {
 	d := m.dialog
+	if d != nil && d.kind == "judge-prompt-confirm" {
+		return m.resumeJudgePromptDraft()
+	}
 	if d != nil && d.kind == "loom-policy-dimension" && d.args["id"] == "draft" {
 		m.behaviorDraft = nil
 	}
@@ -334,9 +388,14 @@ func (m *model) closeDialog() tea.Cmd {
 		return m.send("cancel", nil)
 	}
 	if d != nil && d.parent != nil {
-		m.dialog = d.parent
-		if d.kind == "loom-policy-timing" || d.kind == "loom-policy-dimension" {
-			m.refreshConfig()
+		parent := d.parent
+		m.dialog = parent
+		// Every supported configuration parent reads authoritative state again.
+		// refreshConfig is a no-op for other dialogs and preserves row/filter.
+		m.refreshConfig()
+		if m.dialog != parent {
+			*parent = *m.dialog
+			m.dialog = parent
 		}
 		return nil
 	}

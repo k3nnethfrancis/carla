@@ -67,6 +67,27 @@ bindings. `/` focuses the command bar, including from the document editor.
 The Keys dialog covers listed actions and navigation; its own capture, reset,
 save and cancel controls stay fixed so you can always recover a binding.
 
+## From a seed to evaluated conversations
+
+With a base model configured, one small experiment takes six steps:
+
+1. **Library:** select seed passages with Space, then Enter to open them in Branches.
+2. **Branches:** run `/loom 3 --tokens 512` to explore three continuations.
+3. **Keep a favorite:** select a result and use `/add` to keep it in Anthology.
+4. **Anthology:** select that document and run `/loom 4 --turns 2` to open four
+   conversations in Simulator. Select a conversation or its parent set and use
+   `/continue` to take it further.
+5. **Judge:** configure an Evals policy in `/policy` → Evals, including its model
+   and behaviors. Select conversations and run `/eval` using the active policy.
+6. **Curate and export:** review results in Evaluate, mark useful items for
+   training, then `/export` the selected data and metadata. Training itself is
+   not implemented yet.
+
+You only need **Loom → Add → Loom → Eval → Export** for this first pass.
+`/config` sets defaults, `/policy` sets judging rules, `/inspect` explains a
+saved result, and `/stop` stops active work. Monitoring, automatic selection and
+multiple loops can wait until this basic flow feels familiar.
+
 ## Commands at a glance
 
 Type `/` anywhere to open the command bar. Start typing, use ↑/↓ to select a
@@ -88,6 +109,7 @@ typing a prefix such as `/lo`. `/help` explains each option; press Enter on a co
 | `/library` · `/branches` · `/anthology` · `/simulator` · `/evaluate` | Open a stage. |
 
 [Commands](docs/commands.md) covers flags, selection, editing and exports;
+the [generated reference](docs/command-reference.md) shares its source with `/help`;
 [interaction model](docs/interaction-model.md) explains object identity and grouping.
 Models, workspace selection and keybindings are available through `/config`.
 
@@ -130,31 +152,6 @@ carla --setup-model
 GGUF is a file format; quantization is optional. Model weights are never bundled
 or downloaded automatically. A missing model does not prevent source browsing.
 
-## Work through an experiment
-
-- **Library:** Space selects passages; Enter opens their text as a new seed root in
-  Branches. [Import your own text](docs/configuration.md#document-library).
-- **Branches:** `/loom --tokens 512` continues the document (or an explicitly positioned cursor);
-  `/loom 3 --tokens 512` samples three alternatives. `/branch` forks the current
-  version without generating. Edits preserve ancestry.
-- **Anthology:** `/add` retains a document for curation. Keeping is a human
-  selection, not an automatic quality verdict or training step.
-- **Simulator:** `/config` chooses documents, speakers, openings and sampling.
-  `/loom 3 --turns 4 --tokens 512` produces three conversations with four new
-  character replies each. A visitor replies between character turns. Selecting
-  an existing conversation resumes its frozen document context and history.
-  Use `/clear` to start fresh; hovering over a conversation or batch does not select it. Multi-output runs stream into a selectable grid.
-- **Evaluate:** create a named collection, choose judges, add frozen documents or
-  conversations, and run judgments. Review evidence, add notes and mark items for
-  training. Existing judgments can be attached without another model call.
-  `/export` saves selected evaluation items or the collection, including evidence and training marks.
-
-`/loom 3 --tokens 512 --loops 4` creates three alternatives and continues each
-for four generation chunks. Enable Selection in `/policy` to select and split
-again between loops instead.
-The selection policy lives under `/policy`; no policy instructions enter base-model
-prompts. It never automatically keeps documents. Configure a selector before
-using policy-guided split loops; see [configuration](docs/configuration.md).
 
 ## Policies and evaluations
 
@@ -163,22 +160,42 @@ These use criteria to judge text, but serve different purposes:
 | Mechanism | When it runs | What the result does |
 | --- | --- | --- |
 | Monitoring | During generation and/or after replies | Flags conditions such as looping; warns or stops only as configured. Off by default. |
-| Selection | During multi-loop Loom runs | Reviews candidates and chooses one path to develop. Does not automatically keep or mark it for training. |
+| Selection | Split Loom runs with explicit `--loops` | Reviews candidates and chooses one path to develop. Does not automatically keep or mark it for training. |
 | Evaluation | On saved items, or after `/loom --eval "name"` | Records whole-item judgments in a named collection for review and dataset curation. |
 
-Use `/policy` to configure monitoring, selection and reusable judges. Selection
+Plain document `/loom`, `/loom N` and `/continue` generate without judging.
+Use `--monitoring on`, `--selection on` (with 2+ alternatives and explicit `--loops`)
+or `--eval "policy"` to opt in. Simulator uses its saved monitoring/selection settings.
+
+Use `/policy` to configure monitoring, selection and evaluation policies. Selection
 uses a local instruct model. Monitoring can use local DiffusionGemma through OpenJev, or optional Jev through
-OpenRouter. Evaluation judges also support the configured local instruct model.
+OpenRouter. Each evaluation policy uses one registered local instruct model as its judge.
 After [one-time setup](docs/local-judge.md), Carla starts and stops the Apple Silicon
 classifier automatically on an available local port.
 Hosted classification sends the assessed text to an external service and can
 incur charges. Local generation itself uses llama.cpp.
 
-In **Evaluate**, `/config` sets the collection's name, judges and active status.
-Adding items does not run judges. `/eval` runs the active evaluation on selected
-material; `/eval "Voice"` chooses a particular collection. An item passes when
-all its currently configured judge revisions pass. You can mark training items
-manually or use `/eval --train-on-pass true` to mark successful passes.
+`/policy` always opens Monitoring, Selection and Evals. Each category holds named
+policies with behaviors, judge settings and role-specific result handling. Monitoring and Selection
+use On/Off: enabling one switches the previous policy in that category Off.
+`/behaviors` is a reusable workspace library of specs; adding a spec to a policy
+keeps its settings local.
+
+**Evaluate** separates **Data**, **Policies** and **Runs**. Data is the saved
+documents and conversation traces. Policies contain behaviors and judge settings
+as separate sections. Each policy has one judge that assesses its enabled behaviors.
+The Policies view edits the same policies as `/policy` → Evals.
+**+ New run** configures a dataset, policy, data scope and On pass setting for one
+execution; **Runs** preserves its assessments. In Evaluate, `/eval` opens that
+setup for the focused dataset or selected items. Outside Evaluate, it runs the
+active policy on selected material. `/eval "Voice"` chooses a named policy.
+Adding data does not invoke a model. You can mark training items manually or use
+`/eval --train-on-pass true` to mark items that pass every behavior in that run.
+
+Selection and Evals separate observed behavior from **Pass when · Present/Absent**.
+Selection assesses each candidate before choosing among those that pass; Evals
+records whole-trace results and can mark passing data for training with **On pass**.
+Imported specs start Off for review.
 
 Changing a prompt, model or setting can be evaluated with the same collection
 and criteria; evaluation is not limited to training decisions. Saved source
@@ -194,12 +211,13 @@ Configuration exposes these authoring surfaces:
 | Input | Where to change it |
 | --- | --- |
 | Continuation input | Edit/fork the document and place the cursor; the exact prefix is sent to the base model. |
-| Character and Visitor templates | Simulator → `/config` → Character prompt / Visitor prompt |
-| Visitor brief | Simulator → `/config` → Visitor brief |
+| Character and Visitor templates | Simulator → `/config` → Prompts → Character prompt / Visitor prompt |
+| Visitor brief | Simulator → `/config` → Prompts → Visitor brief |
 | Fixed or generated opening | Simulator → `/config` → Opening; generated mode has its own prompt, model and sampling. |
-| Selection criteria and routing prompt | `/policy` → Selection |
-| Monitoring behavior specs | `/policy` → Monitoring → Behaviors |
-| Evaluation criteria and local judge prompt | `/policy` → Judge configurations |
+| Selection behaviors, assessment and choice templates | `/policy` → Selection |
+| Monitoring behavior specs | `/policy` → Monitoring → a policy → Behaviors |
+| Evaluation criteria | Evaluate → Policies → a policy → Behaviors |
+| Evaluation judge prompt and Call mode | Evaluate → Policies → a policy → Judge |
 
 Document Loom has no separate system-message wrapper. Conversation templates are
 explicit raw-completion prompts with anthology/history placeholders; there are

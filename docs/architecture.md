@@ -142,8 +142,8 @@ capacity reservation. Warn and monitor-provider errors do not stop generation.
 ## Frontend
 
 `tui/` owns command routing, contextual completion, keybindings, tree selection,
-conversation grids and the document editor. Library, Branches, Anthology and
-Simulator are the main views. Notes belong to documents. The terminal supplies
+conversation grids and the document editor. Library, Branches, Anthology,
+Simulator and Evaluate are the main views. Notes belong to documents. The terminal supplies
 light/dark base colors; provenance and speaker roles use distinct accents.
 Narrow terminals collapse panels; below 60 × 18 only a resize/quit view is shown.
 
@@ -151,7 +151,7 @@ See [commands](commands.md) for the command contract. `exploration.py` owns repe
 batches and evidence-backed selection; document and conversation generators own
 their outputs. `stream_monitor.py` shares bounded monitoring across both.
 
-See `service.py` for backend commands, `tui/command.go` for command descriptions,
+See `service.py` for backend commands, `tui/command_registry.go` for command names, descriptions, help and completion metadata,
 and tests alongside each subsystem for its executable behavioral contract.
 
 ## Model onboarding
@@ -173,31 +173,66 @@ only, with redirects/proxy inheritance disabled, no credentials and no remote
 fallback. The pinned launcher disables OpenJev routing and loads cached weights
 offline after setup. See [local judge setup](local-judge.md).
 
-## Evaluation records
+## Evaluation data, policies and runs
 
-`evaluation.py` owns versioned judge definitions and execution. Instruct judging
-reuses `Runtime.judge`; DiffusionGemma/Jev evaluation and monitoring share `monitor.classify`,
-retaining exact requests and provider results. Evaluation prompts never enter
-generation context. Monitoring and selection retain their operational owners.
+`evaluation_judges.py` owns policy-level judge and behavior definitions, validation
+and legacy definition conversion. `assessments.py` owns whole-input model calls,
+response validation and the deterministic observation → expected outcome mapping.
+`evaluation.py` owns evaluation execution and sequential per-judge model resolution.
+Selection calls the same assessment engine for each candidate, saves those records,
+then submits only eligible candidates to its separate choice call. Monitoring keeps
+its heartbeat owner and classifier execution, sharing the classifier transport.
+Local LLM assessment reuses `Runtime.judge`; DiffusionGemma/Jev assessment shares
+`monitor.classify`, retaining exact requests and provider results. Assessment
+prompts never enter generation context. Monitoring and selection retain their
+operational owners and context-specific actions.
 
-`evaluation_sets.py` owns named collections, frozen item membership, evidence
-references and training metadata. Workspace `evaluators` holds current judge
-definitions; `evaluations` holds immutable completed judgment records;
-`evaluation_sets` holds collections and `active_evaluation` selects the default.
-A one-time additive migration references historical results without rewriting them.
-Adding snapshots or attaching completed judgments requires no model call. Policy
-evidence retains turn/candidate scope rather than becoming a whole-item grade.
+`operational_policies.py` stores named Monitoring and Selection configurations,
+exclusive On/Off routing, and the workspace behavior-spec library. Enabling a
+policy projects its settings into the generation runtime and switches the
+previous policy Off. Disabled policies retain their settings without affecting
+runtime; all policies may be Off. Legacy configuration commands update the
+remembered policy through the same routing contract.
+The UI uses one `/policy` hub in every tab. Evaluate Policies is another entry
+to the same Evals catalog. Library imports copy the spec and its revision;
+changing a library entry does not mutate existing uses or historical runs.
 
-`/eval` captures targets before a cancellable session job. `/loom --eval name`
-freezes judge configuration at dispatch and chains evaluation after generation
-under the same operation lock. Re-evaluation appends results. Item notes and
-training membership have metadata histories. Normal state events carry collection
-summaries; opening an item requests its full text/evidence separately. Export
-writes training-marked items to a new workspace-local JSONL; it does not train.
+`evaluation_sets.py` owns data collections, frozen item membership, evidence
+references and training metadata. `evaluation_policies.py` owns reusable policy
+groups and run envelopes. The workspace stores:
 
-`tui/evaluation_collections.go` owns collection navigation, membership/configuration
-dialogs and item rendering. `tui/evaluation.go` owns judge dialogs and command
-execution. Both reuse the app's focus, editor and parent/back mechanisms.
+- `evaluators`: retained legacy definitions for compatibility and migration.
+- `evaluation_sets`: data collections and frozen items.
+- `behavior_library`: reusable, revisioned names and specs.
+- `operational_policies`: named Monitoring and Selection configurations, with
+  at most one On policy per category. `active_operational_policies` is the legacy
+  internal routing reference, retained to remember settings while all are Off;
+  it is not a separate user-visible activation state.
+- `evaluation_policies`: sibling actions, one judge (model, prompt, call mode) and
+  versioned behaviors (spec, enabled state, expected Present/Absent, threshold). Execution expands each
+  judge against every enabled behavior, retaining both identities in the result.
+  Exact resolved LLM configurations are frozen for execution; model changes unload
+  the previous runtime before the next starts.
+- `evaluations`: individual assessment records with frozen inputs and definitions.
+- `evaluation_runs`: execution envelopes referencing those records and preserving
+  the policy used. Historical run status comes from its records, not current policy.
+
+The additive migration creates policies from legacy collection configurations
+and run envelopes from historical result batches. It does not rewrite original
+judgments. Adding snapshots or attaching completed judgments invokes no model.
+Policy evidence retains turn/candidate scope rather than becoming a whole-item grade.
+
+`/eval [policy]` captures targets before a cancellable session job. Generation
+`--eval` freezes the chosen policy, judges and behaviors at dispatch and chains
+assessment after generation under the same operation lock. Reruns append results.
+Item notes and training membership have metadata histories. Snapshot events carry
+data, policy and run summaries; opening an item or run requests full results.
+Exports preserve frozen data, judgment history, notes and training marks in a
+workspace-local structured manifest plus text copies; they do not train a model.
+
+The Evaluate TUI uses the existing focus, editor, selection and Escape mechanisms
+for Data, Policies and Runs. Data collection membership and policy selection are
+independent; no additional named evaluation container is required.
 
 The frontend saves the last tab and document/trace row in each workspace's
 `view-state.json`, separately from project data. Startup restores that location
@@ -214,3 +249,25 @@ leaves for scheduling, and remaps saved output scopes to new IDs on splits.
 Continue retains conversation identities; document continuations save child
 versions. Current document sets resolve their current member heads, while old
 set snapshots and evaluated versions remain unchanged.
+
+
+### Prompt data and policy ownership
+
+`templates.py` resolves only `{{name}}` and dotted data lookups; list fields project
+in order and objects serialize as JSON. It never evaluates code or re-renders
+inserted text. `assessments.py` supplies behavior objects and full input; explicit
+templates own their placement, while a separate system message preserves the
+validated response contract. Instruction-only legacy prompts keep their prior
+JSON user envelope. Traces preserve template, context and rendered messages.
+Simulator uses the same renderer while accepting old single-brace formats.
+
+Monitoring policy storage owns `actions` keyed by behavior ID. Behaviors own their
+names, specs and detection rules (`decision`, `threshold`). The judge configures
+model, prompt and call mode. `expanded()` accepts the former `monitor_detection`
+map; migration folds it into behaviors without changing execution values or
+historical run snapshots. The UI exposes these settings at their owning level.
+
+Editable Evals policies allow zero judges while drafting and exactly one to run.
+The wire field remains `judges` for historical compatibility. Legacy multi-judge
+policies require an explicit replacement, which archives their prior settings in
+`previous_judges`. Frozen multi-judge run evidence remains supported by the harness.

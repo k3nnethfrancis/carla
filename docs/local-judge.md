@@ -20,7 +20,7 @@ repository:
 
 Requires `uv` and internet access for the initial installation and model download.
 Wait for `Application startup complete`, then stop that setup process with Ctrl+C.
-Carla subsequently starts the cached judge automatically when a local monitoring
+Carla subsequently starts the prepared judge automatically when a local monitoring
 or evaluation request needs it. No server address or port is required.
 
 The installer pins OpenJev and the
@@ -30,9 +30,15 @@ Carla's GGUF registry is unchanged. Allow about **17 GB of disk space** plus run
 installation space, and at least **16 GB free RAM for the classifier alone**.
 The generator, its KV cache, and other applications need additional memory.
 
-Automatic startup is cache-only: both the model and `uv` dependency environment
-must already be installed. Missing dependencies produce an installation message,
-not a background download. The worker disables model routing and credential use;
+Setup creates a persistent Python environment under
+`~/.local/share/character-lab/runtimes/openjev-a0ddd7d9-v1` (or under
+`CARLA_DATA_DIR`). Its resolved packages are recorded in `installed.txt`.
+Carla launches that Python directly: startup never resolves dependencies again.
+Use `./scripts/local-judge.sh --setup-only` to prepare it without leaving a server running.
+Automatic startup is offline: both the model and prepared runtime must exist. Missing dependencies produce an installation message,
+not a background download. If the offline Python cache is incomplete, rerun the
+setup script to repair it; cached weights are reused. Failed startups are held for
+60 seconds so each heartbeat does not launch another failing process. The worker disables model routing and credential use;
 its dependencies and model load with offline mode enabled.
 
 Carla asks the operating system for an available loopback port and retains that
@@ -49,21 +55,22 @@ in each judgment, even when the saved setting is `auto`.
 
 ## Use in Carla
 
-**Live monitoring:** `/policy` → Monitoring → **DiffusionGemma (local)**.
+**Live monitoring:** `/policy` → Monitoring → a policy. Enable monitoring and choose
+**DiffusionGemma (classifier)**. To change it later, open Judge → Model.
 The local worker starts automatically using `openjev-latest`. No API key is requested.
 Heartbeat, behavior specs, detection thresholds and Warn/Stop actions work exactly
 as for Jev. Call mode defaults to Separate (one request per enabled behavior).
 Bundled is available after a warning confirmation; fewer requests can be faster,
 but shared question context can change judgments. Monitoring remains Off in a new
 workspace until explicitly enabled.
-The same policy covers document continuations and Character replies; Visitor
-replies are not monitored separately.
+The same rules can assess document continuations with `--monitoring on`.
+Document Looms default to judging Off; Simulator follows the saved policy switch.
+Visitor replies are not monitored separately.
 
-**Whole-item evaluations:** `/policy` → Judge configurations → New judge →
-**DiffusionGemma (local)**. Add criteria and choose the pass threshold. Add that judge to a named evaluation in Evaluate, then run
-`/eval` on selected material or `/loom … --eval "evaluation name"`. Each result
-freezes its judge configuration, including automatic or explicit endpoint mode, alongside the exact
-request, response, provider and elapsed time. Later policy changes do not rewrite it.
+**Whole-item evaluations:** new Evals policies currently offer registered local
+LLMs only. Existing DiffusionGemma evaluation configurations and frozen results
+remain supported for compatibility; the model picker does not create new ones.
+Each result retains its exact judge configuration, request, response and timing.
 
 Selection during multi-loop Loom still uses the configured local instruct model;
 this addition does not replace its candidate/evidence contract.
@@ -86,6 +93,9 @@ Carla gives local requests a 120-second timeout (3 seconds to connect), with no
 retries or remote fallback. A missing service, timeout, oversized input or invalid
 score remains an explicit unavailable/error result. Monitoring errors do not stop
 generation; evaluation errors cannot create a pass or mark a new item for training.
+Failed managed startup retains a private temporary log; the error gives its path.
+This preserves dependency/model startup errors for diagnosis without changing
+providers or downloading anything automatically.
 Only a configured Stop rule applied to a successful classification stops output.
 Full history/text is sent: the service's context limit produces an error instead
 of silently truncating evidence (OpenJev defaults to 32,768 prompt tokens).

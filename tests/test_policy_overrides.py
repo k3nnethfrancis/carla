@@ -44,7 +44,9 @@ async def test_monitor_override_applies_then_reverts(session, monkeypatch, simul
     assert record["monitor_mode"] == "off"
     await session.execute(command, args, "default")
     await session.job
-    assert calls and set(calls) == {"jev"}
+    assert bool(calls) is simulator
+    if calls:
+        assert set(calls) == {"jev"}
     assert p.data["simulator_config"] == saved
     assert not [e for e in session.events if e[0] == "error"]
 
@@ -75,6 +77,11 @@ async def test_monitor_on_restores_provider_without_saving_override(
     await session.execute(command, {**args, "monitoring": True}, "on")
     await session.job
     assert calls == ["diffusion"]
+    if not simulator:
+        assert any(
+            kind == "operation" and data.get("stage") == "monitoring"
+            for kind, data, _ in session.events
+        )
     assert p.data["simulator_config"]["monitor_mode"] == "off"
     await session.execute(command, args, "default")
     await session.job
@@ -154,8 +161,9 @@ async def test_saved_selection_requires_explicit_loop_option(session, simulator)
     assert not p.data.get("policy_runs")
     await session.execute(command, {**args, "loops": 1}, "judged")
     await session.job
-    assert len(p.data["policy_runs"]) == 1
-    assert len(p.data["policy_runs"][0]["steps"]) == 1
+    assert len(p.data.get("policy_runs", [])) == int(simulator)
+    if simulator:
+        assert len(p.data["policy_runs"][0]["steps"]) == 1
     assert not [e for e in session.events if e[0] == "error"]
 
 
@@ -183,3 +191,41 @@ def test_explicit_selection_does_not_apply_to_continue():
         policy_overrides.selection(
             dict(selection=True, loops=1), False, "continue", 1, {}
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("count", [1, 4])
+@pytest.mark.parametrize("loops", [1, 2])
+async def test_document_loom_does_not_inherit_simulator_judging(
+    session, monkeypatch, count, loops
+):
+    from character_lab import evaluation_sets
+
+    await configure(session)
+    p = session.project
+    p.data["selection_enabled"] = True
+    p.data["simulator_config"].update(monitor_mode="diffusion")
+    saved = copy.deepcopy(p.data["simulator_config"])
+
+    async def no_judge(*args, **kwargs):
+        pytest.fail("Ordinary document Loom must not call a judge")
+
+    monkeypatch.setattr(monitor, "scan", no_judge)
+    monkeypatch.setattr(session.runtime_factory, "judge", no_judge)
+    monkeypatch.setattr(
+        evaluation_sets, "plan", lambda *a, **k: pytest.fail("Implicit eval")
+    )
+    before = len(p.data["nodes"])
+    await session.execute(
+        "continue",
+        dict(action="loom", count=count, loops=loops, node=p.data["nodes"][0]["id"]),
+        "plain",
+    )
+    await session.job
+    assert not [e for e in session.events if e[0] == "error"]
+    outputs = p.data["nodes"][before:]
+    assert outputs and all(n["status"] == "complete" for n in outputs)
+    assert all(n["policy_config"]["monitor_mode"] == "off" for n in outputs)
+    assert all(n["policy_config"]["selection_enabled"] is False for n in outputs)
+    assert not p.data.get("policy_runs") and not p.data.get("evaluation_runs")
+    assert p.data["selection_enabled"] is True and p.data["simulator_config"] == saved

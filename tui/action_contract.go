@@ -17,19 +17,21 @@ func (m *model) paletteAvailable(id, input string) bool {
 			return false
 		}
 	}
-	primary := map[string]bool{"add": true, "remove": true, "branch": true, "continue": true, "loom": true, "eval": true, "snapshot": true, "configure": true, "policy": true, "cancel": true, "help": true, "library": true, "branches": true, "kept": true, "simulator": true, "evaluations": true}
+	primary := map[string]bool{"add": true, "remove": true, "branch": true, "continue": true, "loom": true, "eval": true, "snapshot": true, "configure": true, "policy": true, "behaviors": true, "cancel": true, "help": true, "library": true, "branches": true, "kept": true, "simulator": true, "evaluations": true}
 	if !primary[id] {
 		return strings.TrimSpace(input) != "/"
 	}
 	switch id {
+	case "snapshot":
+		return m.section != 4 || m.currentEvaluation() != nil
 	case "add":
-		return m.section != 3
+		return m.section != 3 && !(m.section == 4 && m.evalArea == "runs")
 	case "continue", "loom":
 		return (m.section == 1 || m.section == 2 || m.section == 3) && !m.inNotesContext()
 	case "branch":
 		return (m.section == 1 || m.section == 2) && len(m.actionNodeIDs()) > 0 || m.section == 3 && len(m.selectedConversations()) > 0
 	case "remove":
-		return m.section != 3
+		return m.section != 3 && !(m.section == 4 && m.currentEvaluation() == nil && m.targetRow().kind != "eval-collection")
 	}
 	return true
 }
@@ -45,7 +47,13 @@ func (m *model) addDescription() string {
 	case 2:
 		return "Choose versions to add to Anthology"
 	case 4:
-		return "Add items to this evaluation"
+		if m.evalArea == "policies" {
+			return "Create a policy"
+		}
+		if m.currentEvaluation() == nil {
+			return "Create a data collection"
+		}
+		return "Add documents and traces to this collection"
 	}
 	return "Add item"
 }
@@ -69,11 +77,22 @@ func (m *model) addItem() tea.Cmd {
 		m.dialog = d
 		return nil
 	case 4:
+		if m.evalArea == "policies" {
+			return m.newEvaluationPolicy(nil)
+		}
+		if m.currentEvaluation() == nil {
+			m.evalArea = "data"
+			return m.evaluationCollectionAction("eval-create", "")
+		}
 		return m.openCollectionItems()
 	}
 	return nil
 }
 func (m *model) exportItems() tea.Cmd {
+	if m.section == 4 && m.currentEvaluation() == nil {
+		m.status = "Open a data collection to export its items and results"
+		return nil
+	}
 	scopes := []string{"library", "branches", "anthology", "simulator", "evaluate"}
 	args := map[string]any{"scope": scopes[m.section]}
 	switch m.section {

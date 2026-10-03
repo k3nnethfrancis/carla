@@ -9,6 +9,7 @@ from dataclasses import replace
 
 from . import document_actions, evaluation_sets, policy_overrides, simulator
 from .exploration import explore
+from .runtime import release_for_selection
 
 
 async def start(session, args, request_id, eval_plan):
@@ -42,12 +43,15 @@ async def start(session, args, request_id, eval_plan):
         raise ValueError("Alternatives must be a positive integer")
     selection = policy_overrides.selection(
         args,
-        p.data.get("selection_enabled", False),
+        False,  # Document exploration opts into judging per run.
         action,
         count,
-        session.policy_model,
+        session.selection_model(),
+        behaviors=p.data.get("selection_behaviors"),
     )
-    policy_config = policy_overrides.monitoring(simulator.configuration(p, alias), args)
+    policy_config = policy_overrides.monitoring(
+        simulator.configuration(p, alias), {"monitoring": False, **args}
+    )
     policy_config["selection_enabled"] = selection
     policy_config["loops"] = loops
     targets = [key for key in ("refs", "node", "nodes", "set", "scope") if key in args]
@@ -141,11 +145,7 @@ async def run(
         )
         generated.extend(outputs)
         if policy_id:
-            if session.runtime.process is None:
-                raise ValueError(
-                    "Stop the externally managed generator before switching to selection"
-                )
-            session.runtime.close()
+            await release_for_selection(session.runtime)
             for node in outputs:
                 node.update(policy_run=policy_id, loop=index + 1)
             p.save()
@@ -193,7 +193,7 @@ async def run(
             await explore(
                 p,
                 loops,
-                session.policy_model,
+                session.selection_model(),
                 session.runtime_factory,
                 batch,
                 advance,

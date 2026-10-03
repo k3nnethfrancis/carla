@@ -60,7 +60,7 @@ func TestSimulatorEnterOpensAndSelectsListConversation(t *testing.T) {
 		t.Fatal("Enter did not open")
 	}
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	var request struct {
 		Command string
 		Args    map[string]any
@@ -87,7 +87,7 @@ func TestLoomUsesCheckedParentNotHighlightedConversation(t *testing.T) {
 		t.Fatal(m.status)
 	}
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	var request struct {
 		Command string
 		Args    map[string]any
@@ -231,7 +231,7 @@ func TestContinueSelectedLoomDispatchesBatchWithConfiguredTurns(t *testing.T) {
 			t.Fatal(m.status)
 		}
 		done := make(chan tea.Msg, 1)
-		go func() { done <- cmd() }()
+		go func() { done <- runPrimaryCommand(cmd) }()
 		var request struct {
 			Command string
 			Args    map[string]any
@@ -262,5 +262,49 @@ func TestSimulationPlanMatchesPreviewAndRejectsAmbiguousCount(t *testing.T) {
 	}
 	if _, _, err = m.simulationLoomPlan(generationOptions{Action: "continue", Count: 4}); err == nil {
 		t.Fatal("continue accepted alternatives")
+	}
+}
+
+func TestSimulatorBrowsingPreviewsWithoutRetargeting(t *testing.T) {
+	m := simulatorFixture()
+	m.focus, m.selected = 0, 4
+	m.simSelection = &simulationSelection{Run: "batch", Conversations: map[int]bool{0: true}}
+	saved := m.simSelection
+	if m.previewTarget() == nil {
+		t.Fatal("browsing did not request content")
+	}
+	run := *m.simulation
+	index := 1
+	run.Opened, run.Browsed, run.OpenConversation = true, true, &index
+	data, _ := json.Marshal(run)
+	m.apply(event{Type: "simulation", Data: data})
+	if m.focus != 0 || m.selected != 4 || m.simSelection != saved || !m.conversationOpen || m.loomGrid {
+		t.Fatal("preview entered or retargeted the conversation")
+	}
+	if !strings.Contains(m.simulationText(), "ONLY SECOND") || strings.Contains(m.simulationText(), "ONLY FIRST") {
+		t.Fatal(m.simulationText())
+	}
+}
+
+func TestSimulatorLatePreviewCatchesUpToCurrentFocus(t *testing.T) {
+	m := simulatorFixture()
+	m.focus, m.selected = 0, 4
+	m.previewTarget()
+	run := *m.simulation
+	index := 1
+	run.Opened, run.Browsed, run.OpenConversation = true, true, &index
+	m.selected = 3
+	data, _ := json.Marshal(run)
+	if m.apply(event{Type: "simulation", Data: data}) == nil {
+		t.Fatal("did not request latest focus after stale reply")
+	}
+	if m.conversationOpen || m.simSelection != nil {
+		t.Fatal("stale response stole preview or selected a target")
+	}
+	index = 0
+	data, _ = json.Marshal(run)
+	m.apply(event{Type: "simulation", Data: data})
+	if m.focus != 0 || m.selected != 3 || !strings.Contains(m.simulationText(), "ONLY FIRST") {
+		t.Fatal("did not catch up")
 	}
 }

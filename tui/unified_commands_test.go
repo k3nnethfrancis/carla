@@ -66,7 +66,7 @@ func TestBranchesLoomUsesDocumentOperation(t *testing.T) {
 			t.Fatal(section, m.status)
 		}
 		done := make(chan tea.Msg, 1)
-		go func() { done <- cmd() }()
+		go func() { done <- runPrimaryCommand(cmd) }()
 		var request struct {
 			Command string
 			Args    map[string]any
@@ -93,7 +93,7 @@ func TestBareSimulatorLoomUsesOneReplyAndHighlightDoesNotSelectBatch(t *testing.
 	m.client = &client{conn: left}
 	cmd := m.loom(generationOptions{})
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	var request struct {
 		Command string
 		Args    map[string]any
@@ -111,7 +111,7 @@ func TestBareSimulatorLoomUsesOneReplyAndHighlightDoesNotSelectBatch(t *testing.
 		}
 	}
 	cmd = m.loom(generationOptions{Count: 4})
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	json.NewDecoder(right).Decode(&request)
 	<-done
 	if request.Command != "simulator.run" || request.Args["run"] != nil {

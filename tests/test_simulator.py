@@ -22,6 +22,9 @@ class Runtime:
         self.process = object()
         self.closed = False
 
+    async def preflight(self, prompt, settings):
+        return {}
+
     async def stream(self, prompt, settings, trace):
         trace.update(request={"prompt": prompt, **settings}, events=[self.final])
         yield self.output
@@ -414,6 +417,13 @@ async def test_resume_after_character_generates_visitor_first(setup):
         "visitor",
         "character",
     ]
+    turns = resumed["conversations"][0]["turns"]
+    assert turns[:2] == seed["turns"]
+    assert turns[2]["prompt"] == simulator.conversation_prompt(
+        config, "visitor", seed["documents"], seed["turns"]
+    )
+    assert "**Model C:**  A new path." in turns[2]["prompt"]
+    assert turns[2]["origin"] == "generated"
     assert simulator.summary(resumed)["parent"]["run"] == original["id"]
 
 
@@ -1012,6 +1022,7 @@ async def test_action_dispatch_validates_before_start_and_records_overrides(setu
         validate_settings=Session.validate_settings,
         start_simulation=start,
         policy_model={},
+        selection_model=lambda: {},
     )
     before = copy.deepcopy(project.data)
     for update, match in [
@@ -1060,4 +1071,27 @@ async def test_stale_continuation_seed_cannot_overwrite_a_newer_head(setup):
     before = copy.deepcopy(project.data)
     with pytest.raises(ValueError, match="changed"):
         await simulator.generate_alternatives(project, config, Runtime, emit, stale)
+    assert project.data == before
+
+
+@pytest.mark.asyncio
+async def test_browse_preview_is_read_only_and_distinct_from_open(setup):
+    from types import SimpleNamespace
+
+    from character_lab import simulator_commands
+
+    project, config, emit, events = setup
+    original = await simulator.generate(project, config, Runtime, emit)
+    before = copy.deepcopy(project.data)
+    session = SimpleNamespace(
+        project=project, emit=lambda kind, data, request: emit(kind, data)
+    )
+    await simulator_commands.dispatch(
+        session,
+        "simulator.open",
+        {"run": original["id"], "conversation": 0, "preview": True},
+        "preview",
+    )
+    assert events[-1][1]["browsed"] is True
+    assert events[-1][1]["open_conversation"] == 0
     assert project.data == before
