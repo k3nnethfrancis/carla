@@ -1072,3 +1072,26 @@ async def test_stale_continuation_seed_cannot_overwrite_a_newer_head(setup):
     with pytest.raises(ValueError, match="changed"):
         await simulator.generate_alternatives(project, config, Runtime, emit, stale)
     assert project.data == before
+
+
+@pytest.mark.asyncio
+async def test_browse_preview_is_read_only_and_distinct_from_open(setup):
+    from types import SimpleNamespace
+
+    from character_lab import simulator_commands
+
+    project, config, emit, events = setup
+    original = await simulator.generate(project, config, Runtime, emit)
+    before = copy.deepcopy(project.data)
+    session = SimpleNamespace(
+        project=project, emit=lambda kind, data, request: emit(kind, data)
+    )
+    await simulator_commands.dispatch(
+        session,
+        "simulator.open",
+        {"run": original["id"], "conversation": 0, "preview": True},
+        "preview",
+    )
+    assert events[-1][1]["browsed"] is True
+    assert events[-1][1]["open_conversation"] == 0
+    assert project.data == before

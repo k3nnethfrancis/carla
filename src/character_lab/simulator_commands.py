@@ -185,6 +185,7 @@ async def dispatch(session, command, args, request_id):
                     | {
                         "opened": True,
                         "grid_group": scope.get("id", ""),
+                        "browsed": bool(args.get("preview")),
                     },
                     request_id,
                 )
@@ -203,7 +204,11 @@ async def dispatch(session, command, args, request_id):
         await session.emit(
             "simulation",
             simulator.view(run)
-            | {"opened": True, "open_conversation": args.get("conversation")},
+            | {
+                "opened": True,
+                "open_conversation": args.get("conversation"),
+                "browsed": bool(args.get("preview")),
+            },
             request_id,
         )
         return

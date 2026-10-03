@@ -85,6 +85,7 @@ type simulationConversation struct {
 	Turns      []simulationTurn
 }
 type simulationRun struct {
+	Browsed               bool
 	PolicyRun             string `json:"policy_run"`
 	Loop                  int
 	Label                 string `json:"label"`
@@ -725,6 +726,33 @@ func (m *model) apply(e event) tea.Cmd {
 			m.simulationViews = map[string]*simulationRun{}
 		}
 		m.simulationViews[run.ID] = &run
+		if run.Browsed {
+			m.pending = false
+			r := m.targetRow()
+			matches := r.kind == "simulation" && r.id == run.ID || r.kind == "simulation-group" && r.id == run.GridGroup
+			if target, ok := gridConversation(r.id); ok && r.kind == "conversation" {
+				matches = target.Run == run.ID && run.OpenConversation != nil && target.Conversation == *run.OpenConversation
+			}
+			if m.section != 3 || m.focus != 0 || m.dialog != nil || m.editing != "" {
+				return nil
+			}
+			if !matches {
+				return m.previewTarget()
+			}
+			m.simulation = &run
+			m.gridGroup = run.GridGroup
+			m.conversationOpen = run.OpenConversation != nil || len(run.Conversations) == 1 && run.GridGroup == ""
+			m.gridSelection = 0
+			if run.OpenConversation != nil {
+				m.gridSelection = *run.OpenConversation
+			}
+			m.loomGrid = !m.conversationOpen
+			m.gridPinned = false
+			m.document.GotoTop()
+			m.reflow()
+			return nil
+		}
+
 		if !run.Opened {
 			updated := false
 			for i := range m.data.SimulationRuns {

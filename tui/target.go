@@ -110,6 +110,42 @@ func (m *model) previewTarget() tea.Cmd {
 		return nil
 	}
 	r := m.targetRow()
+	if m.section == 3 && m.focus == 0 {
+		args := map[string]any{"preview": true}
+		switch r.kind {
+		case "conversation":
+			target, ok := gridConversation(r.id)
+			if !ok {
+				return nil
+			}
+			if m.simulation != nil && m.simulation.ID == target.Run && m.conversationOpen && m.gridSelection == target.Conversation {
+				return nil
+			}
+			args["run"], args["conversation"] = target.Run, target.Conversation
+		case "simulation":
+			if m.simulation != nil && m.simulation.ID == r.id && !m.conversationOpen && m.gridGroup == "" {
+				return nil
+			}
+			args["run"] = r.id
+		case "simulation-group":
+			if m.gridGroup == r.id && m.simulation != nil {
+				return nil
+			}
+			scope := m.simulationGroupScope(r.id)
+			if scope == nil {
+				return nil
+			}
+			args["scope"] = *scope
+		default:
+			m.simulation = nil
+			m.loomGrid = false
+			m.conversationOpen = false
+			m.gridGroup = ""
+			m.reflow()
+			return nil
+		}
+		return m.send("simulator.open", args)
+	}
 	if m.section == 4 && r.kind == "eval-run" && m.evaluationRunStale(r.id) {
 		return m.send("evaluation.run.open", map[string]any{"id": r.id})
 	}

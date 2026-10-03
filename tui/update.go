@@ -405,7 +405,7 @@ func (m *model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 		case "nav.left", "nav.right":
 			if m.focus == 0 && m.section == 3 {
 				m.conversationArrow(strings.TrimPrefix(key, "nav."))
-				return m, nil
+				return m, m.previewTarget()
 			}
 			if m.focus == 0 && m.section == 1 {
 				m.branchArrow(strings.TrimPrefix(key, "nav."))
