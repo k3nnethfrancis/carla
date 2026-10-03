@@ -50,7 +50,7 @@ func (m *model) openSelectionConfig() tea.Cmd {
 }
 
 // Keep the trigger first so compact dialogs show it before any clipped detail.
-const selectionTriggerHelp = "Branches: --selection on. Simulator: saved On or flag.\n2+ alternatives + explicit --loops.\n/loom 4 --selection on --loops 1\nOne loop selects; more split from the winner.\nNone qualify: stop. Other outputs stay saved."
+const selectionTriggerHelp = "Assesses alternatives against your behaviors, then chooses a qualifying branch to continue.\nUse /loom 4 --loops 2: select from four alternatives, then branch from the winner for the next loop. One loop selects once.\nRequires 2+ alternatives and explicit --loops. If none qualify, stop; all generated paths stay saved.\nSimulator uses the saved switch. Branches requires --selection on; --selection off skips it for a run."
 const evaluationJudgesHelp = "Criteria + model used by named evaluations.\nChoose judges in Evaluate > Configure.\nRun: /eval or /loom --eval \"name\"\nCreating a judge does not run it."
 
 func (m *model) openSelectionJudge() tea.Cmd {

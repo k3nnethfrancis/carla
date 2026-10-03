@@ -45,9 +45,17 @@ type evaluationRecord struct {
 }
 
 func (m *model) openPolicy() tea.Cmd {
+	monitoring, selection := "Off", "Off"
+	mode, _ := m.data.SimulatorConfig["monitor_mode"].(string)
+	if mode == "jev" || mode == "diffusion" {
+		monitoring = "On"
+	}
+	if m.data.SelectionEnabled {
+		selection = "On"
+	}
 	m.dialog = &dialog{kind: "policy", title: "Policy", rows: []row{
-		{id: "monitor", label: "Monitoring", preview: "Configure shared monitoring rules. Simulator uses saved On/Off; document Looms require --monitoring on."},
-		{id: "selection", label: "Selection (/loom --loops)", preview: selectionTriggerHelp},
+		{id: "monitor", label: "Monitoring · " + monitoring, preview: "Configure shared monitoring rules. Simulator uses saved On/Off; document Looms require --monitoring on."},
+		{id: "selection", label: "Selection · " + selection, preview: "Each Loom loop judges 2+ alternatives against your behaviors and picks a qualifying branch. The next loop grows from that winner. Other paths stay saved. No qualifying branch: stop. Use --loops."},
 		{id: "evaluators", label: "Evals", preview: "Configure reusable behaviors and models to assess saved documents and conversations."},
 	}}
 	return nil

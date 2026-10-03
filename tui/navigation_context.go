@@ -108,6 +108,8 @@ func (m *model) refreshConfig() {
 		return
 	}
 	switch d.kind {
+	case "policy":
+		m.openPolicy()
 	case "behavior-library":
 		m.openBehaviorLibrary()
 	case "behavior-library-item":

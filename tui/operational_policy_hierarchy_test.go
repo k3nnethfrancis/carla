@@ -261,3 +261,22 @@ func chooseSelectionLibrary(m *model) tea.Cmd {
 	}
 	return nil
 }
+
+func TestPolicyHomeReflectsSavedSwitchesOnReturn(t *testing.T) {
+	m := policyFixture()
+	m.data.SimulatorConfig = map[string]any{"monitor_mode": "off"}
+	m.data.SelectionEnabled = false
+	m.openPolicy()
+	if m.dialog.rows[0].label != "Monitoring · Off" || m.dialog.rows[1].label != "Selection · Off" {
+		t.Fatal(m.dialog.rows)
+	}
+	home := m.dialog
+	m.openOperationalPolicies("selection")
+	m.dialog.parent = home
+	m.data.SelectionEnabled = true
+	m.data.SimulatorConfig["monitor_mode"] = "diffusion"
+	m.closeDialog()
+	if m.dialog.rows[0].label != "Monitoring · On" || m.dialog.rows[1].label != "Selection · On" {
+		t.Fatal(m.dialog.rows)
+	}
+}
