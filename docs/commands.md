@@ -44,7 +44,7 @@ one level, cancelling an editor draft before leaving its owner. On restart,
 Branches and Simulator open only the ancestor path to your last focused item;
 other branches and Looms stay collapsed. Without a saved location, the tree starts collapsed. `/config` exposes
 keybindings, including selection clearing, editing, save/cancel and session exit.
-Delete invokes Remove in content panels; in text editors it deletes text.
+Use Space to select items, then Enter to open their actions, or use `/remove`. Editing keys retain their text-editing behavior.
 
 ## Continue versus Loom
 
@@ -213,3 +213,5 @@ Evaluate displays frozen conversation turns using the same Visitor/Character lab
 Run labels lead with the saved dataset or item name, followed by the policy and overall result. Ad hoc multi-item selections show an item count. A trailing run number distinguishes repeat evaluations. Names come from the captured data, so later renaming does not rewrite historical runs.
 
 Loom selection outcomes and saved-candidate retries are described in [Loom selection](loom-selection.md). Use `/inspect` on a selected result to inspect or retry judging without regenerating text.
+
+The [generated command reference](command-reference.md) is checked against the same registry used by help and completion.

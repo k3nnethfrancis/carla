@@ -9,27 +9,7 @@ import (
 )
 
 // Commands reuse the action handlers; typing never invokes single-key shortcuts.
-func commandName(a action) string {
-	switch a.id {
-	case "snapshot":
-		return "export"
-	case "evaluations":
-		return "evaluate"
-	case "configure":
-		return "config"
-	case "kept":
-		return "anthology"
-	case "models":
-		return "model"
-	case "workspaces":
-		return "workspace"
-	case "cancel":
-		return "stop"
-	case "discard":
-		return "cancel"
-	}
-	return a.id
-}
+
 func (m *model) commandChoices() []action {
 	value := strings.ToLower(strings.TrimSpace(m.command.Value()))
 	if fields := strings.Fields(value); len(fields) > 1 {
@@ -490,67 +470,7 @@ func (m *model) prioritizePageCommands(actions []action) {
 
 // Internal action IDs remain stable for saved keyboard bindings. Canonical names
 // and aliases share a single palette row and dispatch path.
-func (m *model) canonicalCommand(id string) string {
-	switch id {
-	case "generate", "run", "simulate":
-		return "continue"
-	case "grow":
-		return "loom"
-	case "export":
-		return "snapshot"
-	case "import":
-		return "add"
-	case "keep":
-		if m.section == 4 {
-			return "keep"
-		}
-		return "add"
-	case "delete":
-		return "remove"
-	case "fork":
-		return "branch"
-	case "quit":
-		return "exit"
-	case "grow-config", "grow-policy", "spec", "prompt", "loom-policy":
-		return "policy"
-	case "settings", "config", "sim-config", "character-sampling", "visitor-sampling":
-		return "configure"
-	}
-	return id
-}
-func (m *model) commandAliases(id string) []string {
-	names := []string{commandName(action{id: id})}
-	switch id {
-	case "loom":
-		names = append(names, "grow")
-	case "continue":
-		names = append(names, "generate", "run", "simulate")
-	case "add":
-		names = append(names, "import")
-		if m.section != 4 {
-			names = append(names, "keep")
-		}
-	case "snapshot":
-		names = append(names, "snapshot")
-	case "evaluations":
-		names = append(names, "evaluations")
-	case "branch":
-		names = append(names, "fork")
-	case "remove":
-		names = append(names, "delete")
-	case "configure":
-		names = append(names, "configure", "settings", "sim-config", "character-sampling", "visitor-sampling")
-	case "policy":
-		names = append(names, "grow-config", "grow-policy", "spec", "prompt", "loom-policy", "loom-control-policy")
-	case "exit":
-		names = append(names, "quit")
-	case "kept":
-		names = append(names, "kept")
-	}
-	return names
-}
 
-// Optional direct entry opens the same control as keyboard navigation.
 func (m *model) directConfig(id, input string) (tea.Cmd, bool) {
 	fields := strings.Fields(input)
 	if len(fields) == 2 && id == "configure" {

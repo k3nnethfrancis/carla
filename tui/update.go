@@ -7,27 +7,6 @@ import (
 	"time"
 )
 
-type action struct{ id, label, key string }
-
-var allActions = []action{
-	{"continue", "Continue", "ctrl+r"}, {"generate", "Generate (alias for continue)", ""}, {"branch", "Branch current version", "ctrl+b"}, {"loom", "Generate alternatives", ""},
-	{"add", "Add to seeds", ""}, {"remove", "Remove from collection", ""},
-	{"delete", "Delete selected branches", ""}, {"keep", "Keep branch", "k"}, {"grow", "Grow", "g"},
-	{"settings", "Settings", "ctrl+t"}, {"models", "Model", "m"},
-	{"workspaces", "Workspace", "ctrl+w"}, {"edit", "Edit document", "e"},
-	{"inspect", "Exact input", "ctrl+e"}, {"review", "Review document", "ctrl+u"},
-	{"spec", "Selection spec", "s"}, {"prompt", "Selector prompt", "p"},
-	{"snapshot", "Export kept documents", "ctrl+s"}, {"clear", "Clear seed selection", "x"},
-	{"library", "Library", "1"}, {"branches", "Branches", "2"},
-	{"kept", "Anthology", "3"}, {"notes", "Notes", "4"}, {"simulator", "Simulator", "5"}, {"sim-config", "Configure simulator", ""}, {"simulate", "Run conversations", ""}, {"grow-config", "Configure Grow", ""}, {"grow-policy", "Grow selection criteria", ""},
-	{"run", "Run Simulator conversations", ""}, {"configure", "Configure this page", ""},
-	{"find", "Filter this list", "ctrl+f"}, {"active", "View active generation", ""}, {"rename", "Rename document or conversation", ""},
-	{"visitor", "Write a visitor message in a conversation fork", ""}, {"grid", "Show Loom grid", ""}, {"loom-policy", "Configure conversation warnings and stop rules", ""},
-	{"character-sampling", "Character temperature, top-p and output tokens", ""}, {"visitor-sampling", "Visitor temperature, top-p and output tokens", ""},
-	{"import", "Import a document into Library", ""},
-	{"behaviors", "Reusable behavior specs", ""}, {"policy", "Monitoring, selection and evaluation criteria", ""}, {"eval", "Evaluate selected material", ""}, {"evaluations", "Evaluation datasets", "6"},
-}
-
 func (m *model) perform(id string) tea.Cmd {
 	if id == "remove.alt" {
 		id = "remove"
