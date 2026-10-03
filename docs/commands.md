@@ -35,6 +35,7 @@ The shared controls are:
 - `/policy`: monitoring, selection and evaluation definitions.
 - `/stop`: cancel the active operation, retaining partial output.
 - `/help`: command descriptions and arguments.
+- `/rename`: name a focused document or individual conversation; optionally update descendant ancestry names.
 
 Arrows move focus and preview content. Space selects/unselects. Enter opens a
 selected object or its actions. Tab/Shift+Tab move between panes; Escape unwinds
@@ -82,7 +83,9 @@ and raw completion templates.
 | `--visitor "text"` | Simulator Continue/Loom | Supply the next visitor message before generation |
 | `--turns N` | Simulator Continue/Loom | Number of additional character replies |
 | `--eval "name"` | Continue, Loom | Judge completed outputs with a named evaluation |
-| `--loops N` | Continue, Loom | Repeat continuation from each output; enabled selection can guide split loops |
+| `--selection on\|off` | Loom; Off also accepted by Continue | Override selection for this run. On requires 2+ alternatives and an explicit `--loops N`. |
+| `--monitoring on\|off` | Continue, Loom | Override monitoring for this run using the configured provider and behavior rules. |
+| `--loops N` | Continue, Loom | Repeat generation; with selection enabled, judge each batch and continue from the winner. |
 
 Persistent defaults live in `/config`. Flags override one operation and are saved
 with its provenance. Model flags do not change workspace defaults. Token caps
@@ -106,8 +109,23 @@ without a supplied message to generate its response. Nothing is silently replace
 
 Loops do not require a selector. With Selection Off (default), the first loop
 creates the requested alternatives and later loops advance those same outputs.
-Selection On in `/policy` instead chooses a complete alternative between split
-loops and splits again from the winner. One-output loops always advance directly.
+Selection On in `/policy` chooses a complete alternative after each batch when
+`--loops` is supplied, and splits again from the winner if another loop remains.
+One-output loops always advance directly. An explicit `--selection on` requires
+2+ alternatives and an explicit `--loops`; invalid combinations fail before generation.
+`--loops 1` generates and selects once without generating another batch.
+
+```text
+/loom 4 --selection on --loops 1
+/loom 4 --selection on --monitoring off --loops 3
+/continue --monitoring on
+```
+
+Both flags override only this run. Omitting them uses saved policy settings;
+`--selection off` bypasses selection even when saved On. `--monitoring on` uses
+the configured provider (or the last explicitly chosen provider when saved Off).
+If none has been configured, Carla asks you to choose one in `/policy` first.
+Required provider setup still applies. No provider is chosen implicitly.
 A selection policy never combines individual winners from different sets. All
 candidates and decisions remain available. Monitoring is a separate optional check during generation;
 only explicitly configured Stop actions terminate flagged work.

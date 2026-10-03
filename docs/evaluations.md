@@ -7,7 +7,7 @@ inputs, triggers and effects. Configuring one does not silently enable another.
 | Role | Input / trigger | Result and effect |
 | --- | --- | --- |
 | Monitoring | Partial or completed generation and its context, at configured Heartbeat checkpoints | Local DiffusionGemma or hosted Jev behavior probabilities; enabled rules annotate, warn or explicitly stop. |
-| Selection | Candidate set during a multi-loop Loom | Local instruct model reviews candidates and chooses one eligible continuation, or none. Others remain saved. |
+| Selection | Selection On, 2+ alternatives and explicit `--loops N` | Local instruct model reviews candidates and chooses one eligible continuation, or none. Others remain saved. |
 | Evaluation | Frozen document/conversation items in a named collection | One or more instruct/DiffusionGemma/Jev judges record whole-item results for comparison and dataset curation. |
 
 All are inspectable. A monitor flag is not automatically a training rejection;
@@ -15,7 +15,10 @@ a selected branch is not automatically an anthology or training member.
 
 ## Monitoring
 
-Open `/policy` → Monitoring. Default is Off. DiffusionGemma (local) uses an
+Open `/policy` → Monitoring. Default is Off. `--monitoring on|off` overrides it
+for one Continue/Loom run without changing saved settings. On uses the configured
+provider, or the last explicitly selected provider if monitoring is currently Off.
+If no provider has been configured, choose one in `/policy` first. DiffusionGemma (local) uses an
 [OpenJev service](local-judge.md) without an API key. Selecting Jev requires a saved or
 environment OpenRouter key before other settings appear. [Credential storage
 and external data flow](configuration.md#optional-monitoring) apply here.
@@ -38,7 +41,14 @@ Open `/policy` → Selection to configure the local instruct evaluator, criteria
 and classifier/routing prompt. The generator's raw prompt never receives these
 instructions. The selector receives candidate text and criteria separately.
 
-`/loom 3 --tokens 512 --loops 4` creates three candidates per loop, classifies them
+Selection triggers only when it is **On**, the Loom has **2 or more alternatives**,
+and `--loops` is **explicitly supplied**. Bare `/loom`, `/continue`, and `/loom 4`
+without `--loops` do not call the selector. `--loops 1` generates and judges one
+batch, records a winner, and finishes. With Selection Off, loops continue all outputs.
+Use `--selection on|off` to override the saved setting for one run. Explicit On
+requires at least two alternatives and `--loops`; invalid combinations fail early.
+
+With Selection On, `/loom 3 --tokens 512 --loops 4` creates three candidates per loop, classifies them
 and advances one eligible path. The classifier must review every candidate with
 `explore` or `pass`, a reason and matching evidence; `selected` identifies one
 eligible candidate or null. Here `pass` means skip this candidate, not a passing
@@ -52,9 +62,13 @@ the classifier prompt; malformed responses remain errors.
 
 ## Create and run an evaluation
 
+**Evaluation judges** are reusable criteria, models and judge prompts. Creating
+one does not run it or enable Monitoring or Selection. Choose judges for a named
+evaluation, then run `/eval` or attach it to generation with `--eval`.
+
 1. Open **Evaluate** → **New evaluation** and name it, for example `Voice`.
 2. Open **Configure** (`/config`). Choose reusable judges. If none exist, create
-   one under **Manage judge configurations** or `/policy` → **Judge configurations**.
+   one under **Manage evaluation judges** or `/policy` → **Evals**.
    A local judge has criteria and an editable system prompt. A DiffusionGemma or Jev judge uses a
    spec and pass-probability threshold. Instruct judges currently use the configured
    instruct policy-model alias, not an arbitrary independent model per judge.

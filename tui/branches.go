@@ -9,6 +9,9 @@ import (
 // Walk parent links, rather than insertion order: new siblings may arrive after
 // their cousins. Collapse is UI state and never deletes a saved continuation.
 func (m *model) branchRows() []row {
+	if m.section == 1 && m.hasDocumentOperations() {
+		return m.operationBranchRows()
+	}
 	children := map[string][]node{}
 	known := map[string]bool{}
 	for _, n := range m.data.Nodes {
@@ -37,22 +40,10 @@ func (m *model) branchRows() []row {
 				continue
 			}
 			label := documentLabel(n)
-			// The parent tree supplies source context; detached anthology rows
-			// and document headings retain the complete identifier.
-			if depth > 0 && m.section != 2 && n.Label != "" && label == n.Label {
-				parts := strings.Split(label, "-")
-				if len(parts) >= 3 {
-					label = strings.Join(parts[len(parts)-2:], "-")
-				}
-			}
 			if n.Kept {
 				label = "★ " + label
 			}
-			if n.Status == "empty" {
-				label += " · no new text"
-			} else if n.Status != "complete" {
-				label += " · " + n.Status
-			}
+			label = documentStatusLabel(n, label)
 			check := m.selectionMark(n.ID)
 			if m.section == 2 {
 				if n.Kept {
@@ -66,7 +57,7 @@ func (m *model) branchRows() []row {
 						marker = "▸ "
 					}
 				}
-				rows = append(rows, row{id: n.ID, label: marker + check + label, kind: "node", preview: n.Preview, depth: min(depth, 3)})
+				rows = append(rows, row{id: n.ID, label: marker + check + label, kind: "node", preview: n.Preview, depth: depth})
 			}
 			if m.section == 2 || m.filter != "" || !m.collapsed[n.ID] {
 				walk(n.ID, depth+1)
@@ -103,7 +94,7 @@ func (m *model) branchRows() []row {
 			if all {
 				mark = "✓ "
 			}
-			rows = append(rows, row{id: set.ID, kind: "document-set", depth: depth, label: mark + arrow + label + fmt.Sprintf(" · %d documents", len(set.Members))})
+			rows = append(rows, row{id: set.ID, kind: "document-set", depth: depth, label: mark + arrow + m.documentSetActivity(set.ID) + label + fmt.Sprintf(" · %d documents", len(set.Members))})
 			if m.collapsed[set.ID] {
 				return
 			}
@@ -118,7 +109,7 @@ func (m *model) branchRows() []row {
 					if m.branchSelection["set:"+path] {
 						mark = "✓ "
 					}
-					rows = append(rows, row{id: path, kind: "document-set", depth: level, label: mark + arrow + "Set"})
+					rows = append(rows, row{id: path, kind: "document-set", depth: level, label: mark + arrow + m.documentSetActivity(path) + "Set"})
 					if m.collapsed[path] {
 						return
 					}
@@ -129,7 +120,7 @@ func (m *model) branchRows() []row {
 				}
 				for _, n := range m.data.Nodes {
 					if n.ID == scope.Node {
-						rows = append(rows, row{id: n.ID, kind: "node", label: m.selectionMark(n.ID) + documentLabel(n), depth: level, preview: n.Preview})
+						rows = append(rows, row{id: n.ID, kind: "node", label: m.selectionMark(n.ID) + documentStatusLabel(n, documentLabel(n)), depth: level, preview: n.Preview})
 						walk(n.ID, level+1)
 						break
 					}
@@ -199,20 +190,11 @@ func (m *model) branchArrow(key string) {
 		m.collapsed[id] = true
 		return
 	}
-	for _, n := range m.data.Nodes {
-		if n.ID == id {
-			for i, r := range rows {
-				if r.id == n.Parent {
-					m.selected = i
-					return
-				}
-			}
-		}
-	}
+	m.selected = parentBranchRow(rows, m.selected)
 }
 
 func (m *model) documentSetMembers(id string) []string {
-	if strings.Contains(id, "/scope/") {
+	if strings.HasPrefix(id, "loom:") || strings.Contains(id, "/scope/") {
 		var ids []string
 		var visit func(actionScope)
 		visit = func(s actionScope) {
@@ -272,6 +254,15 @@ func (m *model) visibleDocumentSets() []documentSet {
 // documentScope preserves saved nested membership while resolving current heads.
 // Set IDs describe provenance; exact leaf IDs remain the execution authority.
 func (m *model) documentScope(id string) actionScope {
+	if strings.HasPrefix(id, "loom:") {
+		result := actionScope{Kind: "set"}
+		for _, set := range m.data.DocumentSets {
+			if "loom:"+set.OperationID == id {
+				result.Children = append(result.Children, m.documentScope(set.ID))
+			}
+		}
+		return result
+	}
 	if base, path, ok := strings.Cut(id, "/scope/"); ok {
 		scope := m.documentScope(base)
 		for _, part := range strings.Split(path, "/") {
@@ -326,4 +317,39 @@ func (m *model) documentScope(id string) actionScope {
 		return result
 	}
 	return actionScope{Kind: "set"}
+}
+
+func documentStatusLabel(n node, label string) string {
+	switch n.Status {
+	case "generating", "running":
+		label = "▶ generating · " + label
+	case "queued":
+		label = "◷ queued · " + label
+	case "", "complete":
+	case "empty":
+		label = "no new text · " + label
+	default:
+		label = strings.ReplaceAll(n.Status, "_", " ") + " · " + label
+	}
+	if len(n.Monitor.Detections) > 0 {
+		label = "! " + label
+	}
+	if n.Monitor.Status == "checking" {
+		label = "checking · " + label
+	}
+	return label
+}
+func (m *model) documentSetActivity(id string) string {
+	active := 0
+	for _, member := range m.documentSetMembers(id) {
+		for _, n := range m.data.Nodes {
+			if n.ID == member && (n.Status == "generating" || n.Status == "running" || n.Status == "queued") {
+				active++
+			}
+		}
+	}
+	if active > 0 {
+		return fmt.Sprintf("▶ %d active · ", active)
+	}
+	return ""
 }

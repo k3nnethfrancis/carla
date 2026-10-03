@@ -77,7 +77,7 @@ func TestBranchesLoomUsesDocumentOperation(t *testing.T) {
 		<-done
 		left.Close()
 		right.Close()
-		if request.Command != "continue" || request.Args["count"] != float64(1) || request.Args["loops"] != float64(1) || m.section != 1 {
+		if request.Command != "continue" || request.Args["count"] != float64(1) || request.Args["loops"] != nil || m.section != 1 {
 			t.Fatal(section, request)
 		}
 	}
@@ -100,7 +100,7 @@ func TestBareSimulatorLoomUsesOneReplyAndHighlightDoesNotSelectBatch(t *testing.
 	}
 	json.NewDecoder(right).Decode(&request)
 	<-done
-	if request.Args["count"] != float64(1) || request.Args["turns"] != float64(1) || request.Args["loops"] != float64(1) {
+	if request.Args["count"] != float64(1) || request.Args["turns"] != float64(1) || request.Args["loops"] != nil {
 		t.Fatal(request)
 	}
 	m.pending = false

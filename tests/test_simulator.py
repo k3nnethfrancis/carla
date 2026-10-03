@@ -199,7 +199,7 @@ async def test_preview_only_generates_openings(setup):
     assert len(run["conversations"]) == 3
     assert all(len(c["turns"]) == 1 for c in run["conversations"])
     assert all(c["turns"][0]["model"]["alias"] == "other" for c in run["conversations"])
-    assert simulator.summary(run)["label"].startswith("Opening preview")
+    assert simulator.summary(run)["models_label"].startswith("Opening preview")
 
 
 def test_opening_validation(setup):
@@ -1011,6 +1011,7 @@ async def test_action_dispatch_validates_before_start_and_records_overrides(setu
         runtime=SimpleNamespace(model={"alias": "base"}),
         validate_settings=Session.validate_settings,
         start_simulation=start,
+        policy_model={},
     )
     before = copy.deepcopy(project.data)
     for update, match in [

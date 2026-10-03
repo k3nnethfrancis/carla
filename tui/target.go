@@ -96,12 +96,16 @@ func (m *model) targetLabel() string {
 	if r.id == "" {
 		return "No item selected"
 	}
-	return "Selected · " + strings.TrimSpace(strings.TrimLeft(r.label, "▾▸★ "))
+	return "Focused · " + strings.TrimSpace(strings.TrimLeft(r.label, "▾▸★ "))
 }
 
 // Opening the highlighted branch keeps the preview and command target aligned.
 // If a request is pending, the next state event catches up to the latest highlight.
 func (m *model) previewTarget() tea.Cmd {
+	// Coalesce fast navigation: after the pending reply, preview the latest row.
+	if m.pending && m.focus == 0 && !m.notesOpen && (m.section == 1 || m.section == 2) {
+		m.previewSelectionPending = true
+	}
 	if m.pending || m.editing != "" || m.dialog != nil {
 		return nil
 	}
@@ -207,6 +211,25 @@ func (m *model) actionNodeIDs() []string {
 }
 
 func (m *model) selectDocument(id string) {
+	// Expand the displayed ancestry, including operation/set wrappers that are
+	// not document parents in storage. Leave unrelated collapsed groups alone.
+	collapsed := m.collapsed
+	m.collapsed = map[string]bool{}
+	all := m.branchRows()
+	m.collapsed = collapsed
+	for i, r := range all {
+		if r.id != id {
+			continue
+		}
+		depth := r.depth
+		for j := i - 1; j >= 0; j-- {
+			if all[j].depth < depth {
+				delete(m.collapsed, all[j].id)
+				depth = all[j].depth
+			}
+		}
+		break
+	}
 	parents := map[string]string{}
 	for _, n := range m.data.Nodes {
 		parents[n.ID] = n.Parent

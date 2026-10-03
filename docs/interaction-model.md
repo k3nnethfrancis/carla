@@ -69,9 +69,12 @@ Branches which must be kept separately.
 
 Without selection, a split creates N alternatives once, then later loops advance
 those outputs. It does not multiply N on every loop. With Selection enabled in
-`/policy`, split loops judge complete alternatives, select one, then split again
+`/policy` and an explicit `--loops`, split loops judge complete alternatives, select one, then split again
 from that winner. One-output loops always continue directly. Selection defaults
-to Off and is separate from optional monitoring.
+to Off and is separate from optional monitoring. `--selection on|off` and
+`--monitoring on|off` override only the current operation. Explicit selection On
+requires 2+ alternatives and explicit `--loops`; one loop generates and selects
+once, with no subsequent generation.
 
 `--tokens` caps each model completion. `--turns` counts additional character replies
 per Simulator loop; it is unavailable for document continuations. `--visitor`
@@ -83,8 +86,8 @@ this operation. `--eval` judges generated versions without changing prompts.
 
 `/add` imports sources or adds exact versions to the current collection.
 `/remove` removes membership or, in Branches, confirms deletion of documents and
-affected descendants. Delete is its default panel binding. In text editors Delete
-edits text; saved custom bindings remain respected. `/eval` judges individual saved
+affected descendants. Use Space then Enter to open selected-item actions. In text
+editors Delete edits text; saved custom bindings remain respected. `/eval` judges individual saved
 items; selection policies can instead compare complete alternative structures.
 `/export` freezes selected items or the collection into a provenance-bearing bundle.
 
@@ -98,3 +101,94 @@ Go resolves focus and explicit selection into a structured scope. Python validat
 that scope, freezes generation inputs, owns revisions and group provenance, and
 schedules leaves with bounded concurrency. The same command handler serves
 keyboard actions and the command palette. Stopping retains saved partial work.
+
+### Document browsing and editing
+
+The preview label identifies the **focused** item. Space checks items into an
+explicit selection; the pane shows the selected count. Enter with checked
+branches opens their actions, including deletion with confirmation. Single mouse
+clicks focus document and saved-note rows; Enter opens them. Action rows such as
+Back to Branches, New note and Edit document activate with either a click or Enter. Document notes offer New
+note and Edit document; deletion belongs to the selected-item actions.
+
+While editing, Backspace and Delete edit text. Save with Ctrl+Enter, Ctrl+S, or
+`/save`; Command+Enter also saves when the terminal reports its modifier (Super).
+Some terminals intercept Command+Enter or send plain Enter, which remains a
+newline. Escape cancels the draft. Shortcuts can be changed in keybindings.
+
+### Document generation activity and monitoring
+
+Document continuations use the shared monitoring configuration under `/policy` →
+Monitoring, including heartbeat, call mode, behavior specs and warn/stop
+rules. Selection policies remain separately enabled for choosing alternatives.
+The monitor labels source/continuation text without changing the base-model prompt.
+
+Branches show generation status before the name, including documents inside sets.
+Set rows summarize active members, and the app header counts active documents even
+when their rows are collapsed. Live document-monitor events update policy scores
+in the preview footer and Loom grid; `!` marks detections, which remain visible
+on completed documents. Saved monitor summaries restore when reopening a workspace.
+
+### Document names
+
+Automatic names start with the newest operation and end with their ancestry:
+`doc-1`, `loom-1-doc-1`, `branch-2-loom-1-doc-1`, then
+`continue-1-branch-2-loom-1-doc-1`. Human edits use `edit`, explicit copies use
+`branch`, and generated continuations use `continue`. Loom outputs are numbered
+branches beneath their Loom operation. Bare Loom (one output) remains Continue.
+
+Numbers are local to the parent and operation type. They are allocated before
+inference, survive deletion/restart, and do not depend on completion order.
+Document IDs, source attribution, contents and custom titles are unchanged.
+Older automatic labels are retained as `legacy_label` when migrated on normal
+workspace save. Historical groups without a recorded shared invocation remain
+separate; Carla does not infer a common Loom from timestamps.
+
+### Branch tree width
+
+The tree fits the widest expanded row, with a minimum of 24 terminal columns,
+rounded up in four-column increments. Moving the highlight alone does not resize
+it. The document preview uses the remaining space and disappears when the tree
+needs the full width. Collapsing branches restores that space.
+
+Indentation retains the actual nesting depth. When the tree exceeds the available
+width, Ctrl+Left and Ctrl+Right scroll it horizontally; ordinary Left and Right
+still collapse and expand. The scrolling shortcuts appear in the pane when needed
+and can be changed in keybindings. Opening a document restores its reading/editing
+layout with Notes, even when the branch tree occupied the full screen.
+
+### Custom document names
+
+Open a document and choose **Rename document** beside Edit document, or use
+`/rename` on the focused document. Give favorite versions memorable names to find
+in Branches and Anthology. Clear the name to restore the automatic operation name.
+Renaming changes only the display title; text, IDs, ancestry and other versions
+remain unchanged. The automatic label remains saved with the document.
+
+The rename dialog also offers **Update child ancestry names**, off by default.
+Enable it to use the new name in descendant operation names, including Loom groups
+and future children: renaming `doc-1` to `paths` produces `continue-1-paths`.
+Carla follows saved ancestry rather than replacing matching text in unrelated
+names. Custom descendant titles remain unchanged. To restore descendants to the
+automatic ancestry, clear the name and enable this option when saving.
+
+### Simulator names
+
+Simulator names identify saved conversations and their ancestry. A fresh Loom
+is `loom-1`, with conversations such as `convo-1-loom-1`. Continue (including
+`/loom 1`) advances existing conversations without changing their names.
+An explicit branch is `branch-1-convo-1-loom-1`. Splitting a set creates a new
+Loom with numbered branch sets containing separate conversations.
+
+The tree displays the local operation name (`loom-2`, `branch-1`, `convo-1`)
+when its parent is visible above it. Conversation headings and inspection retain
+the full name. Status, message counts and policy flags remain separate from names. Message counts
+include both visitor and character messages; `--turns` still counts character replies.
+Numbers are persisted rather than derived from the visible row order, so
+collapsing or deleting other items does not renumber surviving conversations.
+
+Use `/rename` on one conversation to give it a memorable title. As with documents,
+the optional child-ancestry toggle carries that name into descendants while
+preserving their custom titles. Clearing a title restores its automatic name.
+Names are display metadata; saved IDs, turns, prompts and evaluation references
+remain unchanged.

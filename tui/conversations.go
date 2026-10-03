@@ -40,8 +40,8 @@ func (m *model) simulationRows() []row {
 	seen := map[string]bool{}
 	groups := map[string]bool{}
 	var addRun func(runSummary, int)
-	var addLeafRun func(runSummary, int)
-	var addScope func(actionScope, int)
+	var addLeafRun func(runSummary, int, bool)
+	var addScope func(actionScope, int, bool)
 	var addChildren func(string, int, int)
 	var addScopeChildren func(string, int)
 	addScopeChildren = func(id string, depth int) {
@@ -61,7 +61,7 @@ func (m *model) simulationRows() []row {
 			}
 		}
 	}
-	addScope = func(scope actionScope, depth int) {
+	addScope = func(scope actionScope, depth int, suppressWrapper bool) {
 		leaves := simulationScopeLeaves(scope)
 		if len(leaves) == 0 {
 			return
@@ -76,7 +76,7 @@ func (m *model) simulationRows() []row {
 							if m.conversationSelected(run.ID, c.Index) {
 								mark = "✓ "
 							}
-							rows = append(rows, row{id: conversationKey(run.ID, c.Index), kind: "conversation", depth: depth, preview: run.ID, label: mark + fmt.Sprintf("Conversation %d · %s", c.Index+1, conversationStatus(c))})
+							rows = append(rows, row{id: conversationKey(run.ID, c.Index), kind: "conversation", depth: depth, preview: run.ID, label: mark + conversationRowLabel(c, depth > 0)})
 							addChildren(run.ID, c.Index, depth+1)
 							return
 						}
@@ -99,11 +99,21 @@ func (m *model) simulationRows() []row {
 		if sameRun {
 			for _, run := range runs {
 				if run.ID == leaves[0].Run && len(leaves) == len(run.Conversations) {
-					addLeafRun(run, depth)
+					if !suppressWrapper && scope.Label != "" {
+						run.Label, run.ShortLabel, run.Title = scope.Label, scope.ShortLabel, scope.Title
+					}
+					addLeafRun(run, depth, !suppressWrapper)
 					addScopeChildren(scope.ID, depth+1)
 					return
 				}
 			}
+		}
+		if suppressWrapper {
+			for _, child := range scope.Children {
+				addScope(child, depth, false)
+			}
+			addScopeChildren(scope.ID, depth)
+			return
 		}
 		mark := "  "
 		if m.simSelection != nil && m.simSelection.Group == scope.ID {
@@ -113,7 +123,7 @@ func (m *model) simulationRows() []row {
 		if m.collapsed[scope.ID] {
 			arrow = "▸ "
 		}
-		rows = append(rows, row{id: scope.ID, kind: "simulation-group", depth: depth, label: mark + arrow + fmt.Sprintf("Set · %d conversations", len(leaves))})
+		rows = append(rows, row{id: scope.ID, kind: "simulation-group", depth: depth, label: mark + arrow + fmt.Sprintf("%s · %d conversations", simulationName(scope.Title, scope.ShortLabel, scope.Label, "set"), len(leaves))})
 		if m.collapsed[scope.ID] {
 			for _, leaf := range leaves {
 				seen[leaf.Run] = true
@@ -121,13 +131,13 @@ func (m *model) simulationRows() []row {
 			return
 		}
 		for _, child := range scope.Children {
-			addScope(child, depth+1)
+			addScope(child, depth+1, false)
 		}
 		addScopeChildren(scope.ID, depth+1)
 	}
 	addRun = func(r runSummary, depth int) {
 		if r.AlternativeGroup == "" {
-			addLeafRun(r, depth)
+			addLeafRun(r, depth, true)
 			return
 		}
 		group := r.AlternativeGroup
@@ -143,7 +153,7 @@ func (m *model) simulationRows() []row {
 		if m.collapsed[group] {
 			arrow = "▸ "
 		}
-		rows = append(rows, row{id: group, kind: "simulation-group", depth: depth, label: mark + arrow + fmt.Sprintf("Loom %d · %d alternative sets", loomNumber(r), r.AlternativeCount)})
+		rows = append(rows, row{id: group, kind: "simulation-group", depth: depth, label: mark + arrow + fmt.Sprintf("%s · %d branches", simulationName(r.OperationTitle, r.OperationShortLabel, r.OperationLabel, fmt.Sprintf("loom-%d", loomNumber(r))), r.AlternativeCount)})
 		if m.collapsed[group] {
 			for _, peer := range runs {
 				if peer.AlternativeGroup == group {
@@ -162,7 +172,14 @@ func (m *model) simulationRows() []row {
 			if m.collapsed[key] {
 				arrow = "▸ "
 			}
-			rows = append(rows, row{id: key, kind: "simulation-group", depth: depth + 1, label: mark + arrow + fmt.Sprintf("Alternative %d", alternative+1)})
+			branchName := fmt.Sprintf("branch-%d", alternative+1)
+			for _, peer := range runs {
+				if peer.AlternativeGroup == group && peer.AlternativeIndex == alternative {
+					branchName = simulationName(peer.AlternativeTitle, peer.AlternativeShortLabel, peer.AlternativeLabel, branchName)
+					break
+				}
+			}
+			rows = append(rows, row{id: key, kind: "simulation-group", depth: depth + 1, label: mark + arrow + branchName})
 			renderedScope := false
 			for _, peer := range runs {
 				if peer.AlternativeGroup == group && peer.AlternativeIndex == alternative {
@@ -170,18 +187,18 @@ func (m *model) simulationRows() []row {
 						seen[peer.ID] = true
 					} else if peer.AlternativeScope != nil {
 						if !renderedScope {
-							addScope(*peer.AlternativeScope, depth+2)
+							addScope(*peer.AlternativeScope, depth+2, true)
 							renderedScope = true
 						}
 					} else {
-						addLeafRun(peer, depth+2)
+						addLeafRun(peer, depth+2, false)
 					}
 				}
 			}
 		}
 		addScopeChildren(group, depth+1)
 	}
-	addLeafRun = func(r runSummary, depth int) {
+	addLeafRun = func(r runSummary, depth int, showGroup bool) {
 		if seen[r.ID] {
 			return
 		}
@@ -192,7 +209,7 @@ func (m *model) simulationRows() []row {
 				cs = append(cs, simulationConversation{Index: i, Status: r.Status})
 			}
 		}
-		if len(cs) > 1 {
+		if len(cs) > 1 && showGroup {
 			arrow := "▾ "
 			if m.collapsed[r.ID] {
 				arrow = "▸ "
@@ -201,7 +218,7 @@ func (m *model) simulationRows() []row {
 			if m.simSelection != nil && m.simSelection.Run == r.ID && m.simSelection.All {
 				mark = "✓ "
 			}
-			rows = append(rows, row{id: r.ID, kind: "simulation", depth: depth, label: mark + arrow + fmt.Sprintf("Loom %d · %d conversations · %s", loomNumber(r), len(cs), r.Status), preview: r.ID})
+			rows = append(rows, row{id: r.ID, kind: "simulation", depth: depth, label: mark + arrow + fmt.Sprintf("%s · %d conversations · %s", simulationName(r.Title, r.ShortLabel, r.Label, fmt.Sprintf("loom-%d", loomNumber(r))), len(cs), r.Status), preview: r.ID})
 			if m.collapsed[r.ID] {
 				return
 			}
@@ -210,7 +227,7 @@ func (m *model) simulationRows() []row {
 		addChildren(r.ID, -1, depth)
 		for _, c := range cs {
 			key := conversationKey(r.ID, c.Index)
-			label := fmt.Sprintf("Conversation %d · %s", c.Index+1, conversationStatus(c))
+			label := conversationRowLabel(c, depth > 0)
 			hasChildren := false
 			for _, child := range runs {
 				if child.Parent != nil && child.Parent.Run == r.ID && child.Parent.Conversation == c.Index {
@@ -516,11 +533,12 @@ func conversationFlags(c simulationConversation) string {
 // Keep policy evidence visible even while the transcript is scrolled. The
 // sidebar's transient warning is distinct from the persistent header summary.
 func (m *model) conversationHeading(width int) string {
-	title := fmt.Sprintf("Conversation %d", m.gridSelection+1)
+	title := fmt.Sprintf("convo-%d", m.gridSelection+1)
 	if m.simulation == nil || m.gridSelection >= len(m.simulation.Conversations) {
 		return title
 	}
 	conversation := m.simulation.Conversations[m.gridSelection]
+	title = conversationName(conversation, false)
 	if status := safe(conversationStatus(conversation)); status != "" {
 		title += " · " + status
 	}
@@ -543,11 +561,12 @@ func (m *model) simulationSummaries() []runSummary {
 			if runs[i].ID == s.ID {
 				runs[i].Conversations = s.Conversations
 				runs[i].Status = s.Status
+				copySimulationNames(&runs[i], s)
 				found = true
 			}
 		}
 		if !found {
-			runs = append(runs, runSummary{ID: s.ID, Status: s.Status, Count: len(s.Conversations), Conversations: s.Conversations, Parent: s.Parent, AlternativeScope: s.AlternativeScope, SourceScope: s.SourceScope, AlternativeGroup: s.AlternativeGroup, AlternativeIndex: s.AlternativeIndex, AlternativeCount: s.AlternativeCount})
+			runs = append(runs, runSummary{Label: s.Label, Title: s.Title, ShortLabel: s.ShortLabel, OperationTitle: s.OperationTitle, AlternativeTitle: s.AlternativeTitle, OperationLabel: s.OperationLabel, OperationShortLabel: s.OperationShortLabel, AlternativeLabel: s.AlternativeLabel, AlternativeShortLabel: s.AlternativeShortLabel, ID: s.ID, Status: s.Status, Count: len(s.Conversations), Conversations: s.Conversations, Parent: s.Parent, AlternativeScope: s.AlternativeScope, SourceScope: s.SourceScope, AlternativeGroup: s.AlternativeGroup, AlternativeIndex: s.AlternativeIndex, AlternativeCount: s.AlternativeCount})
 		}
 	}
 	return runs

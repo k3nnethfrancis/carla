@@ -130,14 +130,14 @@ def test_numbered_labels_preserve_lineage_and_survive_restart_and_deletion(tmp_p
     edit = p.edit(gen["id"], "Edited text")
     fork = p.add(edit["text"], parent=edit["id"], kind="fork")
     assert [display_title(n) for n in p.data["nodes"]] == [
-        "doc-branch-0001",
-        "doc-gen-0001",
-        "doc-edit-0001",
-        "doc-branch-0002",
+        "doc-1",
+        "continue-1-doc-1",
+        "edit-1-continue-1-doc-1",
+        "branch-1-edit-1-continue-1-doc-1",
     ]
     p.delete_nodes([fork["id"]], [fork["id"]])
     p = Project(tmp_path)
-    assert display_title(p.add("another fork", kind="fork")) == "doc-branch-0003"
+    assert display_title(p.add("another fork", kind="fork")) == "doc-2"
     assert p.node(edit["id"])["parent"] == gen["id"]
     p.node(gen["id"])["title"] = "My own name"
     assert display_title(p.node(gen["id"])) == "My own name"
@@ -151,9 +151,9 @@ def test_legacy_labels_do_not_use_text_or_change_content():
     }
     assign_labels(data)
     assign_labels(data)
-    assert display_title(data["nodes"][0]) == "doc-gen-0001"
+    assert display_title(data["nodes"][0]) == "doc-1"
     assert data["nodes"][0]["text"] == "First AI line"
-    assert data["label_counters"] == {"Gen": 1}
+    assert list(data["name_counters"].values()) == [1]
 
 
 def test_preview_offset_tracks_this_version_not_inherited_ai(tmp_path):
@@ -171,16 +171,20 @@ def test_preview_offset_tracks_this_version_not_inherited_ai(tmp_path):
     assert p.change_offset(root["id"]) == 0
 
 
-def test_source_labels_inherit_and_migrate_existing_numbers(tmp_path):
+def test_source_labels_keep_source_metadata_and_migrate_legacy_names(tmp_path):
     from character_lab.domain import assign_labels, display_title
 
     p = Project(tmp_path)
     root = p.add("Seed", kind="source", source_documents=[{"key": "gunkel"}])
     gen = p.add("Seed output", parent=root["id"])
-    assert display_title(root) == "paths-branch-0001"
-    assert display_title(gen) == "paths-gen-0001"
-    gen.pop("label_number")
-    gen["label"] = "Gen 7"
+    assert display_title(root) == "doc-1"
+    assert display_title(gen) == "continue-1-doc-1"
+    gen.pop("name_version")
+    gen.pop("name_number")
+    gen["label"] = "paths-gen-0007"
     assign_labels(p.data)
-    assert display_title(gen) == "paths-gen-0007"
-    assert display_title(p.add("Next", parent=gen["id"])) == "paths-gen-0008"
+    assert gen["legacy_label"] == "paths-gen-0007"
+    assert root["source_documents"] == [{"key": "gunkel"}]
+    assert (
+        display_title(p.add("Next", parent=gen["id"])) == "continue-1-" + gen["label"]
+    )

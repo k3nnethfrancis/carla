@@ -10,10 +10,18 @@ import (
 // The tab defines what the positional count produces. Tokens are always a cap.
 type generationOptions struct {
 	Count, Tokens, Turns, Loops                      int
+	Selection, Monitoring                            *bool
 	Message, Evaluation, Model, VisitorModel, Action string
 }
 
 func (o generationOptions) apply(args map[string]any) {
+	// Omitted overrides inherit policy settings; explicit false must survive.
+	if o.Selection != nil {
+		args["selection"] = *o.Selection
+	}
+	if o.Monitoring != nil {
+		args["monitoring"] = *o.Monitoring
+	}
 	if o.Action != "" {
 		args["action"] = o.Action
 	}
@@ -50,7 +58,7 @@ func parseGenerationOptions(input, id string) (generationOptions, error) {
 	}
 	seen := map[string]bool{}
 	fail := func() (generationOptions, error) {
-		return out, fmt.Errorf("use /loom 5 --tokens 1024 --loops 4 (both accept --tokens, --eval and --model; Simulator also accepts --turns N, --visitor and --visitor-model); token ranges are not supported")
+		return out, fmt.Errorf("use /loom 5 --tokens 1024 --loops 4 (both accept --tokens, --eval, --model, --selection on|off and --monitoring on|off; Simulator also accepts --turns N, --visitor and --visitor-model); token ranges are not supported")
 	}
 	for i := 1; i < len(fields); i++ {
 		key, value, inline := strings.Cut(fields[i], "=")
@@ -68,7 +76,7 @@ func parseGenerationOptions(input, id string) (generationOptions, error) {
 		if key == "--msg" || key == "--message" {
 			key = "--visitor"
 		}
-		allowed := key == "--tokens" || key == "--turns" || key == "--visitor" || key == "--eval" || key == "--model" || key == "--visitor-model" || key == "--loops"
+		allowed := key == "--tokens" || key == "--turns" || key == "--visitor" || key == "--eval" || key == "--model" || key == "--visitor-model" || key == "--loops" || key == "--selection" || key == "--monitoring"
 		if id == "loom" {
 			allowed = allowed || key == "--count" || key == "-n" || key == "--loops"
 		}
@@ -79,7 +87,7 @@ func parseGenerationOptions(input, id string) (generationOptions, error) {
 			key = "--count"
 		}
 		if seen[key] {
-			return fail()
+			return out, fmt.Errorf("%s may only be specified once", key)
 		}
 		seen[key] = true
 		if !inline && !positional {
@@ -88,6 +96,18 @@ func parseGenerationOptions(input, id string) (generationOptions, error) {
 				return fail()
 			}
 			value = fields[i]
+		}
+		if key == "--selection" || key == "--monitoring" {
+			if value != "on" && value != "off" {
+				return out, fmt.Errorf("%s must be on or off", key)
+			}
+			enabled := value == "on"
+			if key == "--selection" {
+				out.Selection = &enabled
+			} else {
+				out.Monitoring = &enabled
+			}
+			continue
 		}
 		if key == "--eval" {
 			if strings.TrimSpace(value) == "" {

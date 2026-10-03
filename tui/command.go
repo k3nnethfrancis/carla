@@ -84,7 +84,7 @@ func (m *model) commandChoices() []action {
 		if a.id == "visitor" && m.section != 3 {
 			continue
 		}
-		if documentAction(a.id) && !(a.id == "branch" && len(m.actionNodeIDs()) > 0) && !(conversation && (a.id == "branch" || a.id == "edit" || a.id == "inspect")) && m.targetRow().kind != "node" && !(a.id == "inspect" && m.section == 3 && m.simulation != nil) {
+		if documentAction(a.id) && !(a.id == "branch" && len(m.actionNodeIDs()) > 0) && !(conversation && (a.id == "branch" || a.id == "edit" || a.id == "inspect")) && m.targetRow().kind != "node" && !(a.id == "inspect" && m.section == 3 && m.simulation != nil) && !(a.id == "rename" && m.section == 3 && m.targetRow().kind != "sim-config" && m.targetRow().kind != "sim-run") {
 			continue
 		}
 		if a.id != "generate" && a.id != "keep" && a.id != "add" && a.id != "remove" {
@@ -141,7 +141,7 @@ func (m *model) commandChoices() []action {
 				a.label = "Continue a new branch from kept versions"
 			}
 		case "policy":
-			a.label = "Monitoring, selection and judge configurations"
+			a.label = "Monitoring, selection and evals"
 		case "eval":
 			a.label = "Run active or named evaluation on selected items"
 		case "evaluations":
@@ -414,6 +414,11 @@ func (m *model) cycleFocus(step int) tea.Cmd {
 	}
 	previousFocus := m.focus
 	m.focus = (m.focus + step + 4) % 4
+	if m.adaptiveBranches() && len(m.layout().panels) == 1 {
+		for m.focus == 1 || m.focus == 2 {
+			m.focus = (m.focus + step + 4) % 4
+		}
+	}
 	if m.focus == 2 && !m.showInspector {
 		m.focus = (m.focus + step + 4) % 4
 	}

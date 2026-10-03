@@ -32,6 +32,18 @@ func (m *model) layout() layout {
 	height := max(4, m.height-10-m.suggestionCount()-len(m.commandHints()))
 	l := layout{bodyHeight: height, actionY: 4 + height}
 	width := max(1, m.width-2)
+	if m.adaptiveBranches() {
+		nav := m.branchPaneWidth(width)
+		l.panels = []panel{{0, rect{1, 3, nav, height}}}
+		if nav < width {
+			kind := 1
+			if m.showInspector && m.focus == 2 {
+				kind = 2
+			}
+			l.panels = append(l.panels, panel{kind, rect{nav + 2, 3, max(1, width-nav-1), height}})
+		}
+		return l
+	}
 	if (m.editing != "" && m.editing != "document") || m.width < 90 {
 		focus := m.focus
 		if focus == 3 {
@@ -112,7 +124,10 @@ func (m *model) renderDocument(width int) string {
 		}
 	}
 	text := m.currentText()
-	if text == "" {
+	if text == "" && m.data.Current != nil && m.editing == "" {
+		return lipgloss.Place(width, m.document.Height(), lipgloss.Center, lipgloss.Center, dim.Render("Empty document"))
+	}
+	if text == "" && m.data.Current == nil {
 		return "Start with a seed.\n\nOpen Library, expand a document and select the passages you want to explore.\n\nContinue writes from the end. Branch lets you choose a position in the text."
 	}
 	runes := []rune(text)
@@ -146,7 +161,18 @@ func (m *model) renderDocument(width int) string {
 }
 func (m *model) reflow() {
 	m.command.SetWidth(max(1, m.width-7))
-	for _, p := range m.layout().panels {
+	panels := m.layout().panels
+	if m.adaptiveBranches() && len(panels) == 1 && (m.focus == 1 || m.focus == 2) {
+		m.focus = 0
+	}
+	for _, p := range panels {
+		if p.kind == 0 && m.adaptiveBranches() {
+			m.branchScroll = m.branchHorizontalOffset(p.box)
+			rows := m.rows()
+			if len(rows) > 0 {
+				m.branchScrollRow = rows[min(m.selected, len(rows)-1)].id
+			}
+		}
 		width, height := max(1, p.box.w-4), max(1, p.box.h-5)
 		switch p.kind {
 		case 1:
@@ -183,13 +209,15 @@ func (m *model) navigation(r rect) string {
 		return m.notesView(r)
 	}
 	rows := m.rows()
-	visible := max(1, r.h-6)
+	footer := m.navigationFooter(r)
+	// Reserve every footer row so hints wrap instead of being clipped by the panel.
+	visible := m.navigationRows(r)
 	mIndex := min(m.selected, max(0, len(rows)-1))
 	start := max(0, mIndex-visible+1)
 	var lines []string
 	for i := start; i < min(len(rows), start+visible); i++ {
 		item := rows[i]
-		label := strings.Repeat(" ", item.depth) + safe(item.label)
+		label := m.branchRowText(item, r)
 		label = line(label, r.w-4)
 		if item.kind == "evaluation" {
 			if strings.Contains(item.label, "PASS") {
@@ -200,6 +228,9 @@ func (m *model) navigation(r rect) string {
 		}
 		if i == mIndex {
 			label = selectedStyle.Render(label)
+		}
+		if item.kind == "node" {
+			label = m.pulseLabel(conversationKey(item.id, 0), label)
 		}
 		if item.kind == "conversation" && strings.Contains(item.label, "! ") {
 			label = m.pulseLabel(item.id, label)
@@ -212,31 +243,7 @@ func (m *model) navigation(r rect) string {
 	for len(lines) < visible {
 		lines = append(lines, "")
 	}
-	footer := fmt.Sprintf("%d selected · CTRL+F filter", len(m.data.Selected))
-	if m.section != 0 {
-		footer = fmt.Sprintf("%d items", len(rows))
-		if m.section == 3 {
-			count := len(m.selectedConversations())
-			footer = fmt.Sprintf("%d selected · /clear", count)
-		}
-		if m.section == 4 {
-			count := 0
-			for _, selected := range m.evalSelection {
-				if selected {
-					count++
-				}
-			}
-			footer = fmt.Sprintf("%d selected · ENTER opens", count)
-		}
-		if m.section == 1 || m.section == 2 {
-			footer = fmt.Sprintf("%d selected · %s actions", len(m.selectedBranches()), m.keyLabel("nav.enter"))
-		}
-	}
-	if m.searching {
-		footer = m.search.View()
-	} else if m.filter != "" {
-		footer = "Filter: " + m.filter
-	}
+
 	return strings.Join(append(lines, dim.Render(footer)), "\n")
 }
 func (m *model) dialogRect() rect {
@@ -456,6 +463,11 @@ func (m *model) View() tea.View {
 				}
 			}
 			body = m.document.View() + "\n" + "Source · " + m.aiStyle().Render("AI") + " · " + m.humanStyle().Render("Human edits")
+			if (m.section == 1 || m.section == 2) && m.data.Current != nil {
+				if info := monitorSummary(m.data.Current.Monitor); info != "" {
+					body = m.document.View() + "\n" + dim.Render(safe(info))
+				}
+			}
 			if m.section == 3 || m.section == 4 {
 				body = m.document.View()
 			}
@@ -515,13 +527,19 @@ func (m *model) View() tea.View {
 		modelName = fmt.Sprintf("%d collections · %d items · %d training", len(m.data.EvaluationSets), items, training)
 	}
 
+	activeDocuments := 0
+	for _, n := range m.data.Nodes {
+		if n.Status == "generating" || n.Status == "running" || n.Status == "queued" {
+			activeDocuments++
+		}
+	}
+	if activeDocuments > 0 {
+		heading += fmt.Sprintf(" · ▶ %d active docs", activeDocuments)
+	}
 	header := line(bold.Render(heading), max(20, m.width/2)) + dim.Render(line(safe(modelName), max(1, m.width-2-max(20, m.width/2))))
 	lines := []string{"", " " + header, m.sectionBar(), lipgloss.NewStyle().PaddingLeft(1).Render(lipgloss.JoinHorizontal(lipgloss.Top, joinPanels(parts)...)), " " + dim.Render(line(m.targetLabel(), m.width-2))}
 	if m.section == 0 && m.editing == "" {
 		lines[len(lines)-1] = " " + dim.Render(line(m.seedSummary(), m.width-2))
-	}
-	if m.selectionVisible() {
-		lines[len(lines)-1] = m.selectionBar()
 	}
 	lines = append(lines, m.commandView())
 	status := m.status
@@ -532,7 +550,7 @@ func (m *model) View() tea.View {
 		}
 	}
 	if m.editing != "" {
-		status = "Editing · " + m.keyLabel("save") + " save · " + m.keyLabel("nav.back") + " cancel"
+		status = "Editing · " + m.keyLabel("save") + " / " + m.keyLabel("save.alt") + " save · " + m.keyLabel("nav.back") + " cancel"
 		if m.editing == "document" {
 			status += " · /save · /cancel"
 		}
@@ -644,4 +662,44 @@ func (m *model) sectionBar() string {
 		}
 	}
 	return bar
+}
+
+func (m *model) navigationRows(r rect) int {
+	return max(1, r.h-6-strings.Count(m.navigationFooter(r), "\n"))
+}
+func (m *model) navigationFooter(r rect) string {
+	rows := m.rows()
+	footer := fmt.Sprintf("%d selected · CTRL+F filter", len(m.data.Selected))
+	if m.section != 0 {
+		footer = fmt.Sprintf("%d items", len(rows))
+		if m.section == 3 {
+			count := len(m.selectedConversations())
+			footer = fmt.Sprintf("%d selected · /clear", count)
+		}
+		if m.section == 4 {
+			count := 0
+			for _, selected := range m.evalSelection {
+				if selected {
+					count++
+				}
+			}
+			footer = fmt.Sprintf("%d selected · ENTER opens", count)
+		}
+		if m.section == 1 || m.section == 2 {
+			footer = fmt.Sprintf("%d selected · %s actions", len(m.selectedBranches()), m.keyLabel("nav.enter"))
+		}
+	}
+	if m.adaptiveBranches() && m.branchHorizontalLimit(r) > 0 {
+		footer += "\n" + m.keyLabel("tree.scroll-left") + "/" + m.keyLabel("tree.scroll-right") + " scroll"
+	}
+	if m.searching {
+		footer = m.search.View()
+	} else if m.filter != "" {
+		footer = "Filter: " + m.filter
+	}
+	if !m.searching && m.filter == "" && ansi.StringWidth(footer) > r.w-4 {
+		footer = strings.ReplaceAll(footer, " · ", "\n")
+	}
+	footer = ansi.Wrap(footer, max(1, r.w-4), "")
+	return footer
 }

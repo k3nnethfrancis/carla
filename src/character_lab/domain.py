@@ -10,7 +10,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import ancestry
+from .document_names import assign_labels
 from .persistence import WorkspaceStore
+from .simulator_names import assign_labels as assign_simulator_labels
 
 
 def now():
@@ -32,42 +34,6 @@ def generation_status(node):
 def display_title(node):
     """Use durable numbered labels unless the user explicitly renamed a version."""
     return node.get("title") or node.get("label") or node["kind"]
-
-
-def assign_labels(data):
-    """Number versions in creation order; counters survive deletions and restarts.
-
-    Source imports and explicit forks are branches. Text and parent links remain
-    untouched, including when older workspaces acquire labels on their next save.
-    """
-    counters = data.setdefault("label_counters", {})
-    nodes = {n["id"]: n for n in data["nodes"]}
-    for node in data["nodes"]:
-        category = {"generated": "Gen", "edit": "Edit"}.get(node["kind"], "Branch")
-        if "label_number" not in node:
-            previous = re.fullmatch(r"(?:Branch|Gen|Edit) (\d+)", node.get("label", ""))
-            if previous:
-                node["label_number"] = int(previous[1])
-            else:
-                node["label_number"] = counters.get(category, 0) + 1
-            counters[category] = max(counters.get(category, 0), node["label_number"])
-        if "label_source" not in node:
-            root = node
-            while root.get("parent") in nodes:
-                root = nodes[root["parent"]]
-            sources = root.get("source_documents") or [root.get("source", {})]
-            key = sources[0].get("key") or sources[0].get("title", "doc")
-            short = {"gunkel": "paths", "meditations": "med", "tractatus": "tract"}.get(
-                key, key
-            )
-            if len(sources) > 1:
-                short = "mixed"
-            node["label_source"] = (
-                re.sub(r"[^\w]+", "-", short.lower()).strip("-")[:12] or "doc"
-            )
-        node["label"] = (
-            f"{node['label_source']}-{category.lower()}-{node['label_number']:04d}"
-        )
 
 
 def library():
@@ -154,6 +120,7 @@ class Project:
             node.setdefault("document_id", node["id"])
             heads.setdefault(node["document_id"], node["id"])
         assign_labels(self.data)
+        assign_simulator_labels(self.data)
         self.store.checkpoint()
 
     @property
@@ -354,6 +321,8 @@ class Project:
         for node in incoming["nodes"]:
             node.pop("label", None)
             node.pop("label_number", None)
+            node.pop("name_version", None)
+            node.pop("name_number", None)
             node["imported_from"] = str(source)
             node["run_label"] = label
         self.data["nodes"].extend(incoming["nodes"])

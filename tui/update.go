@@ -11,7 +11,7 @@ type action struct{ id, label, key string }
 
 var allActions = []action{
 	{"continue", "Continue", "ctrl+r"}, {"generate", "Generate (alias for continue)", ""}, {"branch", "Branch current version", "ctrl+b"}, {"loom", "Generate alternatives", ""},
-	{"add", "Add to seeds", ""}, {"remove", "Remove from collection", "delete"},
+	{"add", "Add to seeds", ""}, {"remove", "Remove from collection", ""},
 	{"delete", "Delete selected branches", ""}, {"keep", "Keep branch", "k"}, {"grow", "Grow", "g"},
 	{"settings", "Settings", "ctrl+t"}, {"models", "Model", "m"},
 	{"workspaces", "Workspace", "ctrl+w"}, {"edit", "Edit document", "e"},
@@ -21,7 +21,7 @@ var allActions = []action{
 	{"library", "Library", "1"}, {"branches", "Branches", "2"},
 	{"kept", "Anthology", "3"}, {"notes", "Notes", "4"}, {"simulator", "Simulator", "5"}, {"sim-config", "Configure simulator", ""}, {"simulate", "Run conversations", ""}, {"grow-config", "Configure Grow", ""}, {"grow-policy", "Grow selection criteria", ""},
 	{"run", "Run Simulator conversations", ""}, {"configure", "Configure this page", ""},
-	{"find", "Filter this list", "ctrl+f"}, {"active", "View active generation", ""}, {"rename", "Rename document", ""},
+	{"find", "Filter this list", "ctrl+f"}, {"active", "View active generation", ""}, {"rename", "Rename document or conversation", ""},
 	{"visitor", "Write a visitor message in a conversation fork", ""}, {"grid", "Show Loom grid", ""}, {"loom-policy", "Configure conversation warnings and stop rules", ""},
 	{"character-sampling", "Character temperature, top-p and output tokens", ""}, {"visitor-sampling", "Visitor temperature, top-p and output tokens", ""},
 	{"import", "Import a document into Library", ""},
@@ -127,7 +127,7 @@ func (m *model) perform(id string) tea.Cmd {
 		}
 		return m.send("simulator.inspect", map[string]any{"run": m.simulation.ID})
 	}
-	if documentAction(id) && !(id == "branch" && len(m.actionNodeIDs()) > 0) && !(m.section == 3 && id == "branch") && (m.targetRow().kind != "node" || m.targetRow().id != m.currentID() || m.pending) {
+	if documentAction(id) && !(id == "branch" && len(m.actionNodeIDs()) > 0) && !(m.section == 3 && (id == "branch" || id == "rename")) && (m.targetRow().kind != "node" || m.targetRow().id != m.currentID() || m.pending) {
 		m.status = "Select a branch and wait for its preview before /" + id
 		return m.previewTarget()
 	}
@@ -197,10 +197,10 @@ func (m *model) perform(id string) tea.Cmd {
 	case "active":
 		return m.openActive()
 	case "rename":
-		d := &dialog{kind: "rename", title: "Document title", args: map[string]any{"node": m.currentID()}}
-		d.add("Title", documentLabel(*m.data.Current))
-		m.dialog = d
-		return d.fields[0].input.Focus()
+		if m.section == 3 {
+			return m.renameSimulation()
+		}
+		return m.renameDocument()
 	case "character-sampling", "visitor-sampling":
 		return m.openSampling(strings.TrimSuffix(id, "-sampling") + "_settings")
 	case "workspaces", "review":
@@ -311,7 +311,7 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.previewTarget()
 		}
 
-		if m.editing != "" && m.boundAction(raw, "editor") == "save" {
+		if m.editing != "" && m.saveKey(msg) {
 			return m, m.saveEditor()
 		}
 		if m.focus == 3 {
@@ -321,6 +321,14 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			return m, m.commandKey(msg)
+		}
+		if m.adaptiveBranches() && m.focus == 0 && (m.boundAction(raw, "branches") == "tree.scroll-left" || m.boundAction(raw, "branches") == "tree.scroll-right") {
+			delta := 8
+			if m.boundAction(raw, "branches") == "tree.scroll-left" {
+				delta = -delta
+			}
+			m.scrollBranches(delta)
+			return m, nil
 		}
 		if m.notesOpen && m.focus == 0 {
 			return m, m.notesKey(msg)
@@ -485,11 +493,6 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		for i, r := range m.selectionRects() {
-			if r.contains(msg.X, msg.Y) {
-				return m, m.selectionAction([]string{"clear", m.collectionAction(), "delete"}[i])
-			}
-		}
 		choices := m.commandChoices()
 		first := m.layout().actionY + 3
 		if msg.Y >= first && msg.Y < first+m.suggestionCount() && msg.X >= 1 && msg.X < m.width-1 {
@@ -541,12 +544,13 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					if m.section == 0 && msg.Y == panel.box.y+panel.box.h-3 {
 						return m, m.perform("clear")
 					}
-					index := msg.Y - panel.box.y - 3 + m.navStart(panel.box.h-6)
+					index := msg.Y - panel.box.y - 3 + m.navStart(m.navigationRows(panel.box))
 					if index >= 0 && index < len(m.rows()) {
-						m.selected = index
 						r := m.rows()[index]
+						rowX := m.treeRowX(r, panel.box)
+						m.selected = index
 						if m.section == 1 || m.section == 2 {
-							checkX := panel.box.x + 2 + r.depth
+							checkX := rowX
 							if m.section == 1 {
 								checkX += 2
 							}
@@ -554,16 +558,17 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 								return m, m.toggleTarget()
 							}
 						}
-						if m.section == 3 && (strings.HasPrefix(r.label, "▾") || strings.HasPrefix(r.label, "▸")) && msg.X == panel.box.x+2+r.depth {
+						if m.section == 3 && (strings.HasPrefix(r.label, "▾") || strings.HasPrefix(r.label, "▸")) && msg.X == rowX {
 							m.collapsed[r.id] = !m.collapsed[r.id]
 							return m, nil
 						}
-						if m.section == 1 && m.hasChildren(r.id) && msg.X == panel.box.x+2+r.depth {
+						if m.section == 1 && m.hasChildren(r.id) && msg.X == rowX {
 							m.collapsed[r.id] = !m.collapsed[r.id]
 							m.reflow()
 							return m, nil
 						}
-						return m, m.activate()
+						m.reflow()
+						return m, m.previewTarget()
 					}
 				}
 				m.reflow()
@@ -717,6 +722,7 @@ func (m *model) nodeTitle() string {
 	if n.Kept {
 		title = "★ " + title
 	}
+	title = documentStatusLabel(*n, title)
 	if n.Model != "" {
 		title += " · " + n.Model
 	}

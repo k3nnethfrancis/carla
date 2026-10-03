@@ -19,16 +19,26 @@ type pagePosition struct {
 	notes                                    bool
 }
 type runSummary struct {
-	AlternativeScope           *actionScope `json:"alternative_scope"`
-	SourceScope                *actionScope `json:"source_scope"`
-	AlternativeGroup           string       `json:"alternative_group"`
-	AlternativeIndex           int          `json:"alternative_index"`
-	AlternativeCount           int          `json:"alternative_count"`
-	Parent                     *conversationParent
-	Conversations              []simulationConversation
-	ID, Status, Created, Label string
-	Count                      int
-	PolicyStops                int `json:"policy_stops"`
+	Label                 string `json:"label"`
+	Title                 string `json:"title"`
+	ShortLabel            string `json:"short_label"`
+	OperationTitle        string `json:"operation_title"`
+	AlternativeTitle      string `json:"alternative_title"`
+	OperationLabel        string `json:"operation_label"`
+	OperationShortLabel   string `json:"operation_short_label"`
+	AlternativeLabel      string `json:"alternative_label"`
+	AlternativeShortLabel string `json:"alternative_short_label"`
+
+	AlternativeScope    *actionScope `json:"alternative_scope"`
+	SourceScope         *actionScope `json:"source_scope"`
+	AlternativeGroup    string       `json:"alternative_group"`
+	AlternativeIndex    int          `json:"alternative_index"`
+	AlternativeCount    int          `json:"alternative_count"`
+	Parent              *conversationParent
+	Conversations       []simulationConversation
+	ID, Status, Created string
+	Count               int
+	PolicyStops         int `json:"policy_stops"`
 }
 
 func (m *model) dismissCommands() tea.Cmd {
@@ -244,6 +254,9 @@ func documentLabel(n node) string {
 	if n.Title != "" {
 		return n.Title
 	}
+	if n.Label != "" {
+		return n.Label
+	}
 	for _, line := range strings.Split(n.Preview+"\n"+n.Text, "\n") {
 		if strings.TrimSpace(line) != "" {
 			return strings.TrimSpace(line)
@@ -263,7 +276,7 @@ func runLabel(r runSummary) string {
 	if r.PolicyStops > 0 {
 		status += fmt.Sprintf(" / %d policy stops", r.PolicyStops)
 	}
-	return fmt.Sprintf("%s · %s · %d conv · %s", date, status, r.Count, r.Label)
+	return fmt.Sprintf("%s · %s · %d conv · %s", date, status, r.Count, simulationName(r.Title, "", r.Label, r.ID))
 }
 func filterRows(rows []row, query string) []row {
 	if strings.TrimSpace(query) == "" {

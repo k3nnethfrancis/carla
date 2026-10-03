@@ -253,5 +253,6 @@ async def test_continue_loops_and_single_loom_ignore_selector(session):
     s = session
     s.policy_model = {"name": "missing", "path": "/missing"}
     node = s.project.add("Seed.")
-    await execute(s, action="continue", node=node["id"], loops=2, selection=True)
+    s.project.data["selection_enabled"] = True
+    await execute(s, action="continue", node=node["id"], loops=2)
     assert s.current()["text"] == "Seed." + " A path remembers." * 2

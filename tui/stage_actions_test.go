@@ -55,8 +55,8 @@ func TestDeleteRemovesOutsideTextEditing(t *testing.T) {
 		m.focus = focus
 		m.reflow()
 		m.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
-		if m.dialog == nil || m.dialog.kind != "delete" {
-			t.Fatalf("focus %d: no deletion review", focus)
+		if m.dialog != nil {
+			t.Fatalf("focus %d: unselected delete opened action", focus)
 		}
 	}
 	m := fixture()

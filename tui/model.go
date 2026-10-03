@@ -23,6 +23,7 @@ type origin struct {
 	Kind       string
 }
 type node struct {
+	Monitor                                                      monitorResult
 	DocumentID                                                   string `json:"document_id"`
 	RevisionOf                                                   string `json:"revision_of"`
 	ChangeOffset                                                 int    `json:"change_offset"`
@@ -59,11 +60,25 @@ type simulationTurn struct {
 	Flags                      []string
 }
 type simulationConversation struct {
-	Index  int
-	Status string
-	Turns  []simulationTurn
+	TurnCount  int    `json:"turn_count"`
+	Label      string `json:"label"`
+	Title      string `json:"title"`
+	ShortLabel string `json:"short_label"`
+	Index      int
+	Status     string
+	Turns      []simulationTurn
 }
 type simulationRun struct {
+	Label                 string `json:"label"`
+	Title                 string `json:"title"`
+	ShortLabel            string `json:"short_label"`
+	OperationTitle        string `json:"operation_title"`
+	AlternativeTitle      string `json:"alternative_title"`
+	OperationLabel        string `json:"operation_label"`
+	OperationShortLabel   string `json:"operation_short_label"`
+	AlternativeLabel      string `json:"alternative_label"`
+	AlternativeShortLabel string `json:"alternative_short_label"`
+
 	GridGroup         string       `json:"grid_group"`
 	AlternativeScope  *actionScope `json:"alternative_scope"`
 	SourceScope       *actionScope `json:"source_scope"`
@@ -79,13 +94,16 @@ type simulationRun struct {
 	Conversations     []simulationConversation
 }
 type documentSet struct {
-	Scope       *actionScope `json:"scope"`
-	SourceScope *actionScope `json:"source_scope"`
-	ID          string
-	SetID       string `json:"set_id"`
-	Members     []string
-	Parent      string
-	Action      string
+	OperationID    string       `json:"operation_id"`
+	OperationLabel string       `json:"operation_label"`
+	Label          string       `json:"label"`
+	Scope          *actionScope `json:"scope"`
+	SourceScope    *actionScope `json:"source_scope"`
+	ID             string
+	SetID          string `json:"set_id"`
+	Members        []string
+	Parent         string
+	Action         string
 }
 type state struct {
 	SelectionEnabled bool                   `json:"selection_enabled"`
@@ -146,6 +164,8 @@ type dialog struct {
 type loomTile struct{ ID, Title, Text, Status string }
 
 type model struct {
+	branchScroll                int
+	branchScrollRow             string
 	pendingDocumentNodes        map[string]bool
 	preserveSimulationSelection bool
 	pendingDocumentSelection    map[string]bool
@@ -223,6 +243,7 @@ type model struct {
 	search                      textinput.Model
 	document, inspector         viewport.Model
 	previewChangePending        bool
+	previewSelectionPending     bool
 	inspection                  string
 	showInspector               bool
 	editor                      textarea.Model
@@ -574,6 +595,23 @@ func (m *model) apply(e event) tea.Cmd {
 		return m.previewTarget()
 	case "setup":
 		return m.setupEvent(e.Data)
+	case "document.monitor":
+		var update struct {
+			Node    string
+			Monitor monitorResult
+		}
+		if err := json.Unmarshal(e.Data, &update); err != nil {
+			return nil
+		}
+		for i := range m.data.Nodes {
+			if m.data.Nodes[i].ID == update.Node {
+				m.data.Nodes[i].Monitor = update.Monitor
+			}
+		}
+		if m.currentID() == update.Node {
+			m.data.Current.Monitor = update.Monitor
+		}
+		m.reflow()
 	case "policy.detection":
 		return m.detectPolicy(e.Data)
 	case "loom.start":
@@ -618,11 +656,12 @@ func (m *model) apply(e event) tea.Cmd {
 				if m.data.SimulationRuns[i].ID == run.ID {
 					m.data.SimulationRuns[i].Conversations = run.Conversations
 					m.data.SimulationRuns[i].Status = run.Status
+					copySimulationNames(&m.data.SimulationRuns[i], &run)
 					updated = true
 				}
 			}
 			if !updated {
-				m.data.SimulationRuns = append(m.data.SimulationRuns, runSummary{ID: run.ID, Count: len(run.Conversations), Status: run.Status, Conversations: run.Conversations, Parent: run.Parent, AlternativeScope: run.AlternativeScope, SourceScope: run.SourceScope, AlternativeGroup: run.AlternativeGroup, AlternativeIndex: run.AlternativeIndex, AlternativeCount: run.AlternativeCount})
+				m.data.SimulationRuns = append(m.data.SimulationRuns, runSummary{Label: run.Label, Title: run.Title, ShortLabel: run.ShortLabel, OperationTitle: run.OperationTitle, AlternativeTitle: run.AlternativeTitle, OperationLabel: run.OperationLabel, OperationShortLabel: run.OperationShortLabel, AlternativeLabel: run.AlternativeLabel, AlternativeShortLabel: run.AlternativeShortLabel, ID: run.ID, Count: len(run.Conversations), Status: run.Status, Conversations: run.Conversations, Parent: run.Parent, AlternativeScope: run.AlternativeScope, SourceScope: run.SourceScope, AlternativeGroup: run.AlternativeGroup, AlternativeIndex: run.AlternativeIndex, AlternativeCount: run.AlternativeCount})
 			}
 		}
 		newView := run.Opened || m.simulation == nil && (m.awaitingSimulation || m.simSelection == nil)
@@ -827,6 +866,7 @@ func (m *model) apply(e event) tea.Cmd {
 			}
 		}
 		if oldWorkspace != m.data.Workspace.Path {
+			m.branchScroll, m.branchScrollRow = 0, ""
 			m.gridGroup = ""
 			m.simulationViews = nil
 			m.behaviorDraft = nil
@@ -926,7 +966,7 @@ func (m *model) apply(e event) tea.Cmd {
 
 		m.selected = max(0, min(m.selected, len(m.rows())-1))
 		if oldID != m.currentID() {
-			m.previewChangePending = (m.section == 1 || m.section == 2) && !m.data.Busy && m.editing == ""
+			m.previewChangePending = (m.section == 1 || m.section == 2) && m.editing == ""
 		}
 		m.reflow()
 		if noteSaved {
@@ -943,6 +983,12 @@ func (m *model) apply(e event) tea.Cmd {
 		}
 		if startDocumentEdit {
 			return m.openDocumentWithNotes()
+		}
+		if m.previewSelectionPending {
+			m.previewSelectionPending = false
+			if m.focus == 0 && !m.notesOpen && (m.section == 1 || m.section == 2) {
+				return m.previewTarget()
+			}
 		}
 	case "token":
 		var t struct{ Node, Text string }

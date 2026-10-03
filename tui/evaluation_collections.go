@@ -84,7 +84,7 @@ func (m *model) openCollectionConfig() tea.Cmd {
 	if c.ID == m.data.ActiveEvaluation {
 		active = "Active evaluation"
 	}
-	m.dialog = &dialog{kind: "eval-collection-config", title: c.Name, rows: []row{{id: "name", label: "Name · " + c.Name}, {id: "judges", label: fmt.Sprintf("Judges · %d selected", len(c.Judges))}, {id: "definitions", label: "Manage judge configurations"}, {id: "active", label: active}}}
+	m.dialog = &dialog{kind: "eval-collection-config", title: c.Name, rows: []row{{id: "name", label: "Name · " + c.Name}, {id: "judges", label: fmt.Sprintf("Judges · %d selected", len(c.Judges))}, {id: "definitions", label: "Manage evaluation judges"}, {id: "active", label: active}}}
 	return nil
 }
 func (m *model) enterCollection(id string) {
@@ -128,7 +128,11 @@ func (m *model) openCollectionItems() tea.Cmd {
 	}
 	for _, run := range m.data.SimulationRuns {
 		for i := 0; i < run.Count; i++ {
-			add(conversationKey(run.ID, i), fmt.Sprintf("Conversation %d · %s", i+1, run.ID), map[string]any{"run": run.ID, "conversation": i})
+			c := simulationConversation{Index: i}
+			if i < len(run.Conversations) {
+				c = run.Conversations[i]
+			}
+			add(conversationKey(run.ID, i), conversationName(c, false), map[string]any{"run": run.ID, "conversation": i})
 		}
 	}
 	for _, e := range m.data.Evaluations {

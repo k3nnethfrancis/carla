@@ -5,6 +5,7 @@ emission, so a slow frontend applies backpressure rather than dropping tokens.
 """
 
 import asyncio
+import copy
 import json
 import math
 import random
@@ -148,6 +149,19 @@ class Session:
                 | {
                     "status": generation_status(n),
                     "preview": n["text"][len(n.get("prompt", "")) :][:100],
+                    "monitor": {
+                        k: v
+                        for k, v in n.get("monitor", {}).items()
+                        if k
+                        in {
+                            "status",
+                            "scores",
+                            "detections",
+                            "error",
+                            "phase",
+                            "tokens",
+                        }
+                    },
                     "title": display_title(n),
                     "model": n.get("trace", {}).get("model", {}).get("name", ""),
                 }
@@ -357,9 +371,10 @@ class Session:
             )
         elif command == "node.rename":
             title = args.get("title", "").strip()
-            if not title:
-                raise ValueError("Enter a document title")
-            p.node(args["node"])["title"] = title
+            node = p.node(args["node"])
+            node["title"] = title
+            if args.get("rename_children", False):
+                node["ancestry_name"] = title
             p.save()
         elif command == "node.edit":
             self.edit(args)
@@ -589,9 +604,28 @@ class Session:
         self.project.edit(node["id"], args["text"])
 
     async def generate(
-        self, command, parent, prefix, settings, count, *, nested=False, candidates=None
+        self,
+        command,
+        parent,
+        prefix,
+        settings,
+        count,
+        *,
+        nested=False,
+        candidates=None,
+        policy_config=None,
     ):
         p = self.project
+        policy_config = (
+            copy.deepcopy(policy_config)
+            if policy_config is not None
+            else simulator.configuration(p, self.runtime.model["alias"])
+        )
+        policy_record = {
+            key: value
+            for key, value in policy_config.items()
+            if key.startswith("monitor_") or key in {"selection_enabled", "loops"}
+        }
         self.view_node = None
         job_id = self.job_id
         node = None
@@ -617,6 +651,7 @@ class Session:
                         status="queued",
                         loom_index=i,
                     )
+                    item["policy_config"] = copy.deepcopy(policy_record)
                     branches.append(item)
                 await self.snapshot()
 
@@ -643,6 +678,7 @@ class Session:
                     )
                 if candidate is None:
                     branches.append(node)
+                node["policy_config"] = copy.deepcopy(policy_record)
                 node["loom_index"] = i
                 node["status"] = "generating"
                 self.active_node = node["id"]
@@ -665,7 +701,7 @@ class Session:
                     job_id,
                 )
                 try:
-                    config = simulator.configuration(p, self.runtime.model["alias"])
+                    config = policy_config
 
                     async def monitor_event(kind, data):
                         await self.emit(kind, data, job_id)
@@ -1007,7 +1043,9 @@ class Session:
             current_seed = simulator_actions.selected_seed(p, latest, key)
 
         try:
-            if config.get("loops", 1) == 1:
+            if config.get("loops", 1) == 1 and not config.get(
+                "selection_enabled", False
+            ):
                 await batch()
             elif (
                 config.get("selection_enabled", False)

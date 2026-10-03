@@ -261,7 +261,7 @@ retains the key for later use. Keys are not included in state events, generation
 configs, traces or dataset exports. Saving a key does not make a paid request or
 verify provider authentication; provider errors remain visible when used.
 
-**Judge call mode** defaults to **Separate**: one request per enabled behavior,
+**Call mode** defaults to **Separate**: one request per enabled behavior,
 using the same captured text. **Bundled** asks all enabled behaviors in one
 request. Choosing Bundled opens a confirmation warning: it can reduce calls,
 cost and latency, but asking behaviors together can change scores or miss
@@ -320,3 +320,7 @@ scrolls with the cursor; use arrows, Page Up/Page Down or the mouse wheel to
 navigate. The heading shows the current line and total lines. New judges
 ask for a name first, then open this editor for criteria. Saving preserves the
 complete multiline text, including content outside the visible window.
+
+The local monitoring **Model alias** is the request identifier sent to OpenJev.
+`openjev-latest` routes to DiffusionGemma in Carla’s managed worker; it is not a
+second model. The Behaviors row counts enabled Warn/Stop rules and disabled Off rules.

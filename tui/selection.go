@@ -3,8 +3,6 @@ package main
 import (
 	tea "charm.land/bubbletea/v2"
 	"fmt"
-	"github.com/charmbracelet/x/ansi"
-	"strings"
 )
 
 // Tree operations include hidden descendants, independent of rendered rows.
@@ -96,29 +94,6 @@ func (m *model) selectionAction(id string) tea.Cmd {
 		m.dialog = &dialog{kind: "delete", title: fmt.Sprintf("Delete %d branches? (%d additional descendants)", len(expected), len(expected)-len(ids)), rows: rows, args: map[string]any{"nodes": ids, "expected": expected}}
 	}
 	return nil
-}
-func (m *model) selectionLabels() []string {
-	label := "Keep selected"
-	if m.section == 2 {
-		label = "Remove from anthology"
-	}
-	return []string{"[ Clear selection ]", "[ " + label + " ]", "[ Delete… ]"}
-}
-func (m *model) selectionRects() []rect {
-	if !m.selectionVisible() {
-		return nil
-	}
-	x := 1
-	var rects []rect
-	for _, label := range m.selectionLabels() {
-		w := ansi.StringWidth(label)
-		rects = append(rects, rect{x, m.layout().actionY - 1, w, 1})
-		x += w + 1
-	}
-	return rects
-}
-func (m *model) selectionBar() string {
-	return " " + strings.Join(m.selectionLabels(), " ")
 }
 
 // Selection is a new working set on each Library visit, not saved provenance.

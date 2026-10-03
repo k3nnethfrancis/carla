@@ -7,8 +7,8 @@ path so document identity, set shape and operation overrides have one owner.
 import asyncio
 from dataclasses import replace
 
-from . import document_actions, evaluation_sets
-from .exploration import explore, require_selector
+from . import document_actions, evaluation_sets, policy_overrides, simulator
+from .exploration import explore
 
 
 async def start(session, args, request_id, eval_plan):
@@ -29,11 +29,6 @@ async def start(session, args, request_id, eval_plan):
         raise ValueError(
             "Continue advances each selected item; use Loom for alternatives"
         )
-    selection = args.get("selection", p.data.get("selection_enabled", False))
-    if not isinstance(selection, bool):
-        raise ValueError("Selection must be enabled or disabled")
-    if loops > 1 and selection and args.get("count", 1) > 1:
-        require_selector(session.policy_model)
     alias = args.get("model", session.runtime.model["alias"])
     model = next((m for m in p.data["models"] if m["alias"] == alias), None)
     if model is None:
@@ -43,9 +38,18 @@ async def start(session, args, request_id, eval_plan):
         settings["n_predict"] = args["n_predict"]
     session.validate_settings(settings)
     count = args.get("count", 1)
-    selection = selection and count != 1
     if type(count) is not int or count < 1:
         raise ValueError("Alternatives must be a positive integer")
+    selection = policy_overrides.selection(
+        args,
+        p.data.get("selection_enabled", False),
+        action,
+        count,
+        session.policy_model,
+    )
+    policy_config = policy_overrides.monitoring(simulator.configuration(p, alias), args)
+    policy_config["selection_enabled"] = selection
+    policy_config["loops"] = loops
     targets = [key for key in ("refs", "node", "nodes", "set", "scope") if key in args]
     if len(targets) > 1:
         raise ValueError(
@@ -105,11 +109,13 @@ async def start(session, args, request_id, eval_plan):
     )
     session.job_id = request_id
     session.job = asyncio.create_task(
-        run(session, plan, settings, loops, model, eval_plan, selection)
+        run(session, plan, settings, loops, model, eval_plan, selection, policy_config)
     )
 
 
-async def run(session, plan, settings, loops, model, eval_plan, selection):
+async def run(
+    session, plan, settings, loops, model, eval_plan, selection, policy_config
+):
     p = session.project
     original_runtime = session.runtime
     generated = []
@@ -131,6 +137,7 @@ async def run(session, plan, settings, loops, model, eval_plan, selection):
             len(candidates),
             nested=True,
             candidates=candidates,
+            policy_config=policy_config,
         )
         generated.extend(outputs)
         if policy_id:
@@ -168,7 +175,7 @@ async def run(session, plan, settings, loops, model, eval_plan, selection):
         if original_runtime.model["alias"] != model["alias"]:
             original_runtime.close()
             session.runtime = session.runtime_factory(p.folder, model)
-        if loops == 1:
+        if loops == 1 and not selection:
             await batch()
         elif not selection:
             # Split once, then advance every resulting alternative. Loops extend

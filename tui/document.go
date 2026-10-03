@@ -329,5 +329,5 @@ func (m *model) revealVersionChange() {
 	m.cursorMoved = false
 	m.document.SetContent(m.renderDocument(m.document.Width()))
 	row := strings.Count(ansi.Wrap(safe(string(text[:offset]))+"█", max(1, m.document.Width()), ""), "\n")
-	m.document.SetYOffset(row)
+	m.document.SetYOffset(max(0, row-2))
 }

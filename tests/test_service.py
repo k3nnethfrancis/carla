@@ -1017,3 +1017,49 @@ async def test_selection_policy_toggle_is_explicit_and_persisted(session):
     assert s.project.data["selection_enabled"] is True
     await s.execute("policy.configure", {"selection_enabled": False}, "disable")
     assert json.loads(s.project.path.read_text())["selection_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_rename_keeps_ancestry_and_can_restore_label(session):
+    s = session
+    doc = s.project.add("Unchanged text", kind="source")
+    label = doc["label"]
+    await s.execute(
+        "node.rename", {"node": doc["id"], "title": "Favorite path"}, "name"
+    )
+    assert doc["title"] == "Favorite path"
+    assert doc["label"] == label
+    await s.execute("node.rename", {"node": doc["id"], "title": ""}, "reset")
+    assert doc["title"] == ""
+    assert doc["label"] == label
+    assert doc["text"] == "Unchanged text"
+
+
+@pytest.mark.asyncio
+async def test_rename_children_uses_ancestry_not_text_replacement(session):
+    s = session
+    p = s.project
+    root = p.add("Seed", kind="source")
+    child = p.add("Seed continuation", parent=root["id"])
+    grandchild = p.add("Edited", parent=child["id"], kind="edit")
+    other = p.add("Other", kind="source")
+    grandchild["title"] = "My favorite"
+    await s.execute("node.rename", {"node": root["id"], "title": "paths"}, "local")
+    assert child["label"] == "continue-1-doc-1"
+    await s.execute(
+        "node.rename",
+        {"node": root["id"], "title": "paths", "rename_children": True},
+        "children",
+    )
+    assert child["label"] == "continue-1-paths"
+    assert grandchild["label"] == "edit-1-continue-1-paths"
+    assert grandchild["title"] == "My favorite"
+    assert other["label"] == "doc-2"
+    assert p.add("Next", parent=root["id"])["label"] == "continue-2-paths"
+    await s.execute(
+        "node.rename",
+        {"node": root["id"], "title": "", "rename_children": True},
+        "restore",
+    )
+    assert child["label"] == "continue-1-doc-1"
+    assert grandchild["text"] == "Edited"
