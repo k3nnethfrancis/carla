@@ -145,7 +145,9 @@ func (m *model) refreshConfig() {
 	case "sim-openings":
 		m.openOpeningConfig()
 	case "sim-config":
-		if d.title == "Prompts" {
+		if group, ok := d.args["settings_group"].(string); ok {
+			m.openSimulatorSettings(group)
+		} else if d.title == "Prompts" {
 			m.openSimulatorPrompts()
 		} else if d.title == "Context limits" {
 			m.openSimulatorContexts()

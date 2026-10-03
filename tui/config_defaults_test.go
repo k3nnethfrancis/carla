@@ -23,6 +23,9 @@ func TestTopLevelDefaultsSaveToExistingSettings(t *testing.T) {
 		m.section = item.section
 		m.data.SimulatorConfig = map[string]any{"turns": float64(2), "character_settings": map[string]any{"n_predict": float64(512), "temperature": .7}, "visitor_settings": map[string]any{"n_predict": float64(256), "temperature": .9}}
 		m.openConfig()
+		if item.section == 3 {
+			m.submitDialog()
+		}
 		parent := m.dialog
 		parent.index = item.index
 		m.submitDialog()
@@ -144,5 +147,40 @@ func TestSimulatorContextPickerTargetsSpeakerModel(t *testing.T) {
 	right.Close()
 	if request.Command != "simulator.configure" || request.Args["character_context"] != float64(0) || len(request.Args) != 1 || m.dialog != parent {
 		t.Fatal(request)
+	}
+}
+
+func TestNumericConfigTypingCursorAndUnitSteps(t *testing.T) {
+	m := fixture()
+	m.numberConfig("sim", "turns", 2, "")
+	m.dialogKey(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
+	m.dialogKey(tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+	m.dialogKey(tea.KeyPressMsg{Code: '1', Text: "13"})
+	if m.dialog.fields[0].input.Value() != "13" {
+		t.Fatal(m.dialog.fields[0].input.Value())
+	}
+	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyLeft})
+	m.dialogKey(tea.KeyPressMsg{Code: '2', Text: "2"})
+	if m.dialog.fields[0].input.Value() != "123" {
+		t.Fatal("cursor editing", m.dialog.fields[0].input.Value())
+	}
+	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyUp})
+	if m.dialog.fields[0].input.Value() != "124" {
+		t.Fatal("increment")
+	}
+	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyDown})
+	if m.dialog.fields[0].input.Value() != "123" {
+		t.Fatal("decrement")
+	}
+	m.dialog.fields[0].input.SetValue("1.5")
+	if cmd := m.submitDialog(); cmd != nil || m.status != "Enter a whole number" {
+		t.Fatal("fraction silently truncated")
+	}
+	for _, key := range []string{"n_predict", "context", "monitor_interval_tokens"} {
+		m.numberConfig("sim", key, 512, "")
+		m.numberKey(tea.KeyPressMsg{Code: tea.KeyUp})
+		if m.dialog.fields[0].input.Value() != "513" {
+			t.Fatal(key, m.dialog.fields[0].input.Value())
+		}
 	}
 }

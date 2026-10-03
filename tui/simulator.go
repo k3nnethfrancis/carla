@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -35,19 +36,28 @@ func (m *model) simulationText() string {
 }
 
 func (m *model) openSimulatorConfig() tea.Cmd {
-	d := &dialog{kind: "sim-config", title: "Simulator defaults"}
+	m.dialog = &dialog{kind: "sim-config", title: "Simulator defaults", rows: []row{
+		{id: "generation", label: "Generation", preview: "Default turns and output tokens for character and visitor replies."},
+		{id: "models-group", label: "Models", preview: "Character and visitor models, plus their context capacity."},
+		{id: "sampling-group", label: "Sampling", preview: "Temperature and top-p for each speaker."},
+		{id: "openings", label: "Opening", preview: "Fixed opening message or generated opening settings."},
+		{id: "prompts", label: "Prompts", preview: "Character and visitor templates and the visitor brief."},
+	}}
+	return nil
+}
+func (m *model) openSimulatorSettings(group string) tea.Cmd {
+	d := &dialog{kind: "sim-config", title: map[string]string{"generation": "Generation", "models-group": "Models", "sampling-group": "Sampling"}[group], args: map[string]any{"settings_group": group}}
 	for _, entry := range []struct{ key, label string }{
 		{"turns", "Turns"}, {"character_tokens", "Character tokens"}, {"visitor_tokens", "Visitor tokens"},
-		{"documents", "Anthology documents"}, {"character_alias", "Character model"}, {"visitor_alias", "Visitor model"},
+		{"character_alias", "Character model"}, {"visitor_alias", "Visitor model"},
 		{"contexts", "Context limits"},
-		{"openings", "Opening"},
 		{"character_settings", "Character sampling"}, {"visitor_settings", "Visitor sampling"},
-		{"prompts", "Prompts"},
 	} {
-		value := fmt.Sprint(m.data.SimulatorConfig[entry.key])
-		if entry.key == "documents" {
-			value = fmt.Sprintf("%d explicitly selected versions", len(m.simDocs()))
+		groups := map[string]string{"turns": "generation", "character_tokens": "generation", "visitor_tokens": "generation", "character_alias": "models-group", "visitor_alias": "models-group", "contexts": "models-group", "character_settings": "sampling-group", "visitor_settings": "sampling-group"}
+		if groups[entry.key] != group {
+			continue
 		}
+		value := fmt.Sprint(m.data.SimulatorConfig[entry.key])
 		label := entry.label
 		switch entry.key {
 		case "contexts":
@@ -59,18 +69,11 @@ func (m *model) openSimulatorConfig() tea.Cmd {
 			value = "Maximum new tokens per reply for this speaker. --tokens overrides both speakers for one run; Max uses remaining context."
 		case "character_alias", "visitor_alias":
 			label += " · " + m.modelName(m.simString(entry.key))
-		case "openings":
-			label += " · " + m.simString("opening_mode")
-			value = "Fixed message or a freshly generated opening for each conversation"
-		case "documents":
-			label += fmt.Sprintf(" · %d selected", len(m.simDocs()))
 		case "conversations", "turns":
 			label += " · " + value
 			value = "Additional character replies per conversation, per loop. --turns overrides one run."
 		case "character_settings", "visitor_settings":
-			value = "Temperature and top-p for this speaker. Token limits are shown above."
-		case "prompts":
-			value = "Character and visitor prompt templates, plus the visitor brief."
+			value = "Temperature and top-p for this speaker. Output token limits are in Generation."
 		}
 		d.rows = append(d.rows, row{id: entry.key, label: label, preview: value})
 	}
@@ -234,6 +237,8 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 		return m.saveDialog(d, "grow.selector", map[string]any{"alias": r.id})
 	case "sim-config", "sim-speakers", "sim-openings":
 		switch r.id {
+		case "generation", "models-group", "sampling-group":
+			return m.openSimulatorSettings(r.id)
 		case "contexts":
 			m.openSimulatorContexts()
 		case "character_context", "visitor_context":
@@ -258,26 +263,6 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 				{id: "fixed", label: "Fixed", preview: "Same opening message for every conversation"},
 				{id: "generated", label: "Generated", preview: "Fresh opening per conversation; no anthology supplied"},
 			}}
-		case "preview_openings":
-			m.simulation = nil
-			m.dialog = nil
-			return m.send("simulator.preview", nil)
-		case "documents":
-			selected := map[string]bool{}
-			for _, id := range m.simDocs() {
-				selected[id] = true
-			}
-			next := &dialog{kind: "sim-documents", title: "Anthology · SPACE select · CTRL+S save", args: map[string]any{"selected": selected}}
-			for _, n := range m.data.Nodes {
-				if n.Kept {
-					label := documentLabel(n)
-					if selected[n.ID] {
-						label = "✓ " + label
-					}
-					next.rows = append(next.rows, row{id: n.ID, label: label, preview: n.Preview})
-				}
-			}
-			m.dialog = next
 		case "character_alias", "visitor_alias", "opening_alias":
 			next := &dialog{kind: "sim-model", title: r.label, args: map[string]any{"field": r.id}}
 			if r.id == "opening_alias" {
@@ -335,7 +320,7 @@ func (m *model) openSimulatorContexts() {
 	m.dialog = d
 }
 func (m *model) numberConfig(scope, key string, value float64, group string) tea.Cmd {
-	d := &dialog{kind: "config-number", title: samplingLabel(key) + " · ↑↓ adjust · ←→ ×10", args: map[string]any{"scope": scope, "key": key, "group": group}}
+	d := &dialog{kind: "config-number", title: samplingLabel(key) + " · ↑↓ adjust · type a value", args: map[string]any{"scope": scope, "key": key, "group": group}}
 	label := "Value"
 	if key == "n_predict" {
 		label = "Tokens · M = Max"
@@ -352,7 +337,7 @@ func (m *model) numberConfig(scope, key string, value float64, group string) tea
 	}
 	d.add(label, display)
 	m.dialog = d
-	return nil
+	return d.fields[0].input.Focus()
 }
 func (m *model) numberKey(msg tea.KeyPressMsg) tea.Cmd {
 	d := m.dialog
@@ -377,15 +362,12 @@ func (m *model) numberKey(msg tea.KeyPressMsg) tea.Cmd {
 		delta = 1
 	case "nav.down":
 		delta = -1
-	case "nav.right":
-		delta = 10
-	case "nav.left":
-		delta = -10
+
 	}
 	value, _ := strconv.ParseFloat(d.fields[0].input.Value(), 64)
 	unit, lower := 1.0, 1.0
 	if key == "context" {
-		unit, lower = 1024, 0
+		unit, lower = 1, 0
 	}
 	if key == "temperature" {
 		unit, lower = .1, 0
@@ -394,13 +376,13 @@ func (m *model) numberKey(msg tea.KeyPressMsg) tea.Cmd {
 		unit, lower = .01, 0
 	}
 	if key == "monitor_interval_tokens" {
-		unit, lower = 64, 1
+		unit, lower = 1, 1
 	}
 	if key == "threshold" {
 		lower = 0
 	}
 	if key == "n_predict" {
-		unit = 128
+		unit = 1
 	}
 	if delta != 0 {
 		value = max(lower, value+delta*unit)
@@ -410,9 +392,12 @@ func (m *model) numberKey(msg tea.KeyPressMsg) tea.Cmd {
 		if key == "threshold" {
 			value = min(100, value)
 		}
-		d.fields[0].input.SetValue(strconv.FormatFloat(value, 'f', 2, 64))
+		d.fields[0].input.SetValue(strconv.FormatFloat(value, 'f', -1, 64))
+		return nil
 	}
-	return nil
+	var cmd tea.Cmd
+	d.fields[0].input, cmd = d.fields[0].input.Update(msg)
+	return cmd
 }
 func (m *model) saveNumber(d *dialog) tea.Cmd {
 	key, group := d.args["key"].(string), d.args["group"].(string)
@@ -427,7 +412,12 @@ func (m *model) saveNumber(d *dialog) tea.Cmd {
 		raw = "0"
 	}
 	value, err := strconv.ParseFloat(raw, 64)
-	if err != nil {
+	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) {
+		m.status = "Enter a valid number"
+		return nil
+	}
+	if key != "temperature" && key != "top_p" && key != "threshold" && value != math.Trunc(value) {
+		m.status = "Enter a whole number"
 		return nil
 	}
 	if key == "threshold" {
@@ -513,7 +503,6 @@ func (m *model) openOpeningConfig() tea.Cmd {
 			row{id: "opening_alias", label: "Model · " + name},
 			row{id: "opening_prompt", label: "Generation prompt", preview: m.simString("opening_prompt")},
 			row{id: "opening_settings", label: "Sampling"},
-			row{id: "preview_openings", label: "Preview 3 openings", preview: "Generate openings only; save a labeled preview trace."},
 		)
 	}
 	m.dialog = d

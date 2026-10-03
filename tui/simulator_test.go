@@ -23,7 +23,7 @@ func TestSimulatorStreamAndConfiguration(t *testing.T) {
 		t.Fatal("Max exposed as sentinel")
 	}
 	m.openSimulatorConfig()
-	if len(m.dialog.rows) != 11 {
+	if len(m.dialog.rows) != 5 {
 		t.Fatal("missing simulator controls")
 	}
 	if strings.Join(sectionNames, " ") != "Library Branches Anthology Simulator Evaluate" {
@@ -67,7 +67,7 @@ func TestConfigEscapeReturnsOneLevel(t *testing.T) {
 	}
 
 	m.data.SimulatorConfig = map[string]any{"character_settings": map[string]any{"n_predict": float64(512)}}
-	m.openSimulatorConfig()
+	m.openSimulatorSettings("sampling-group")
 	root := m.dialog
 	for i, r := range root.rows {
 		if r.id == "character_settings" {
@@ -111,7 +111,7 @@ func TestOpeningConfigurationAndPromptEditor(t *testing.T) {
 		}
 	}
 	m.submitDialog()
-	if m.dialog.kind != "sim-openings" || len(m.dialog.rows) != 5 {
+	if m.dialog.kind != "sim-openings" || len(m.dialog.rows) != 4 {
 		t.Fatal("missing opening controls")
 	}
 	openings := m.dialog

@@ -39,7 +39,7 @@ func TestSettingsSaveReturnsToParentAndRefreshes(t *testing.T) {
 	m.width, m.height = 120, 36
 	m.section = 3
 	m.data.SimulatorConfig = map[string]any{"character_alias": "base", "turns": float64(2)}
-	m.openSimulatorConfig()
+	m.openSimulatorSettings("models-group")
 	parent := m.dialog
 	for i, r := range parent.rows {
 		if r.id == "character_alias" {
@@ -102,19 +102,10 @@ func TestBatchRemovalAndFilteredDocumentPicker(t *testing.T) {
 	m.dialog = nil
 	m.data.SimulatorConfig = map[string]any{"documents": []any{second.ID}}
 	m.openSimulatorConfig()
-	for i, r := range m.dialog.rows {
+	for _, r := range m.dialog.rows {
 		if r.id == "documents" {
-			m.dialog.index = i
+			t.Fatal("anthology picker remains in Config")
 		}
-	}
-	m.submitDialog()
-	m.filterDialog(tea.KeyPressMsg{Code: 'A', Text: "Another"})
-	if len(m.dialog.rows) != 1 || m.dialog.rows[0].id != "second" {
-		t.Fatal("document picker failed filtering")
-	}
-	m.dialogKey(tea.KeyPressMsg{Code: tea.KeySpace})
-	if m.dialog.args["selected"].(map[string]bool)[second.ID] {
-		t.Fatal("filtered toggle wrong")
 	}
 }
 

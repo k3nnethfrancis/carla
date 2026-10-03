@@ -929,24 +929,24 @@ func TestSettingsPickersAndSteppers(t *testing.T) {
 	}
 	d.field = 0
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if len(d.rows) == 0 || d.rows[0].id != "Max" {
-		t.Fatal("output picker absent")
+	if !d.adjusting {
+		t.Fatal("value editor absent")
 	}
-	d.index = 0
+	m.dialogKey(tea.KeyPressMsg{Code: 'm', Text: "m"})
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if d.fields[0].input.Value() != "Max" || d.adjusting {
 		t.Fatal("selection not applied")
 	}
 	d.field = 2
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	for i := 0; i < 20; i++ {
-		m.dialogKey(tea.KeyPressMsg{Code: tea.KeyRight})
+	for i := 0; i < 110; i++ {
+		m.dialogKey(tea.KeyPressMsg{Code: tea.KeyUp})
 	}
 	if d.fields[2].input.Value() != "1.00" {
 		t.Fatal("top-p upper bound")
 	}
-	for i := 0; i < 20; i++ {
-		m.dialogKey(tea.KeyPressMsg{Code: tea.KeyLeft})
+	for i := 0; i < 110; i++ {
+		m.dialogKey(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
 	if d.fields[2].input.Value() != "0.00" {
 		t.Fatal("top-p lower bound")
@@ -957,8 +957,11 @@ func TestSettingsPickersAndSteppers(t *testing.T) {
 	}
 	d.field = 3
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if !strings.Contains(d.rows[0].label, "32,768") {
-		t.Fatal("default count missing")
+	m.dialogKey(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
+	m.dialogKey(tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+	m.dialogKey(tea.KeyPressMsg{Code: '1', Text: "10240"})
+	if d.fields[3].input.Value() != "10240" {
+		t.Fatal("exact context editing failed")
 	}
 }
 

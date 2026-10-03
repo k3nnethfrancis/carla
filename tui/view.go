@@ -397,8 +397,8 @@ func (m *model) renderDialog() string {
 				label = "› " + label
 			}
 			value := f.input.View()
-			if d.kind == "settings" {
-				value = f.input.Value() + " ▾"
+			if d.kind == "settings" && (!d.adjusting || i != d.field) {
+				value = f.input.Value()
 				if i == d.field {
 					value = selectedStyle.Render(value)
 				}
@@ -424,12 +424,12 @@ func (m *model) renderDialog() string {
 		if d.kind == "settings" {
 			footer = "↑↓ field · ENTER change · CTRL+S save · ESC cancel"
 			if d.adjusting {
-				footer = "↑↓ adjust · ←→ ×10 · ENTER set · ESC back"
+				footer = "↑↓ adjust · ←→ cursor · ENTER set · ESC back"
 			}
 			body = append(body, dim.Render(line(settingHelp(d.field), r.w-4)))
 		}
 		if d.kind == "config-number" {
-			footer = "↑↓ adjust · ←→ ×10 · ENTER save · ESC cancel"
+			footer = "↑↓ adjust · ←→ cursor · ENTER save · ESC cancel"
 		}
 		if choice, ok := m.dialogChoice(); ok {
 			footer = "SPACE / ←→ change · ENTER open · ESC back"

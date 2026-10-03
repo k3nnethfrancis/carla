@@ -137,7 +137,7 @@ or add arbitrary new variables through configuration.
 
 The default Visitor brief is `A curious visitor talks with Model C.` The default
 fixed opener is `What would you like to talk about?`. Generated openings have an
-editable prompt and sampling; **Preview 3 openings** tests just that stage. The
+editable prompt and sampling. The
 opening generator does not receive anthology text automatically. A blank opening
 model selection follows the configured Visitor model.
 
@@ -364,3 +364,10 @@ complete multiline text, including content outside the visible window.
 The local monitoring **Model alias** is the request identifier sent to OpenJev.
 `openjev-latest` routes to DiffusionGemma in Carla’s managed worker; it is not a
 second model. The Actions row counts enabled Warn/Stop rules and disabled Off rules.
+
+Simulator Config groups settings into **Generation** (turns and output tokens),
+**Models** (speaker models and context limits), **Sampling**, **Opening**, and
+**Prompts**. Choose source documents in Anthology, rather than in Config.
+Numeric fields accept typed values; Left/Right move the cursor, Up/Down adjust
+integer settings by one. Temperature and top-p use fractional steps. Enter saves;
+Escape cancels. Token and context limits retain the M shortcut for Max.
