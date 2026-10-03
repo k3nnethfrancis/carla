@@ -1,6 +1,7 @@
 package main
 
 import (
+	tea "charm.land/bubbletea/v2"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -204,4 +205,59 @@ func TestLegacyPolicyAliasesOpenNamedLists(t *testing.T) {
 			t.Fatal(alias, m.dialog, m.editing)
 		}
 	}
+}
+
+func TestSelectionBehaviorEditingAndLibraryScope(t *testing.T) {
+	m := namedOperationalFixture()
+	m.openOperationalPolicies("selection")
+	m.openOperationalPolicy("selection", "selection-draft")
+	chooseBehaviorRow(t, m, "behaviors")
+	m.submitDialog()
+	behavior := m.dialog
+	chooseBehaviorRow(t, m, "spec")
+	if m.dialog != nil || m.editReturn != behavior {
+		t.Fatal("menu covers editor")
+	}
+	m.cancelEdit()
+	chooseBehaviorRow(t, m, "behavior-name")
+	m.dialog.fields[0].input.SetValue("Conversation coherence")
+	req := captureCommand(t, m, m.submitDialog)
+	if req.Command != "operational.policy.save" {
+		t.Fatal(req)
+	}
+	var config map[string]any
+	json.Unmarshal(req.Args["config"], &config)
+	bs := config["selection_behaviors"].([]any)
+	if bs[0].(map[string]any)["name"] != "Conversation coherence" {
+		t.Fatal(config)
+	}
+	state, _ := json.Marshal(m.data)
+	m.apply(event{Type: "state", ID: req.ID, Data: state})
+	m.refreshConfig()
+	if m.dialog.args["selection_behavior"] != "coherence" {
+		t.Fatal("lost behavior menu")
+	}
+	req = captureCommand(t, m, func() tea.Cmd { return chooseSelectionLibrary(m) })
+	if req.Command != "behavior.publish" || string(req.Args["purpose"]) != "\"selection\"" || string(req.Args["policy"]) != "\"selection-draft\"" {
+		t.Fatal(req)
+	}
+	state, _ = json.Marshal(m.data)
+	m.apply(event{Type: "state", ID: req.ID, Data: state})
+	chooseBehaviorRow(t, m, "behavior-remove")
+	if m.dialog.index != 0 {
+		t.Fatal("remove must default Cancel")
+	}
+	m.submitDialog()
+	if m.dialog.args["selection_behavior"] != "coherence" {
+		t.Fatal("cancel return")
+	}
+}
+func chooseSelectionLibrary(m *model) tea.Cmd {
+	for i, r := range m.dialog.rows {
+		if r.id == "library-save" {
+			m.dialog.index = i
+			return m.submitDialog()
+		}
+	}
+	return nil
 }

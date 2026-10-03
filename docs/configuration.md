@@ -154,7 +154,7 @@ The selection prompt must preserve its JSON contract: review each candidate once
 include valid evidence, and return an eligible candidate ID or null. The local
 assessment prompt must return `passed` (boolean observation of the criteria),
 `reason` and `evidence`. Carla then applies the behavior’s Present/Absent expectation.
-Selection has an Assessment template for this step and a Choice template for
+Selection has an Behavior assessment template for this step and a Branch selection template for
 comparing eligible candidates. Full
 contracts/defaults are visible in their editors and in saved judge requests.
 Monitoring allows behavior specs, thresholds and actions; its transport envelope
@@ -336,7 +336,7 @@ Open a policy’s **Behaviors** panel to edit names, specs and enabled states.
 separate rule/cutoff for each behavior. Policy-level **Actions** configures Warn
 or Stop and warning colors by behavior.
 **Heartbeat** controls when monitoring runs. Selection has the same direct
-Behaviors / Judge layout, with separate **Assessment template** and **Choice template**
+Behaviors / Judge layout, with separate **Behavior assessment template** and **Branch selection template**
 rows in Judge. Evals LLM judges expose **Prompt template**.
 LLM judge templates open the full multiline editor with highlighted `{{variables}}`.
 See [template variables and examples](templates.md) for input placement and object fields. Saving a changed template

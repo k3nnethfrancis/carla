@@ -2,6 +2,7 @@ package main
 
 import (
 	tea "charm.land/bubbletea/v2"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -158,7 +159,7 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 			}
 			return nil
 		case "selection_call_mode":
-			m.dialog = &dialog{kind: "selection-call-mode", title: "Call mode", parent: d, rows: []row{{id: "separate", label: "Separate", preview: "One independent request per enabled behavior."}, {id: "bundled", label: "Bundled", preview: "One request for all behaviors; opens a warning before changing."}}}
+			m.dialog = &dialog{kind: "selection-call-mode", title: "Assessment call mode", parent: d, rows: []row{{id: "separate", label: "Separate", preview: "One assessment request per enabled behavior per candidate."}, {id: "bundled", label: "Bundled", preview: "One request for all behaviors; opens a warning before changing."}}}
 			return nil
 		case "assessment-prompt":
 			cmd := m.beginEdit("selection_assessment_prompt")
@@ -183,7 +184,35 @@ func (m *model) configureChoice(d *dialog, r row) tea.Cmd {
 		case "models":
 			return m.openDialog("models")
 		case "spec":
-			return m.beginEdit("policy_spec")
+			cmd := m.beginEdit("policy_spec")
+			if m.editing == "policy_spec" {
+				m.dialog = nil
+			}
+			return cmd
+		case "library-save":
+			_, policy := m.operationalContext()
+			for _, b := range m.selectionBehaviors() {
+				if b["id"] == m.operationalBehaviorID() {
+					raw, _ := json.Marshal(b)
+					var value evaluationBehavior
+					_ = json.Unmarshal(raw, &value)
+					return m.openPolicyBehaviorLibrary(d, policy, value)
+				}
+			}
+			return nil
+		case "behavior-name":
+			name := ""
+			for _, b := range m.selectionBehaviors() {
+				if b["id"] == m.operationalBehaviorID() {
+					name, _ = b["name"].(string)
+				}
+			}
+			m.dialog = &dialog{kind: "operational-selection-rename", title: "Behavior name", parent: d}
+			m.dialog.add("Name", name)
+			return m.dialog.fields[0].input.Focus()
+		case "behavior-remove":
+			m.dialog = &dialog{kind: "operational-selection-remove", title: "Remove behavior?", parent: d, rows: []row{{id: "cancel", label: "Cancel"}, {id: "confirm", label: "Remove", preview: "Remove this policy criterion. Historical results remain unchanged."}}}
+			return nil
 		case "prompt":
 			cmd := m.beginEdit("policy_prompt")
 			if m.editing == "policy_prompt" {

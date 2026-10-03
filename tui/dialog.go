@@ -101,7 +101,7 @@ func (m *model) submitDialog() tea.Cmd {
 	if m.dialog != nil && m.dialog.kind == "judge-prompt-confirm" {
 		return m.submitJudgePromptConfirmation()
 	}
-	if m.dialog != nil && strings.HasPrefix(m.dialog.kind, "operational-policy") {
+	if m.dialog != nil && (strings.HasPrefix(m.dialog.kind, "operational-policy") || strings.HasPrefix(m.dialog.kind, "operational-selection")) {
 		return m.submitOperationalPolicy(m.dialog)
 	}
 	if m.dialog != nil && strings.HasPrefix(m.dialog.kind, "behavior-library") {

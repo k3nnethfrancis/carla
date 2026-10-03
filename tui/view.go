@@ -512,10 +512,10 @@ func (m *model) View() tea.View {
 					if m.editing == "policy-judge-prompt" || m.editing == "policy_prompt" || m.editing == "selection_assessment_prompt" {
 						title = m.editReturn.title + " · Prompt template"
 						if m.editing == "selection_assessment_prompt" {
-							title = m.editReturn.title + " · Assessment template"
+							title = m.editReturn.title + " · Behavior assessment template"
 						}
 						if m.editing == "policy_prompt" {
-							title = m.editReturn.title + " · Choice template"
+							title = m.editReturn.title + " · Branch selection template"
 						}
 					}
 					if (m.editing == "policy-behavior-new" || m.editing == "library-spec") && len(m.editReturn.fields) > 0 {

@@ -67,7 +67,11 @@ and fail open. Scores are model estimates, not calibrated guarantees.
 ## Selection
 
 Open `/policy` → Selection → a policy → **Judge** to choose a registered local
-instruct model, **Call mode**, **Assessment template**, and **Choice template**.
+instruct model, **Assessment call mode**, **Behavior assessment template**, and **Branch selection template**.
+Selection behaviors have their own Name, multiline Behavior spec, Pass when,
+library save/update state and Remove controls. Library updates preserve other
+policy copies and past results.
+
 Saving a changed template requires confirmation; cancelling preserves the draft.
 [Template variables](templates.md) control where behaviors and candidate text appear.
 
@@ -75,7 +79,7 @@ Each enabled behavior is first assessed against each complete candidate. **Pass
 when · Present/Absent** determines whether that observation is wanted. Separate
 makes one assessment call per candidate and behavior; Bundled assesses all enabled
 behaviors in one call per candidate. Only candidates passing every behavior reach
-the final choice call, which uses the existing choice template to compare them.
+the final selection call, which uses the **Branch selection template** to compare them.
 This adds assessment calls before selection. Both assessment and choice records
 retain exact inputs, outputs and evidence. Failed assessments exclude that candidate;
 if errors leave none eligible, the run reports failure rather than a criteria result.

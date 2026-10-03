@@ -157,6 +157,10 @@ func (m *model) refreshConfig() {
 	case "sim-speakers":
 		m.speakerPicker()
 	case "grow-config":
+		if d.args["selection_behavior"] != nil {
+			m.openSelectionBehavior()
+			break
+		}
 		switch d.title {
 		case "Selection judge":
 			m.openSelectionJudge()

@@ -142,6 +142,31 @@ func (m *model) appendOperationalControls(d *dialog) {
 	d.rows = append(d.rows, row{id: "delete-policy", label: "Delete policy", preview: "Remove this policy. If On, turn it off. Existing run results remain saved."})
 }
 func (m *model) submitOperationalPolicy(d *dialog) tea.Cmd {
+	if d.kind == "operational-selection-rename" {
+		name := strings.TrimSpace(d.fields[0].input.Value())
+		if name == "" {
+			m.status = "Enter a behavior name"
+			return nil
+		}
+		id := m.operationalBehaviorID()
+		m.dialog = d.parent
+		return m.saveSelectionBehavior(id, map[string]any{"name": name})
+	}
+	if d.kind == "operational-selection-remove" {
+		if d.rows[d.index].id == "cancel" {
+			m.dialog = d.parent
+			return nil
+		}
+		id := m.operationalBehaviorID()
+		bs := []map[string]any{}
+		for _, b := range m.selectionBehaviors() {
+			if b["id"] != id {
+				bs = append(bs, b)
+			}
+		}
+		m.dialog = d.parent.parent
+		return m.send("configure", map[string]any{"selection_behaviors": bs})
+	}
 	purpose, _ := d.args["purpose"].(string)
 	if d.kind == "operational-policy-name" {
 		name := strings.TrimSpace(d.fields[0].input.Value())

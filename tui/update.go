@@ -727,13 +727,13 @@ func (m *model) nodeTitle() string {
 		return "Behavior spec"
 	}
 	if m.editing == "policy_spec" {
-		return "Selection spec"
+		return "Behavior spec"
 	}
 	if m.editing == "selection_assessment_prompt" {
-		return "Assessment template"
+		return "Behavior assessment template"
 	}
 	if m.editing == "policy_prompt" {
-		return "Choice template"
+		return "Branch selection template"
 	}
 	if m.section == 0 && m.editing == "" {
 		return "Source preview"

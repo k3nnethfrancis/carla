@@ -2,6 +2,7 @@ package main
 
 import (
 	tea "charm.land/bubbletea/v2"
+	"encoding/json"
 	"fmt"
 )
 
@@ -55,9 +56,9 @@ const evaluationJudgesHelp = "Criteria + model used by named evaluations.\nChoos
 func (m *model) openSelectionJudge() tea.Cmd {
 	m.dialog = &dialog{kind: "grow-config", title: "Selection judge", rows: []row{
 		{id: "selector", label: "Model · " + m.selectionModelName() + " (LLM)", preview: "The local instruction-following model used to assess alternatives."},
-		{id: "prompt", label: "Choice template", preview: "Chooses among qualified candidates after behavior assessment. Saving changes requires confirmation."},
-		{id: "assessment-prompt", label: "Assessment template", preview: "Assesses behavior presence on each complete candidate. Saving changes requires confirmation."},
-		{id: "selection_call_mode", label: "Call mode · " + selectionCallModeLabel(m.selectionString("selection_call_mode")), preview: "Separate assesses each behavior independently. Bundled shares one request; changing to it shows a warning."},
+		{id: "selection_call_mode", label: "Assessment call mode · " + selectionCallModeLabel(m.selectionString("selection_call_mode")), preview: "Separate makes one assessment request per behavior per candidate; Bundled assesses a candidate’s behaviors together. Branch selection follows in one additional call."},
+		{id: "assessment-prompt", label: "Behavior assessment template", preview: "Assess behavior presence in each complete candidate. Every enabled behavior must meet its Pass when condition to qualify. Saving changes requires confirmation."},
+		{id: "prompt", label: "Branch selection template", preview: "Compare qualifying candidates using the behaviors and assessment results; choose one to continue, or none. Saving changes requires confirmation."},
 	}}
 	return nil
 }
@@ -79,8 +80,11 @@ func (m *model) openSelectionBehavior() tea.Cmd {
 		id = "criteria"
 	}
 	name, spec, expected, enabled := "Selection criteria", "", "present", false
+	var librarySpec evaluationBehavior
 	for _, b := range m.selectionBehaviors() {
 		if b["id"] == id {
+			raw, _ := json.Marshal(b)
+			_ = json.Unmarshal(raw, &librarySpec)
 			name, _ = b["name"].(string)
 			spec, _ = b["spec"].(string)
 			expected, _ = b["expected"].(string)
@@ -91,10 +95,13 @@ func (m *model) openSelectionBehavior() tea.Cmd {
 	if enabled {
 		state = "On"
 	}
-	m.dialog = &dialog{kind: "grow-config", title: "Selection behavior", args: map[string]any{"selection_behavior": id}, rows: []row{
+	m.dialog = &dialog{kind: "grow-config", title: name, args: map[string]any{"selection_behavior": id}, rows: []row{
 		{id: "behavior-enabled", label: "Enabled · " + state, preview: "Include this criterion in the selection judge’s candidate assessment."},
-		{id: "spec", label: "Behavior spec · " + name, preview: "Describe behavior presence in the complete candidate. " + spec},
+		{id: "behavior-name", label: "Name · " + name, preview: "Name this criterion independently of the policy and judge."},
+		{id: "spec", label: "Behavior spec", preview: "Describe behavior presence in the complete candidate. " + spec},
 		{id: "behavior-expected", label: "Pass when · " + expectedLabel(expected), preview: expectedHelp},
+		m.behaviorLibraryRow(librarySpec),
+		{id: "behavior-remove", label: "Remove behavior…", preview: "Remove this criterion from the policy. Existing results retain their saved spec."},
 	}}
 	return nil
 }

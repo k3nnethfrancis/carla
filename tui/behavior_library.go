@@ -171,15 +171,20 @@ func (m *model) behaviorLibraryRow(b evaluationBehavior) row {
 
 func (m *model) openPolicyBehaviorLibrary(parent *dialog, policy string, b evaluationBehavior) tea.Cmd {
 	source := m.libraryBehavior(b.SourceID)
+	args := map[string]any{"policy": policy, "behavior": b.ID, "action": "save"}
+	if purpose, _ := m.operationalContext(); purpose == "selection" {
+		args["purpose"] = purpose
+	}
 	if source == nil {
-		return m.saveDialog(&dialog{parent: parent}, "behavior.publish", map[string]any{"policy": policy, "behavior": b.ID, "action": "save"})
+		return m.saveDialog(&dialog{parent: parent}, "behavior.publish", args)
 	}
 	rows := []row{{id: "cancel", label: "Back", preview: "Keep the policy and library unchanged."}}
 	if source.Name != b.Name || source.Spec != b.Spec {
 		rows = append(rows, row{id: "update", label: "Update library from this policy…", preview: "Replace the library name and spec. Other policy copies remain unchanged."}, row{id: "refresh", label: "Use library version in this policy…", preview: source.Name + "\n" + source.Spec + "\nKeeps this policy’s enabled state, Pass when and threshold."})
 	}
 	rows = append(rows, row{id: "copy", label: "Save as separate spec…", preview: "Create a separate library identity and link this policy to it."})
-	m.dialog = &dialog{kind: "behavior-library-sync", title: m.behaviorLibraryRow(b).label, parent: parent, args: map[string]any{"policy": policy, "behavior": b.ID, "revision": source.Revision}, rows: rows}
+	args["revision"] = source.Revision
+	m.dialog = &dialog{kind: "behavior-library-sync", title: m.behaviorLibraryRow(b).label, parent: parent, args: args, rows: rows}
 	return nil
 }
 

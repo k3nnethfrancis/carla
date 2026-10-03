@@ -2,14 +2,27 @@
 
 import uuid
 
-from . import evaluation_policies
+from . import evaluation_policies, operational_policies
 
 
 def publish(project, args):
-    policy = evaluation_policies.resolve(project, args.get("policy"))
-    behavior = next(
-        (b for b in policy["behaviors"] if b["id"] == args.get("behavior")), None
-    )
+    selection = args.get("purpose") == "selection"
+    if selection:
+        policy = next(
+            (
+                p
+                for p in project.data["operational_policies"]["selection"]
+                if p["id"] == args.get("policy")
+            ),
+            None,
+        )
+        if policy is None:
+            raise ValueError("Selection policy no longer exists")
+        behaviors = policy["config"]["selection_behaviors"]
+    else:
+        policy = evaluation_policies.resolve(project, args.get("policy"))
+        behaviors = policy["behaviors"]
+    behavior = next((b for b in behaviors if b["id"] == args.get("behavior")), None)
     if behavior is None:
         raise ValueError("Behavior no longer exists")
     items = project.data["behavior_library"]
@@ -54,5 +67,18 @@ def publish(project, args):
             items.append(source)
     behavior.update(source_id=source["id"], source_revision=source["revision"])
     if behavior != before:
-        behavior["revision"] += 1
+        behavior["revision"] = behavior.get("revision", 0) + 1
         policy["revision"] += 1
+
+    if selection:
+        config = policy["config"]
+        config["policy_spec"] = (
+            "\n\n".join(
+                f"{b['name']} (expected {b.get('expected', 'present')}): {b['spec']}"
+                for b in behaviors
+                if b.get("enabled", True)
+            )
+            or config["policy_spec"]
+        )
+        if project.data["active_operational_policies"].get("selection") == policy["id"]:
+            operational_policies.project_values(project, "selection", config)

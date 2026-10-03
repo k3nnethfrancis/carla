@@ -806,3 +806,36 @@ async def test_library_publish_states_and_safe_updates(lab):
     assert frozen["behaviors"][0]["spec"] == "Criteria 0"
     assert policy["judges"][0]["name"] == "judge"
     assert evals.evaluation_judges.flatten(policy)[0]["judge_name"] == "judge"
+
+
+@pytest.mark.asyncio
+async def test_selection_library_sync_preserves_routing_and_detection(lab):
+    policy = lab.project.data["operational_policies"]["selection"][0]
+    behavior = policy["config"]["selection_behaviors"][0]
+    route = copy.deepcopy(lab.project.data["active_operational_policies"])
+    settings = {k: behavior.get(k) for k in ("enabled", "expected", "threshold")}
+    args = dict(
+        purpose="selection", policy=policy["id"], behavior=behavior["id"], action="save"
+    )
+    await ops.dispatch(lab, "behavior.publish", args, "save")
+    source = next(
+        b
+        for b in lab.project.data["behavior_library"]
+        if b["id"] == behavior["source_id"]
+    )
+    source.update(
+        name="Coherence",
+        spec="The candidate develops a coherent idea.",
+        revision=source["revision"] + 1,
+    )
+    await ops.dispatch(
+        lab,
+        "behavior.publish",
+        dict(args, action="refresh", revision=source["revision"]),
+        "refresh",
+    )
+    assert behavior["spec"] == source["spec"]
+    assert {k: behavior.get(k) for k in settings} == settings
+    assert lab.project.data["active_operational_policies"] == route
+    assert source["spec"] in lab.project.data["policy_spec"]
+    assert not policy["config"]["selection_enabled"]
