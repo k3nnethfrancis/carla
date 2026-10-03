@@ -6,6 +6,7 @@ import platform
 import shutil
 import signal
 import tempfile
+import time
 from pathlib import Path
 
 import httpx
@@ -24,12 +25,16 @@ class LocalJudge:
         self.endpoint = None
         self.lock = asyncio.Lock()
         self.log = None
+        self.failure = None
+        self.retry_at = 0
 
     async def ensure(self):
         # Concurrent monitor/evaluation requests share this single startup.
         async with self.lock:
             if self.process is not None and self.process.returncode is None:
                 return self.endpoint
+            if self.failure and time.monotonic() < self.retry_at:
+                raise LocalJudgeError(self.failure)
             await self.close()
             if platform.system() != "Darwin" or platform.machine() != "arm64":
                 raise LocalJudgeError("Managed DiffusionGemma requires Apple Silicon.")
@@ -81,6 +86,7 @@ class LocalJudge:
                                     response.status_code == 200
                                     and response.json().get("status") == "ok"
                                 ):
+                                    self.failure = None
                                     return self.endpoint
                             except (httpx.HTTPError, ValueError):
                                 pass
@@ -97,15 +103,21 @@ class LocalJudge:
                     with tempfile.NamedTemporaryFile(
                         prefix="carla-local-judge-", suffix=".log", delete=False
                     ) as output:
-                        output.write(self.log.read())
+                        tail = self.log.read()
+                        output.write(tail)
+                        if b"Network connectivity is disabled" in tail:
+                            exc = LocalJudgeError(
+                                "Local judge Python dependencies are missing from the offline cache. "
+                                + SETUP
+                            )
                         diagnostic = " Startup log: " + output.name
                 await self.close()
                 if isinstance(exc, TimeoutError):
-                    raise LocalJudgeError(
-                        "Local judge startup timed out." + diagnostic
-                    ) from None
+                    exc = LocalJudgeError("Local judge startup timed out.")
                 if isinstance(exc, LocalJudgeError):
-                    raise LocalJudgeError(str(exc) + diagnostic) from None
+                    self.failure = str(exc) + diagnostic
+                    self.retry_at = time.monotonic() + 60
+                    raise LocalJudgeError(self.failure) from None
                 raise
 
     async def close(self):

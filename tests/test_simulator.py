@@ -417,6 +417,13 @@ async def test_resume_after_character_generates_visitor_first(setup):
         "visitor",
         "character",
     ]
+    turns = resumed["conversations"][0]["turns"]
+    assert turns[:2] == seed["turns"]
+    assert turns[2]["prompt"] == simulator.conversation_prompt(
+        config, "visitor", seed["documents"], seed["turns"]
+    )
+    assert "**Model C:**  A new path." in turns[2]["prompt"]
+    assert turns[2]["origin"] == "generated"
     assert simulator.summary(resumed)["parent"]["run"] == original["id"]
 
 

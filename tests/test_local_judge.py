@@ -99,8 +99,11 @@ async def test_start_failure_cleans_up_owned_process(monkeypatch):
     process = Process()
     process.stdout.feed_eof()
 
+    attempts = []
+
     async def spawn(*args, **kwargs):
-        kwargs["stderr"].write(b"Synthetic missing dependency\n")
+        attempts.append(args)
+        kwargs["stderr"].write(b"Network connectivity is disabled\n")
         return process
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", spawn)
@@ -108,10 +111,20 @@ async def test_start_failure_cleans_up_owned_process(monkeypatch):
     monkeypatch.setattr(local_judge.platform, "machine", lambda: "arm64")
     monkeypatch.setattr(local_judge.shutil, "which", lambda _: "/bin/uv")
     manager = local_judge.LocalJudge()
-    with pytest.raises(local_judge.LocalJudgeError, match="install") as error:
+    with pytest.raises(
+        local_judge.LocalJudgeError, match="dependencies are missing"
+    ) as error:
         await manager.ensure()
     diagnostic = local_judge.Path(str(error.value).split("Startup log: ", 1)[1])
-    assert diagnostic.read_text() == "Synthetic missing dependency\n"
+    assert diagnostic.read_text() == "Network connectivity is disabled\n"
+    with pytest.raises(local_judge.LocalJudgeError, match="dependencies are missing"):
+        await manager.ensure()
+    assert len(attempts) == 1
+    manager.retry_at = 0
+    with pytest.raises(local_judge.LocalJudgeError) as retry:
+        await manager.ensure()
+    assert len(attempts) == 2
+    local_judge.Path(str(retry.value).split("Startup log: ", 1)[1]).unlink()
     assert diagnostic.stat().st_mode & 0o077 == 0
     diagnostic.unlink()
     assert manager.process is None and manager.log is None

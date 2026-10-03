@@ -32,7 +32,9 @@ The generator, its KV cache, and other applications need additional memory.
 
 Automatic startup is cache-only: both the model and `uv` dependency environment
 must already be installed. Missing dependencies produce an installation message,
-not a background download. The worker disables model routing and credential use;
+not a background download. If the offline Python cache is incomplete, rerun the
+setup script to repair it; cached weights are reused. Failed startups are held for
+60 seconds so each heartbeat does not launch another failing process. The worker disables model routing and credential use;
 its dependencies and model load with offline mode enabled.
 
 Carla asks the operating system for an available loopback port and retains that
