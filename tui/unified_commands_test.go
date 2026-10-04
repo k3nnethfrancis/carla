@@ -12,7 +12,7 @@ func TestUnifiedAliases(t *testing.T) {
 		m := fixture()
 		m.section = section
 		m.focus = 3
-		for alias, want := range map[string]string{"config": "configure", "settings": "configure", "generate": "loom", "continue": "loom", "run": "loom", "branch": "branch", "fork": "branch", "remove": "remove", "delete": "remove"} {
+		for alias, want := range map[string]string{"config": "configure", "settings": "configure", "generate": "continue", "continue": "continue", "run": "continue", "branch": "branch", "fork": "branch", "remove": "remove", "delete": "remove"} {
 			// Document-only actions require a valid document target; test their identity separately.
 			id := m.canonicalCommand(alias)
 			if id != want {
@@ -48,8 +48,8 @@ func TestLoopsParser(t *testing.T) {
 	}
 }
 
-func TestDocumentEntryPointsShareOneOperation(t *testing.T) {
-	for _, section := range []int{0, 1, 2} {
+func TestBranchesLoomUsesDocumentOperation(t *testing.T) {
+	for _, section := range []int{1} {
 		m := fixture()
 		m.section = section
 		m.width, m.height = 120, 36
@@ -66,7 +66,7 @@ func TestDocumentEntryPointsShareOneOperation(t *testing.T) {
 			t.Fatal(section, m.status)
 		}
 		done := make(chan tea.Msg, 1)
-		go func() { done <- cmd() }()
+		go func() { done <- runPrimaryCommand(cmd) }()
 		var request struct {
 			Command string
 			Args    map[string]any
@@ -77,7 +77,7 @@ func TestDocumentEntryPointsShareOneOperation(t *testing.T) {
 		<-done
 		left.Close()
 		right.Close()
-		if request.Command != "continue" || request.Args["count"] != float64(1) || request.Args["loops"] != float64(1) || m.section != 1 {
+		if request.Command != "continue" || request.Args["count"] != float64(1) || request.Args["loops"] != nil || m.section != 1 {
 			t.Fatal(section, request)
 		}
 	}
@@ -93,14 +93,14 @@ func TestBareSimulatorLoomUsesOneReplyAndHighlightDoesNotSelectBatch(t *testing.
 	m.client = &client{conn: left}
 	cmd := m.loom(generationOptions{})
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	var request struct {
 		Command string
 		Args    map[string]any
 	}
 	json.NewDecoder(right).Decode(&request)
 	<-done
-	if request.Args["count"] != float64(1) || request.Args["turns"] != float64(1) || request.Args["loops"] != float64(1) {
+	if request.Args["count"] != float64(1) || request.Args["turns"] != float64(1) || request.Args["loops"] != nil {
 		t.Fatal(request)
 	}
 	m.pending = false
@@ -111,7 +111,7 @@ func TestBareSimulatorLoomUsesOneReplyAndHighlightDoesNotSelectBatch(t *testing.
 		}
 	}
 	cmd = m.loom(generationOptions{Count: 4})
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	json.NewDecoder(right).Decode(&request)
 	<-done
 	if request.Command != "simulator.run" || request.Args["run"] != nil {

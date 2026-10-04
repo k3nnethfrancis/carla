@@ -2,11 +2,19 @@ package main
 
 import tea "charm.land/bubbletea/v2"
 
-// One command, with its target fixed by the current tab rather than a stale
-// document selection. Simulator runs start fresh from its configured opening.
+// The view determines document versus conversation generation; an explicit
+// Simulator selection determines which histories advance.
 func (m *model) loom(options generationOptions) tea.Cmd {
-	if m.section != 3 && (options.Turns > 0 || options.Message != "") {
-		m.status = "Error: --turns and --message apply only to Simulator conversations"
+	if options.Action == "" {
+		options.Action = "loom"
+	}
+	if m.section == 0 || m.section == 4 {
+		m.status = "Open material in Branches or Simulator to generate"
+		return nil
+	}
+	simulator := m.section == 3 || (m.section == 2 && options.Action == "loom")
+	if !simulator && (options.Turns > 0 || options.Message != "" || options.VisitorModel != "") {
+		m.status = "Error: --turns, --visitor and --visitor-model apply only to Simulator conversations"
 		return nil
 	}
 	if m.pending || m.data.Busy {
@@ -17,42 +25,51 @@ func (m *model) loom(options generationOptions) tea.Cmd {
 		m.status = "Save or cancel the edit before running /loom"
 		return nil
 	}
-	// Bare Loom never inherits a surprising batch size or conversation length.
-	if options.Count == 0 {
-		options.Count = 1
-	}
-	if options.Turns == 0 && m.section == 3 {
-		options.Turns = 1
-	}
-	if options.Loops == 0 {
-		options.Loops = 1
-	}
-	if m.section == 3 {
-		if options.Message != "" && m.loomConversation != nil {
-			m.status = "Clear the conversation selection with /clear before using --message for a fresh opening"
+	if simulator {
+		var documents []string
+		if m.section == 2 {
+			documents = m.actionNodeIDs()
+			if len(documents) == 0 {
+				m.status = "Select Anthology documents to start a conversation"
+				return nil
+			}
+			m.simSelection = nil
+		}
+		args, _, err := m.simulationLoomPlan(options)
+		if err != nil {
+			m.status = err.Error()
 			return nil
 		}
-		args := map[string]any{}
-		options.apply(args)
-		if target, ok := m.loomConversationTarget(); ok {
-			for k, v := range target {
-				args[k] = v
-			}
+		if len(documents) > 0 {
+			args["documents"] = documents
+			m.section = 3
 		}
-		m.conversationOpen = false
-		m.simulation = nil
-		m.activeSimulation = nil
-		cmd := m.send("simulator.run", args)
-		if cmd != nil {
-			m.loomConversation = nil
+		advancing := options.Action == "continue" || (m.simSelection != nil && options.Count <= 1)
+		if advancing && m.simulation == nil && m.simSelection != nil && m.simSelection.Group == "" {
+			m.awaitingSimulation = true
+			m.preserveSimulationSelection = true
 		}
-		return cmd
+		if !advancing {
+			m.preserveSimulationSelection = false
+			m.awaitingSimulation = true
+			m.conversationOpen = false
+			m.simulation = nil
+			m.activeSimulation = nil
+		}
+		return m.send("simulator.run", args)
 	}
-	if m.section == 0 {
-		args := map[string]any{"refs": m.targetRefs()}
+	if options.Count == 0 && options.Action == "loom" {
+		options.Count = 1
+	}
+
+	if m.selectionVisible() || m.targetRow().kind == "document-set" {
+		args := m.documentGroupArgs()
 		options.apply(args)
+		if m.section == 2 {
+			args["from_anthology"] = true
+		}
 		m.section, m.focus = 1, 1
-		return m.send("continue", args)
+		return m.sendDocumentGeneration(args)
 	}
 	if m.targetRow().kind != "node" {
 		m.status = "Select a document in Branches to run /loom"
@@ -62,7 +79,21 @@ func (m *model) loom(options generationOptions) tea.Cmd {
 		m.status = "Wait for the selected document to load before running /loom"
 		return m.previewTarget()
 	}
+	// A preview's automatic scroll/cursor is not a request to truncate its text.
+	// Only deliberate navigation in the reader supplies a generation prefix.
+	focus := m.focus
+	if focus == 3 && m.commandOrigin != nil {
+		focus = m.commandOrigin.focus
+	}
+	args := map[string]any{"nodes": []string{m.currentID()}}
+	if focus == 1 && m.cursorMoved {
+		args = map[string]any{"node": m.currentID(), "offset": m.cursorOffset(), "branch": true}
+	}
+	options.apply(args)
+	if m.section == 2 {
+		args["from_anthology"] = true
+	}
 	m.section, m.focus = 1, 1
 	m.reflow()
-	return m.generateAtCursor(true, options)
+	return m.sendDocumentGeneration(args)
 }

@@ -10,6 +10,7 @@ import json
 import secrets
 from pathlib import Path
 
+from .local_judge import managed
 from .models import load_models
 from .service import Session
 from .workspaces import Workspaces
@@ -41,7 +42,7 @@ async def serve(args):
     folder = Path(folder).expanduser().resolve()
     models = load_models(args.models) if args.models else None
     policy_model = (
-        load_models(args.policy_model, "instruct")[0] if args.policy_model else None
+        load_models(args.policy_model, "instruct") if args.policy_model else None
     )
     secret = secrets.token_urlsafe(32)
     done = asyncio.Event()
@@ -110,6 +111,8 @@ async def serve(args):
                     await session.close()
                 except ConnectionError:
                     pass
+            if authenticated:
+                await managed.close()
             writer.close()
             if authenticated:
                 done.set()

@@ -61,11 +61,11 @@ func (m *model) openDialog(kind string) tea.Cmd {
 		d.add("Top-p", fmt.Sprint(s.TopP))
 		context := strconv.Itoa(m.data.ModelContext)
 		if m.data.ModelContext == 0 {
-			context = "Default"
+			context = "Max"
 		}
-		label := "Context (default unavailable)"
+		label := "Context (maximum unknown)"
 		if m.data.NativeContext > 0 {
-			label = fmt.Sprintf("Context (default: %s)", tokenNumber(m.data.NativeContext))
+			label = fmt.Sprintf("Context (maximum: %s)", tokenNumber(m.data.NativeContext))
 		}
 		d.add(label, context)
 	case "review":
@@ -95,6 +95,24 @@ func (d *dialog) add(label, value string) {
 	d.fields = append(d.fields, field{label, i})
 }
 func (m *model) submitDialog() tea.Cmd {
+	if m.dialog != nil && m.dialog.kind == "inspection" {
+		return m.submitInspection()
+	}
+	if m.dialog != nil && m.dialog.kind == "selection-results" {
+		return m.submitSelectionResults()
+	}
+	if m.dialog != nil && (m.dialog.kind == "selection-call-mode" || m.dialog.kind == "selection-call-bundled") {
+		return m.submitSelectionCallMode(m.dialog)
+	}
+	if m.dialog != nil && m.dialog.kind == "judge-prompt-confirm" {
+		return m.submitJudgePromptConfirmation()
+	}
+	if m.dialog != nil && (strings.HasPrefix(m.dialog.kind, "operational-policy") || strings.HasPrefix(m.dialog.kind, "operational-selection")) {
+		return m.submitOperationalPolicy(m.dialog)
+	}
+	if m.dialog != nil && strings.HasPrefix(m.dialog.kind, "behavior-library") {
+		return m.submitBehaviorLibrary(m.dialog)
+	}
 	if m.dialog != nil && (m.dialog.kind == "policy" || strings.HasPrefix(m.dialog.kind, "eval-")) {
 		return m.submitEvaluation(m.dialog)
 	}
@@ -151,10 +169,7 @@ func (m *model) submitDialog() tea.Cmd {
 		return nil
 	}
 	if d.kind == "help" {
-		if len(d.rows) > 0 {
-			m.dialog = &dialog{kind: "help-detail", title: d.rows[d.index].label, parent: d, args: map[string]any{"text": d.rows[d.index].preview}}
-		}
-		return nil
+		return m.openHelpRow()
 	}
 	if len(d.fields) > 0 {
 		values := []string{}
@@ -173,9 +188,14 @@ func (m *model) submitDialog() tea.Cmd {
 				return nil
 			}
 			return m.send("library.import", map[string]any{"path": strings.TrimSpace(values[0]), "title": values[1], "author": values[2], "url": values[3]})
+		case "sim-rename":
+			command = "simulator.rename"
+			args["title"] = values[0]
+			args["update_children"] = values[1] == "On"
 		case "rename":
 			command = "node.rename"
 			args["title"] = values[0]
+			args["rename_children"] = values[1] == "On"
 		case "sim-text":
 			command = "simulator.configure"
 			args = map[string]any{d.args["field"].(string): values[0]}
@@ -205,7 +225,7 @@ func (m *model) submitDialog() tea.Cmd {
 					nums[i] = -1
 					continue
 				}
-				if i == 3 && strings.EqualFold(strings.TrimSpace(v), "Default") {
+				if i == 3 && (strings.EqualFold(strings.TrimSpace(v), "Default") || strings.EqualFold(strings.TrimSpace(v), "Max")) {
 					nums[i] = 0
 					continue
 				}
@@ -246,11 +266,20 @@ func (m *model) submitDialog() tea.Cmd {
 	m.dialog = nil
 	switch d.kind {
 	case "loom-config", "sim-openings", "sim-opening-mode", "sim-config", "sim-speakers", "grow-config", "sim-model", "selector-pick", "sim-sampling":
+		if r.id == "workspaces" || r.id == "keys" {
+			cmd := m.perform(r.id)
+			if m.dialog != nil {
+				m.dialog.parent = d
+			}
+			return cmd
+		}
 		return m.configureChoice(d, r)
 	case "conversation-edit":
 		index, _ := strconv.Atoi(r.id)
 		m.conversationEdit = index
 		return m.startConversationEdit(m.simulation.Conversations[m.gridSelection].Turns[index].Text)
+	case "anthology-add":
+		return m.send("node.keep", map[string]any{"node": r.id, "kept": true})
 	case "document-actions":
 		if r.id == "edit" {
 			return m.editDocumentWithNotes()
@@ -271,10 +300,24 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.helpKey(msg)
 	}
 	d := m.dialog
+	if msg.Code == tea.KeySpace || msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight {
+		if cmd, ok := m.quickJudgeCallMode(d); ok {
+			return cmd
+		}
+	}
+	if d.kind == "grow-config" && len(d.rows) > 0 && (d.rows[d.index].id == "behavior-enabled" || d.rows[d.index].id == "behavior-expected") && (msg.Code == tea.KeySpace || msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight) {
+		return m.configureChoice(d, d.rows[d.index])
+	}
+	if d.kind == "eval-policy-config" && len(d.rows) > 0 && d.rows[d.index].id == "on-pass" && (msg.Code == tea.KeySpace || msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight) {
+		return m.submitEvaluationPolicy(d)
+	}
+	if d.kind == "eval-policy-behavior" && len(d.rows) > 0 && (d.rows[d.index].id == "enabled" || d.rows[d.index].id == "expected") && (msg.Code == tea.KeySpace || msg.Code == tea.KeyLeft || msg.Code == tea.KeyRight) {
+		return m.submitPolicyJudge(d)
+	}
 	if d.kind == "config-number" {
 		return m.numberKey(msg)
 	}
-	if (d.kind == "sim-documents" || d.kind == "eval-judges" || d.kind == "eval-add-items") && (msg.Code == tea.KeySpace || msg.Code == tea.KeyEnter) {
+	if (d.kind == "sim-documents" || d.kind == "eval-add-items") && (msg.Code == tea.KeySpace || msg.Code == tea.KeyEnter) {
 		if len(d.rows) == 0 {
 			return nil
 		}
@@ -294,6 +337,21 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if d.kind == "settings" {
 		return m.settingsKey(msg)
+	}
+	if (d.kind == "rename" || d.kind == "sim-rename") && d.field == 1 {
+		switch msg.Code {
+		case tea.KeySpace, tea.KeyLeft, tea.KeyRight:
+			value := "On"
+			if d.fields[1].input.Value() == "On" {
+				value = "Off"
+			}
+			d.fields[1].input.SetValue(value)
+			return nil
+		}
+		// Keep this choice a toggle, not an editable text value.
+		if msg.Text != "" {
+			return nil
+		}
 	}
 	key := m.navigationKey(msg.String())
 	if msg.String() == "ctrl+s" || m.boundAction(msg.String(), "editor") == "save" {
@@ -344,6 +402,9 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 			return m.cycleDialogChoice(step)
 		}
 	}
+	if d.kind == "help" && m.filterHelp(msg) {
+		return nil
+	}
 	if m.filterDialog(msg) {
 		return nil
 	}
@@ -353,28 +414,6 @@ func (m *model) dialogKey(msg tea.KeyPressMsg) tea.Cmd {
 		return cmd
 	}
 	return nil
-}
-
-// A review can attach to a selected passage in the editor without injecting that
-// feedback into the base-model prompt. Offsets refer to the saved edited version.
-func (m *model) reviewSelection() tea.Cmd {
-	if m.editing != "document" {
-		return nil
-	}
-	text := m.editor.Value()
-	start, end := 0, len([]rune(text))
-	if a, b, ok := m.editor.Selection(); ok {
-		start = textOffset(text, a.Row, a.Col)
-		end = textOffset(text, b.Row, b.Col)
-	}
-	d := &dialog{kind: "review", title: "Review selected passage", args: map[string]any{"node": m.editNode, "text": text}}
-	d.add("Verdict (unreviewed / promising / pass)", "promising")
-	d.add("Note", "")
-	d.add("Start character", strconv.Itoa(start))
-	d.add("End character", strconv.Itoa(end))
-	m.dialog = d
-	m.reflow()
-	return d.fields[0].input.Focus()
 }
 
 func newInput() textinput.Model {

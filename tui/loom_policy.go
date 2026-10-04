@@ -19,7 +19,7 @@ func (d loomDimension) builtin() bool {
 }
 func (m *model) dimensions() []loomDimension {
 	var out []loomDimension
-	b, _ := json.Marshal(m.data.SimulatorConfig["monitor_dimensions"])
+	b, _ := json.Marshal(m.monitoringConfig()["monitor_dimensions"])
 	json.Unmarshal(b, &out)
 	return out
 }
@@ -35,55 +35,106 @@ func (m *model) dimension(id string) loomDimension {
 	return loomDimension{}
 }
 func (m *model) openLoomPolicy() tea.Cmd {
-	mode := "Off"
-	if m.simString("monitor_mode") == "jev" {
-		mode = "Jev"
+	provider := m.monitorString("monitor_mode")
+	mode := "Inactive"
+	if provider == "diffusion" || provider == "jev" {
+		mode = "Active"
 	}
 	d := &dialog{kind: "loom-policy", title: "Monitoring policy", rows: []row{
-		{id: "mode", label: "Monitoring · " + mode, preview: "Off by default. Jev sends monitored text to OpenRouter; API usage may incur charges."},
+		{id: "status", label: "Status · " + mode, preview: operationalStatusHelp},
 	}}
+	defer orderOperationalRows(d)
+	m.appendOperationalControls(d)
 	m.dialog = d
-	if mode == "Off" {
+	if mode == "Inactive" {
+		provider = m.monitorString("monitor_provider")
+	}
+	if provider != "jev" && provider != "diffusion" {
 		return nil
 	}
-	if m.data.MonitorKeySource == "" {
+	if provider == "jev" && m.data.MonitorKeySource == "" {
 		d.rows = append(d.rows, row{id: "key", label: "Set up OpenRouter API key", preview: "Complete API key setup to reveal monitoring settings."})
 		return nil
 	}
 	d.rows = append(d.rows,
-		row{id: "model", label: "Model · " + m.simString("monitor_model")},
-		row{id: "timing", label: "Heartbeat · " + m.monitorTimingSummary(), preview: "Shared with document continuations; Visitor messages are not checked."},
+		row{id: "timing", label: "Heartbeat · " + m.monitorTimingSummary(), preview: "When this policy runs: during streaming output, after completed replies, or both."},
+		row{id: "behaviors", label: fmt.Sprintf("Behaviors · %d", len(m.dimensions())), preview: "Name and describe what to detect. Set detection rules here; responses belong to Actions."},
+		row{id: "judge", label: "Judge · " + m.monitorJudgeName(), preview: "Choose the model and call mode used to assess behaviors."},
+		row{id: "actions", label: "Actions · " + m.behaviorCounts(), preview: "Choose Warn or Stop and warning colors for each detected behavior."},
 	)
-	d.rows = append(d.rows,
-		row{id: "behaviors", label: "Behaviors", preview: "Define what to detect and what happens when it is detected."},
-		row{id: "key", label: "API key · " + m.data.MonitorKeySource, preview: "Replace the saved key. Keys stay outside workspaces and exported traces."},
-	)
+	return nil
+}
+
+func (m *model) monitorJudgeName() string {
+	provider := m.monitorString("monitor_mode")
+	if provider == "off" || provider == "" {
+		provider = m.monitorString("monitor_provider")
+	}
+	if provider == "diffusion" {
+		return "DiffusionGemma (classifier)"
+	}
+	return "Jev (classifier)"
+}
+func (m *model) openMonitorJudge() tea.Cmd {
+	d := &dialog{kind: "loom-policy-judge", title: m.monitorJudgeName(), rows: []row{
+		{id: "mode", label: "Model · " + m.monitorJudgeName(), preview: "Choose the classifier. DiffusionGemma runs locally; Jev uses OpenRouter and requires an API key."},
+		{id: "monitor_call_mode", label: "Call mode · " + strings.Title(m.monitorCallMode()), preview: "Separate sends one request per behavior. Bundled checks all enabled behaviors in one request."},
+	}}
+	if m.monitorJudgeName() == "Jev (classifier)" {
+		d.rows = append(d.rows, row{id: "key", label: "API key · " + m.data.MonitorKeySource, preview: "Replace the saved OpenRouter key. Keys stay outside workspaces and exported traces."})
+	}
 	m.dialog = d
 	return nil
 }
+
 func (m *model) openDimension(id string) tea.Cmd {
 	item := m.dimension(id)
-	decision := "Most likely"
-	if item.Decision == "threshold" {
-		decision = fmt.Sprintf("Probability ≥ %.0f%%", item.Threshold*100)
-	}
 	d := &dialog{kind: "loom-policy-dimension", title: item.Name, args: map[string]any{"id": id}, rows: []row{
-		{id: "enabled", label: "Enabled · " + map[bool]string{true: "On", false: "Off"}[item.Enabled], preview: "Off skips this behavior entirely; its detection and action settings remain saved."},
-		{id: "name", label: "Name · " + item.Name}, {id: "spec", label: "Behavior spec", preview: item.Spec},
-		{id: "action", label: "Action · " + item.Action, preview: "Warn highlights a detection. Stop interrupts this conversation, including an in-progress reply."},
-		{id: "decision", label: "Detection rule · " + decision, preview: "Determines when the behavior counts as detected. Most likely: estimated probability > 50%. Threshold: probability ≥ your cutoff. Action then decides Warn or Stop; probabilities are not calibrated confidence."},
+		{id: "enabled", label: "Enabled · " + map[bool]string{true: "On", false: "Off"}[item.Enabled], preview: "Off skips this behavior; Detection rules and policy actions remain saved."},
+		{id: "name", label: "Name · " + item.Name, preview: "The label shown in results."},
+		{id: "spec", label: "Behavior spec", preview: "What the judge should observe. " + item.Spec},
 	}}
+	d.rows = append(d.rows, row{id: "decision", label: "Detection rule · " + detectionLabel(item), preview: "Most likely detects probability above 50%. Threshold uses your cutoff. These scores are not calibrated confidence."})
 	if item.Decision == "threshold" {
-		d.rows = append(d.rows, row{id: "threshold", label: fmt.Sprintf("Threshold · %.0f%%", item.Threshold*100)})
-	}
-	if item.Action == "warn" {
-		d.rows = append(d.rows, row{id: "color", label: "Warning color · " + item.Color})
+		d.rows = append(d.rows, row{id: "threshold", label: fmt.Sprintf("Threshold · %.0f%%", item.Threshold*100), preview: "Minimum probability counted as a detection. Policy actions determine the response."})
 	}
 	if id == "draft" {
 		d.title = "New behavior"
-		d.rows = append(d.rows, row{id: "create", label: "Create behavior", preview: "Save the name, full spec and all settings shown here."})
+		d.rows = append(d.rows, row{id: "create", label: "Create behavior", preview: "Save this behavior. Actions defaults to Warn in amber."})
 	} else if !item.builtin() {
-		d.rows = append(d.rows, row{id: "delete", label: "Delete behavior"})
+		d.rows = append(d.rows, row{id: "delete", label: "Delete behavior", preview: "Remove this custom behavior from the monitoring policy. Confirmation is required."})
+	}
+	m.dialog = d
+	return nil
+}
+
+// Responses belong to the policy and retain their behavior identity.
+func (m *model) openMonitorActions() tea.Cmd {
+	d := &dialog{kind: "loom-policy-actions-list", title: "Actions"}
+	for _, b := range m.dimensions() {
+		label := b.Name + " · " + b.Action
+		if b.Action == "warn" {
+			label += " · " + b.Color
+		}
+		if !b.Enabled {
+			label += " · off"
+		}
+		d.rows = append(d.rows, row{id: b.ID, label: label, preview: b.Spec})
+	}
+	m.dialog = d
+	return nil
+}
+func detectionLabel(b loomDimension) string {
+	if b.Decision == "threshold" {
+		return fmt.Sprintf("Probability ≥ %.0f%%", b.Threshold*100)
+	}
+	return "Most likely"
+}
+func (m *model) openMonitorAction(id string) tea.Cmd {
+	b := m.dimension(id)
+	d := &dialog{kind: "loom-policy-actions", title: b.Name, args: map[string]any{"id": id}, rows: []row{{id: "action", label: "Action · " + b.Action, preview: "Warn highlights a detection. Stop interrupts generation when this behavior is detected."}}}
+	if b.Action == "warn" {
+		d.rows = append(d.rows, row{id: "color", label: "Warning color · " + b.Color, preview: "Color used for this policy’s warning."})
 	}
 	m.dialog = d
 	return nil
@@ -97,7 +148,15 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 			m.status = "Enter an OpenRouter API key"
 			return nil
 		}
-		return m.saveDialog(d, "loom-policy.key", map[string]any{"key": key})
+		args := map[string]any{"key": key}
+		if _, id := m.operationalContext(); id != "" {
+			args["activate"] = false
+			args["policy_id"] = id
+			if d.parent != nil && d.parent.kind == "loom-policy-judge" && m.monitorString("monitor_mode") == "off" {
+				args["preserve_disabled"] = true
+			}
+		}
+		return m.saveDialog(d, "loom-policy.key", args)
 	}
 	if len(d.fields) > 0 {
 		args := map[string]any{}
@@ -108,7 +167,7 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 		field := args["field"].(string)
 		delete(args, "field")
 		args[field] = d.fields[0].input.Value()
-		if field == "monitor_model" {
+		if field == "monitor_model" || field == "monitor_local_model" {
 			return m.saveDialog(d, "simulator.configure", map[string]any{field: args[field]})
 		}
 		return m.saveDialog(d, "loom-policy.update", args)
@@ -117,13 +176,47 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 		return nil
 	}
 	r := d.rows[d.index]
+	if d.kind == "loom-policy-bundle-confirm" {
+		if r.id != "confirm" {
+			return m.closeDialog()
+		}
+		// Return to settings after confirmation; Escape retains the picker.
+		parent := d.parent
+		if parent.kind == "loom-policy-pick" {
+			parent = parent.parent
+		}
+		m.dialog = parent
+		return m.send("simulator.configure", map[string]any{"monitor_call_mode": "bundled"})
+	}
 	if d.kind == "loom-policy-pick" {
 		field := d.args["field"].(string)
+		if field == "monitor_call_mode" {
+			if r.id == m.monitorCallMode() {
+				return m.closeDialog()
+			}
+			if r.id == "bundled" {
+				parent := d
+				if m.dialog != d {
+					parent = d.parent
+				}
+				m.confirmBundledCalls(parent)
+				return nil
+			}
+			return m.saveDialog(d, "simulator.configure", map[string]any{field: r.id})
+		}
 		if field == "monitor_mode" {
 			if r.id == "jev" && m.data.MonitorKeySource == "" {
 				return m.openMonitorKey(d.parent)
 			}
-			return m.saveDialog(d, "simulator.configure", map[string]any{field: r.id})
+			args := map[string]any{field: r.id}
+			if d.parent != nil && d.parent.kind == "loom-policy-judge" && m.monitorString("monitor_mode") == "off" {
+				args[field] = "off"
+				args["monitor_provider"] = r.id
+			}
+			if field == "monitor_mode" && r.id == "diffusion" {
+				args["monitor_local_url"] = "auto"
+			}
+			return m.saveDialog(d, "simulator.configure", args)
 		}
 		if field == "delete" {
 			if r.id != "yes" {
@@ -148,7 +241,16 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 		}
 		return m.send("simulator.configure", args)
 	}
+	if d.kind == "loom-policy-actions-list" {
+		m.openMonitorAction(r.id)
+		m.dialog.parent = d
+		return nil
+	}
 	if d.kind == "loom-policy-behaviors" {
+		if r.id == "library" {
+			m.openBehaviorLibraryPicker(d, "operational-policy-library-monitor", nil)
+			return nil
+		}
 		if r.id == "new" {
 			m.behaviorDraft = &loomDimension{ID: "draft", Enabled: true, Action: "warn", Color: "amber", Decision: "most_likely", Threshold: .8}
 			m.openDimension("draft")
@@ -158,8 +260,17 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 		m.dialog.parent = d
 		return nil
 	}
-	if d.kind == "loom-policy" {
+	if d.kind == "loom-policy" || d.kind == "loom-policy-judge" {
+		if cmd, ok := m.operationalControl(d, r.id); ok {
+			return cmd
+		}
 		switch r.id {
+		case "actions":
+			m.openMonitorActions()
+			m.dialog.parent = d
+		case "judge":
+			m.openMonitorJudge()
+			m.dialog.parent = d
 		case "key":
 			return m.openMonitorKey(d)
 		case "behaviors":
@@ -169,9 +280,16 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 			m.openMonitorTiming()
 			m.dialog.parent = d
 		case "mode":
-			m.policyPicker(d, "", "monitor_mode", []string{"off", "jev"})
+			m.policyPicker(d, "", "monitor_mode", []string{"diffusion", "jev"})
+		case "monitor_call_mode":
+			m.policyPicker(d, "", r.id, []string{"separate", "bundled"})
+			if m.monitorCallMode() == "bundled" {
+				m.dialog.index = 1
+			}
+		case "monitor_local_model":
+			m.policyForm(d, "", r.id, m.monitorString(r.id))
 		case "model":
-			m.policyForm(d, "", "monitor_model", m.simString("monitor_model"))
+			m.policyForm(d, "", "monitor_model", m.monitorString("monitor_model"))
 
 		}
 		if m.dialog != nil && len(m.dialog.fields) > 0 {
@@ -197,6 +315,10 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 			m.status = "Add a name and behavior spec before creating"
 			d.rows[d.index].preview = m.status
 			return nil
+		}
+		if _, pid := m.operationalContext(); pid != "" {
+			m.dialog = d.parent
+			return m.send("loom-policy.add", item.args())
 		}
 		request, cmd := m.dispatch("loom-policy.add", item.args())
 		if cmd != nil {
@@ -224,6 +346,9 @@ func (m *model) submitLoomPolicy(d *dialog) tea.Cmd {
 }
 func (m *model) policyForm(parent *dialog, id, field, value string) {
 	d := &dialog{kind: "loom-policy-field", title: strings.ReplaceAll(field, "_", " "), parent: parent, args: map[string]any{"id": id, "field": field}}
+	if field == "monitor_local_model" {
+		d.title = "Local judge model"
+	}
 	d.add(d.title, value)
 	m.dialog = d
 }
@@ -232,6 +357,21 @@ func (m *model) policyPicker(parent *dialog, id, field string, values []string) 
 	for _, v := range values {
 		label := strings.Title(strings.ReplaceAll(v, "_", " "))
 		preview := ""
+		if field == "monitor_mode" {
+			d.title = "Monitoring model"
+			label = map[string]string{"diffusion": "DiffusionGemma (classifier)", "jev": "Jev (classifier)", "off": "Off"}[v]
+			preview = "Local classifier; Carla manages its inference server."
+			if v == "jev" {
+				preview = "Hosted classifier via OpenRouter. Requires an API key and incurs API costs."
+			}
+		}
+		if field == "monitor_call_mode" {
+			d.title = "Call mode"
+			preview = "One request per behavior."
+			if v == "bundled" {
+				preview = "All enabled behaviors in one request."
+			}
+		}
 		if field == "decision" {
 			d.title = "Detection rule"
 			if v == "most_likely" {
@@ -246,13 +386,13 @@ func (m *model) policyPicker(parent *dialog, id, field string, values []string) 
 }
 
 func (m *model) monitorInterval() float64 {
-	if value, ok := m.data.SimulatorConfig["monitor_interval_tokens"].(float64); ok {
+	if value, ok := m.monitoringConfig()["monitor_interval_tokens"].(float64); ok {
 		return value
 	}
 	return 512
 }
 func (m *model) monitorTimingEnabled(key string) bool {
-	enabled, ok := m.data.SimulatorConfig[key].(bool)
+	enabled, ok := m.monitoringConfig()[key].(bool)
 	if !ok {
 		enabled = true
 	}
@@ -274,7 +414,7 @@ func (m *model) monitorTimingSummary() string {
 }
 func (m *model) openMonitorTiming() tea.Cmd {
 	d := &dialog{kind: "loom-policy-timing", title: "Heartbeat", rows: []row{}}
-	if m.simString("monitor_mode") != "jev" {
+	if m.monitorString("monitor_mode") == "off" {
 		d.title += " · monitoring off"
 	}
 	for _, entry := range []struct{ key, label, preview string }{
@@ -301,4 +441,60 @@ func (m *model) openMonitorKey(parent *dialog) tea.Cmd {
 	d.fields[0].input.EchoCharacter = '•'
 	m.dialog = d
 	return d.fields[0].input.Focus()
+}
+
+func monitorLabel(provider string) string {
+	switch provider {
+	case "diffusion":
+		return "DiffusionGemma (local)"
+	case "jev":
+		return "Jev (OpenRouter)"
+	default:
+		return "Off"
+	}
+}
+
+func (m *model) monitorCallMode() string {
+	if m.monitorString("monitor_call_mode") == "bundled" {
+		return "bundled"
+	}
+	return "separate"
+}
+
+func (m *model) confirmBundledCalls(parent *dialog) {
+	const warning = "Bundled calls may reduce cost and latency, but asking behaviors together can change scores or miss detections. Switch to bundled?"
+	m.dialog = &dialog{kind: "loom-policy-bundle-confirm", title: "Switch to bundled calls?", parent: parent, rows: []row{
+		{id: "cancel", label: "Keep separate", preview: warning},
+		{id: "confirm", label: "Use bundled", preview: warning},
+	}}
+}
+
+func (m *model) behaviorCounts() string {
+	warn, stop, off := 0, 0, 0
+	for _, behavior := range m.dimensions() {
+		if !behavior.Enabled {
+			off++
+		} else if behavior.Action == "stop" {
+			stop++
+		} else {
+			warn++
+		}
+	}
+	return fmt.Sprintf("%d warn · %d stop · %d off", warn, stop, off)
+}
+
+// Enabled is policy-level; changing the classifier belongs to its judge.
+func (m *model) toggleMonitoring(parent *dialog) tea.Cmd {
+	if provider := m.monitorString("monitor_mode"); provider == "diffusion" || provider == "jev" {
+		return m.send("simulator.configure", map[string]any{"monitor_mode": "off"})
+	}
+	provider := m.monitorString("monitor_provider")
+	if provider != "diffusion" && provider != "jev" {
+		m.policyPicker(parent, "", "monitor_mode", []string{"diffusion", "jev"})
+		return nil
+	}
+	if provider == "jev" && m.data.MonitorKeySource == "" {
+		return m.openMonitorKey(parent)
+	}
+	return m.send("simulator.configure", map[string]any{"monitor_mode": provider})
 }

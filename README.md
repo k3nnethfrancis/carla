@@ -58,14 +58,35 @@ Use ↑/↓ and Enter to choose, or Escape to go back:
 - Skip setup to browse the bundled Meditations and Tractatus starters offline.
 
 Downloads show their size, license and pinned revision before confirmation.
-Use `/model` → `+ Add model`, or run `carla --setup-model`, to add another model. Generation also requires
+Use `/config` → models → `+ Add model`, or run `carla --setup-model`, to add another model. Generation also requires
 `llama-server` on PATH; see [generation setup](#set-up-generation).
 
 Once inside Carla, select a passage with Space, open it with Enter, and explore the
-panes with Tab / Shift+Tab. Type `/help` for commands or `/keys` for editable
+panes with Tab / Shift+Tab. Type `/help` for commands or `/config` for editable
 bindings. `/` focuses the command bar, including from the document editor.
 The Keys dialog covers listed actions and navigation; its own capture, reset,
 save and cancel controls stay fixed so you can always recover a binding.
+
+## From a seed to evaluated conversations
+
+With a base model configured, one small experiment takes six steps:
+
+1. **Library:** select seed passages with Space, then Enter to open them in Branches.
+2. **Branches:** run `/loom 3 --tokens 512` to explore three continuations.
+3. **Keep a favorite:** select a result and use `/add` to keep it in Anthology.
+4. **Anthology:** select that document and run `/loom 4 --turns 2` to open four
+   conversations in Simulator. Select a conversation or its parent set and use
+   `/continue` to take it further.
+5. **Judge:** configure an Evals policy in `/policy` → Evals, including its model
+   and behaviors. Select conversations and run `/eval` using the active policy.
+6. **Curate and export:** review results in Evaluate, mark useful items for
+   training, then `/export` the selected data and metadata. Training itself is
+   not implemented yet.
+
+You only need **Loom → Add → Loom → Eval → Export** for this first pass.
+`/config` sets defaults, `/policy` sets judging rules, `/inspect` explains a
+saved result, and `/stop` stops active work. Monitoring, automatic selection and
+multiple loops can wait until this basic flow feels familiar.
 
 ## Commands at a glance
 
@@ -76,56 +97,45 @@ typing a prefix such as `/lo`. `/help` explains each option; press Enter on a co
 
 | Command | What it does |
 | --- | --- |
-| `/import` | Add a local text or Markdown seed to the shared Library. |
-| `/help` · `/keys` | Browse all commands or customize keyboard bindings. |
-| `/workspace` · `/model` | Choose a workspace or local model. |
-| `/config` | Generation settings; in Evaluate, the opened collection and its judges. |
-| `/policy` | Monitoring, selection and reusable judge configurations. |
-| `/eval [name] --train-on-pass true` | Run active/named evaluation on selected material; optionally mark passes for training. |
-| `/evaluations` | Manage named evaluation collections, inspect judgments and export training items. |
-| `/loom` | Generate one continuation or the next Character reply. |
-| `/loom 3 --tokens 512` | In Branches, generate three alternative continuations. |
-| `/loom 3 --turns 4 --tokens 512` | In Simulator, generate three conversations, each with four new character replies. |
-| `/loom 3 --tokens 512 --eval "Voice"` | Generate alternatives, then judge completed outputs with the saved Voice evaluation. |
-| `/fork` | Fork the selected document or conversation without generating. |
-| `/keep` · `/anthology` | Keep selected branches or browse the curated anthology. |
-| `/edit` · `/save` · `/cancel` | Edit, save a new version, or discard the draft. |
-| `/inspect` · `/notes` | Inspect exact inputs and provenance, or open document notes. |
-| `/simulator` · `/visitor` | Open Simulator or write a Visitor message into a fork. |
-| `/grid` · `/active` | View Loom outputs together or jump to active generation. |
-| `/loom 3 --tokens 512 --loops 4` | Generate three alternatives per loop; selection advances one path for four loops. |
-| `/remove` | Deselect sources, unkeep anthology entries, or confirm branch deletion. Alias: `/delete`. |
-| `/snapshot` | Export anthology documents or training-marked evaluation items with provenance. |
-| `/stop` · `/restart` · `/exit` | Stop generation, restart Carla, or exit. |
+| `/add` · `/remove` | Add or remove material from the current collection. |
+| `/branch` | Copy selected material without generating, preserving ancestry. |
+| `/continue --tokens 512` | Advance the existing item or set; preserve earlier revisions. |
+| `/loom 3 --tokens 512` | Generate three alternative futures of the selected item or set. |
+| `/loom 3 --turns 2 --visitor "What matters to you?"` | Explore three conversational alternatives from your supplied message. |
+| `/eval "Voice" --train-on-pass true` | Judge selected content and optionally mark passes for training. |
+| `/export` | Save selected content or the current collection with provenance. |
+| `/config` · `/policy` | Configure execution defaults and judging policies. |
+| `/stop` · `/help` | Stop active work or browse command help. |
+| `/library` · `/branches` · `/anthology` · `/simulator` · `/evaluate` | Open a stage. |
 
-[Command system](docs/commands.md) explains the complete contract; `/help` lists commands. Generation needs a configured model; `--tokens` sets
-an output ceiling, and `--turns` counts character replies rather than both speakers.
+[Commands](docs/commands.md) covers flags, selection, editing and exports;
+the [generated reference](docs/command-reference.md) shares its source with `/help`;
+[interaction model](docs/interaction-model.md) explains object identity and grouping.
+Models, workspace selection and keybindings are available through `/config`.
 
-### How Loom works
+### Continue, Loom and Branch
 
-Library, Branches and Anthology use the same document continuation operation;
-starting from Library or Anthology takes you to Branches. New outputs must be
-kept explicitly. Simulator instead extends one explicitly selected conversation,
-or starts fresh when nothing is selected. Hovering does not select a conversation;
-Space/Enter selects it and `/clear` clears it.
+`/continue` and bare `/loom` advance what you selected. `/loom N` with N≥2 creates N alternative futures
+of it. `/branch` copies it without generation. The same meanings apply to a single
+item or a set: selecting four conversations and running `/loom 3` produces three
+sets of four; `/continue` advances the original four. Prior revisions and ancestry
+remain saved, while evaluations refer to the exact content they judged.
 
-Bare `/loom` creates one alternative, for one loop, adding one Character reply
-in Simulator. Add a count for alternatives, `--tokens N|Max` for an output cap,
-and `--turns N` for Character replies per Simulator alternative. `--msg "text"`
-(or `--message`) sets a fresh run's Visitor opener. `--eval "name"` applies a saved
-evaluation after generation. `--loops N` repeats generation and policy selection,
-advancing one candidate between loops; configure selection under `/policy` first.
+Library opens seeds in Branches. Anthology Branch/Continue returns to Branches;
+Anthology Loom starts Simulator. Simulator
+uses conversations. With no Simulator selection, `/loom 4` starts four fresh
+conversations. Space/Enter selects a target; arrows only preview. Clear selection
+to start fresh again. New document versions must be kept explicitly with `/add`.
 
 ```text
-/loom 3 --turns 2 --tokens 512 --msg "What does a path remember?" --eval "Voice" --loops 4
+/loom 3 --tokens 512 --visitor "What does a path remember?" --turns 2 --eval "Voice" --loops 4
 ```
 
-This Simulator run generates three alternatives per loop, each adding two
-Character replies, over four loops. Selection advances one path; the completed
-outputs are then judged by Voice. The token cap applies to each speaker's
-generation, not the whole conversation. Quote names and messages containing
-spaces. `/continue`, `/generate`, `/run`, `/simulate` and `/grow` are aliases for
-`/loom` and accept the same arguments.
+`--tokens` caps each generation; `--turns` counts new character replies.
+`--visitor` supplies a message once per selected conversation. `--model` and
+`--visitor-model` override configured models for this operation. `--eval` judges
+completed outputs. `--loops` repeats continuation from each output. Selection is Off by default;
+enabling it in `/policy` lets a judge choose whole alternatives between split loops.
 
 ## Set up generation
 
@@ -142,29 +152,6 @@ carla --setup-model
 GGUF is a file format; quantization is optional. Model weights are never bundled
 or downloaded automatically. A missing model does not prevent source browsing.
 
-## Work through an experiment
-
-- **Library:** select passages from shared documents; only selected text enters
-  the workspace. [Import your own text](docs/configuration.md#document-library).
-- **Branches:** `/loom --tokens 512` samples one continuation from the cursor;
-  `/loom 3 --tokens 512` samples three alternatives. `/fork` forks the current
-  version without generating. Edits preserve ancestry.
-- **Anthology:** `/keep` retains a document for curation. Keeping is a human
-  selection, not an automatic quality verdict or training step.
-- **Simulator:** `/config` chooses documents, speakers, openings and sampling.
-  `/loom 3 --turns 4 --tokens 512` produces three conversations with four new
-  character replies each. A visitor replies between character turns. Selecting
-  an existing conversation resumes its frozen document context and history.
-  Use `/clear` to start fresh; hovering over a conversation or batch does not select it. Multi-output runs stream into a selectable grid.
-- **Evaluate:** create a named collection, choose judges, add frozen documents or
-  conversations, and run judgments. Review evidence, add notes and mark items for
-  training. Existing judgments can be attached without another model call.
-  `/snapshot` exports training-marked items with their evidence and provenance.
-
-`/loom 3 --tokens 512 --loops 4` repeats candidate generation and local selection.
-The selection policy lives under `/policy`; no policy instructions enter base-model
-prompts. It never automatically keeps documents. Configure a selector before
-starting repeated loops; see [configuration](docs/configuration.md).
 
 ## Policies and evaluations
 
@@ -173,20 +160,42 @@ These use criteria to judge text, but serve different purposes:
 | Mechanism | When it runs | What the result does |
 | --- | --- | --- |
 | Monitoring | During generation and/or after replies | Flags conditions such as looping; warns or stops only as configured. Off by default. |
-| Selection | During multi-loop Loom runs | Reviews candidates and chooses one path to develop. Does not automatically keep or mark it for training. |
-| Evaluation | On saved items, or after `/loom --eval "name"` | Records whole-item judgments in a named collection for review and dataset curation. |
+| Selection | Split Loom runs with explicit `--loops` | Reviews candidates and chooses one path to develop. Does not automatically keep or mark it for training. |
+| Evaluation | On saved items, or after `/loom --eval "name"` | Records whole-item judgments and frozen inputs in a saved run. Dataset membership is explicit. |
 
-Use `/policy` to configure monitoring, selection and reusable judges. Selection
-uses a local instruct model. Monitoring uses optional Jev through OpenRouter;
-evaluation judges can use either the configured local instruct model or Jev.
+Plain document `/loom`, `/loom N` and `/continue` generate without judging.
+Use `--monitoring on`, `--selection on` (with 2+ alternatives and explicit `--loops`)
+or `--eval "policy"` to opt in. Simulator uses its saved monitoring/selection settings.
+
+Use `/policy` to configure monitoring, selection and evaluation policies. Selection
+uses a local instruct model. Monitoring can use local DiffusionGemma through OpenJev, or optional Jev through
+OpenRouter. Each evaluation policy uses one registered local instruct model as its judge.
+After [one-time setup](docs/local-judge.md), Carla starts and stops the Apple Silicon
+classifier automatically on an available local port.
 Hosted classification sends the assessed text to an external service and can
 incur charges. Local generation itself uses llama.cpp.
 
-In **Evaluate**, `/config` sets the collection's name, judges and active status.
-Adding items does not run judges. `/eval` runs the active evaluation on selected
-material; `/eval "Voice"` chooses a particular collection. An item passes when
-all its currently configured judge revisions pass. You can mark training items
-manually or use `/eval --train-on-pass true` to mark successful passes.
+`/policy` always opens Monitoring, Selection and Evals. Each category holds named
+policies with behaviors, judge settings and role-specific result handling. Monitoring and Selection
+use On/Off: enabling one switches the previous policy in that category Off.
+`/behaviors` is a reusable workspace library of specs; adding a spec to a policy
+keeps its settings local.
+
+**Evaluate** separates **Data**, **Policies** and **Runs**. Data is the saved
+documents and conversation traces. Policies contain behaviors and judge settings
+as separate sections. Each policy has one judge that assesses its enabled behaviors.
+The Policies view edits the same policies as `/policy` → Evals.
+**+ New run** configures a dataset, policy, data scope and On pass setting for one
+execution; **Runs** preserves its assessments. In Evaluate, `/eval` opens that
+setup for the focused dataset or selected items. Outside Evaluate, it runs the
+active policy on selected material. `/eval "Voice"` chooses a named policy.
+Adding data does not invoke a model. You can mark training items manually or use
+`/eval --train-on-pass true` to mark items that pass every behavior in that run.
+
+Selection and Evals separate observed behavior from **Pass when · Present/Absent**.
+Selection assesses each candidate before choosing among those that pass; Evals
+records whole-trace results and can mark passing data for training with **On pass**.
+Imported specs start Off for review.
 
 Changing a prompt, model or setting can be evaluated with the same collection
 and criteria; evaluation is not limited to training decisions. Saved source
@@ -202,12 +211,13 @@ Configuration exposes these authoring surfaces:
 | Input | Where to change it |
 | --- | --- |
 | Continuation input | Edit/fork the document and place the cursor; the exact prefix is sent to the base model. |
-| Character and Visitor templates | Simulator → `/config` → Character prompt / Visitor prompt |
-| Visitor brief | Simulator → `/config` → Visitor brief |
+| Character and Visitor templates | Simulator → `/config` → Prompts → Character prompt / Visitor prompt |
+| Visitor brief | Simulator → `/config` → Prompts → Visitor brief |
 | Fixed or generated opening | Simulator → `/config` → Opening; generated mode has its own prompt, model and sampling. |
-| Selection criteria and routing prompt | `/policy` → Selection |
-| Monitoring behavior specs | `/policy` → Monitoring → Behaviors |
-| Evaluation criteria and local judge prompt | `/policy` → Judge configurations |
+| Selection behaviors, assessment and choice templates | `/policy` → Selection |
+| Monitoring behavior specs | `/policy` → Monitoring → a policy → Behaviors |
+| Evaluation criteria | Evaluate → Policies → a policy → Behaviors |
+| Evaluation judge prompt and Call mode | Evaluate → Policies → a policy → Judge |
 
 Document Loom has no separate system-message wrapper. Conversation templates are
 explicit raw-completion prompts with anthology/history placeholders; there are
@@ -219,6 +229,7 @@ shows the defaults, allowed fields and inspection behavior.
 - [User guide](docs/user-guide.md): first experiment, editing, comparison, data storage and recovery.
 - [Commands](docs/commands.md): all commands, flags, targeting and keyboard behavior.
 - [Configuration](docs/configuration.md): models, sampling, prompts, source imports and credentials.
+- [Local DiffusionGemma judge](docs/local-judge.md): Apple Silicon setup, behavior specs and resource limits.
 - [Policies and evaluations](docs/evaluations.md): monitoring, selection, judging and training exports.
 - [Architecture](docs/architecture.md), [development](docs/development.md) and
   [research references](docs/resources.md): implementation and contributor context.
@@ -238,7 +249,7 @@ and evaluation workflow, developed with collaborator feedback.
 
 - Inference uses local llama.cpp raw completions. Base-model continuations have
   no hidden assistant prompt, RAG memories or reflection step. Simulator templates
-  are explicit and inspectable; the selection classifier uses a separate chat endpoint.
+  are explicit and inspectable; the selection judge uses a separate chat endpoint.
 - Up to four requests share one resident model, subject to memory and full
   prompt/output context reservations. This is a conservative heuristic, not an
   optimal throughput scheduler. Large budgets can serialize requests. Same-model
@@ -276,7 +287,9 @@ make build
 ```
 
 Tests use synthetic documents and fake inference; they need no weights, GPU or
-API keys. See [architecture](docs/architecture.md) for code boundaries and
+API keys. The optional [monitoring eval](evals/monitoring/README.md) compares
+System One probability distributions and latency outside the app; its results stay
+local and gitignored. See [architecture](docs/architecture.md) for code boundaries and
 [research references](docs/resources.md) for method context.
 
 Code is [MIT licensed](LICENSE). Imported texts, model weights and generated
@@ -286,7 +299,7 @@ For optional hosted monitoring and stored trace details, see
 
 ## Releases
 
-Carla uses versioned source releases: `v0.1.0`, `v0.1.1`, and so on. Each reviewed
+Carla uses versioned source releases, including `v0.1.0`, `v0.1.1`, and `v0.2.0`. Each reviewed
 promotion to `main` receives a new version and publishes a matching GitHub release
 after macOS/Linux checks pass. `dev` is ongoing work. See
 [GitHub releases](https://github.com/k3nnethfrancis/carla/releases) for pinned

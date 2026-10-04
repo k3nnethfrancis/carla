@@ -3,7 +3,6 @@ package main
 import (
 	tea "charm.land/bubbletea/v2"
 	"fmt"
-	"sort"
 	"strconv"
 )
 
@@ -14,13 +13,12 @@ func settingHelp(field int) string {
 	case 2:
 		return "Top-p range: 0–1. Step: 0.01."
 	case 3:
-		return "Default uses the model's native context."
+		return "Max uses the model's native context; larger contexts need more memory."
 	}
-	return "↑↓ small steps · ←→ larger steps"
+	return "Type a value · ↑↓ adjust · ←→ move cursor"
 }
 
-// Settings are pickers/steppers, never text entry. The existing field values
-// remain the submission payload, so validation has one backend owner.
+// Browse settings, then Enter to edit a value using normal text input.
 func (m *model) settingsKey(msg tea.KeyPressMsg) tea.Cmd {
 	d := m.dialog
 	key := m.navigationKey(msg.String())
@@ -52,12 +50,18 @@ func (m *model) settingsKey(msg tea.KeyPressMsg) tea.Cmd {
 		step = -1
 	case "nav.down", "nav.next":
 		step = 1
-	case "nav.left":
-		step = -10
-	case "nav.right":
-		step = 10
+
 	}
 	if step == 0 {
+		if d.adjusting {
+			if msg.String() == "m" && (d.field == 0 || d.field == 3) {
+				d.fields[d.field].input.SetValue("Max")
+				return nil
+			}
+			var cmd tea.Cmd
+			d.fields[d.field].input, cmd = d.fields[d.field].input.Update(msg)
+			return cmd
+		}
 		return nil
 	}
 	if !d.adjusting {
@@ -97,45 +101,7 @@ func (m *model) startSetting() {
 	d := m.dialog
 	d.adjusting = true
 	d.previous = d.fields[d.field].input.Value()
-	if d.field != 0 && d.field != 3 {
-		return
-	}
-	special := "Max"
-	if d.field == 3 {
-		special = "Default"
-	}
-	capacity := m.data.ModelContext
-	if capacity == 0 || d.field == 3 {
-		capacity = m.data.NativeContext
-	}
-	values := []int{128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576}
-	if capacity > 0 {
-		values = append(values, capacity)
-	}
-	if current, err := strconv.Atoi(d.previous); err == nil {
-		values = append(values, current)
-	}
-	sort.Ints(values)
-	preview := settingHelp(d.field)
-	label := special
-	if d.field == 3 && m.data.NativeContext > 0 {
-		label += " · " + tokenNumber(m.data.NativeContext)
-	}
-	d.rows = []row{{id: special, label: label, preview: preview}}
-	seen := map[int]bool{}
-	for _, n := range values {
-		if n <= 0 || seen[n] || (capacity > 0 && n > capacity && strconv.Itoa(n) != d.previous) {
-			continue
-		}
-		seen[n] = true
-		d.rows = append(d.rows, row{id: strconv.Itoa(n), label: tokenNumber(n), preview: preview})
-	}
-	d.index = 0
-	for i, r := range d.rows {
-		if r.id == d.previous {
-			d.index = i
-		}
-	}
+	d.fields[d.field].input.Focus()
 }
 func (m *model) finishSetting(cancel bool) {
 	d := m.dialog

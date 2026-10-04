@@ -3,8 +3,6 @@ package main
 import (
 	tea "charm.land/bubbletea/v2"
 	"fmt"
-	"github.com/charmbracelet/x/ansi"
-	"strings"
 )
 
 // Tree operations include hidden descendants, independent of rendered rows.
@@ -25,18 +23,8 @@ func (m *model) subtree(ids []string) map[string]bool {
 	return result
 }
 func (m *model) selectionMark(id string) string {
-	ids := m.subtree([]string{id})
-	count := 0
-	for key := range ids {
-		if m.branchSelection[key] {
-			count++
-		}
-	}
-	if count == len(ids) {
+	if m.branchSelection[id] {
 		return "✓ "
-	}
-	if count > 0 {
-		return "− "
 	}
 	return "  "
 }
@@ -66,7 +54,7 @@ func (m *model) openSelectionActions() tea.Cmd {
 	return nil
 }
 func (m *model) selectionAction(id string) tea.Cmd {
-	if m.pending || m.data.Busy {
+	if id != "clear" && (m.pending || m.data.Busy) {
 		m.status = "Wait for the current operation"
 		return nil
 	}
@@ -107,33 +95,12 @@ func (m *model) selectionAction(id string) tea.Cmd {
 	}
 	return nil
 }
-func (m *model) selectionLabels() []string {
-	label := "Keep selected"
-	if m.section == 2 {
-		label = "Remove from anthology"
-	}
-	return []string{"[ Clear selection ]", "[ " + label + " ]", "[ Delete… ]"}
-}
-func (m *model) selectionRects() []rect {
-	if !m.selectionVisible() {
-		return nil
-	}
-	x := 1
-	var rects []rect
-	for _, label := range m.selectionLabels() {
-		w := ansi.StringWidth(label)
-		rects = append(rects, rect{x, m.layout().actionY - 1, w, 1})
-		x += w + 1
-	}
-	return rects
-}
-func (m *model) selectionBar() string {
-	return " " + strings.Join(m.selectionLabels(), " ")
-}
 
 // Selection is a new working set on each Library visit, not saved provenance.
 // Defer its reset if another request is in flight; saved branch roots are intact.
 func (m *model) switchSection(section int) tea.Cmd {
+	m.pendingActivation = nil
+	m.gridFollow = false
 	if section == m.section && m.notesOpen {
 		return m.backFromNotes()
 	}

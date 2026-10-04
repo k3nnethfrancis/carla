@@ -7,28 +7,33 @@ import (
 	"time"
 )
 
-type action struct{ id, label, key string }
-
-var allActions = []action{
-	{"continue", "Continue", "ctrl+r"}, {"generate", "Generate (alias for continue)", ""}, {"branch", "Fork current version", "ctrl+b"}, {"loom", "Generate alternatives", ""},
-	{"add", "Add to seeds", ""}, {"remove", "Remove from collection", ""},
-	{"delete", "Delete selected branches", ""}, {"keep", "Keep branch", "k"}, {"grow", "Grow", "g"},
-	{"settings", "Settings", "ctrl+t"}, {"models", "Model", "m"},
-	{"workspaces", "Workspace", "ctrl+w"}, {"edit", "Edit document", "e"},
-	{"inspect", "Exact input", "ctrl+e"}, {"review", "Review document", "ctrl+u"},
-	{"spec", "Selection spec", "s"}, {"prompt", "Selector prompt", "p"},
-	{"snapshot", "Export kept documents", "ctrl+s"}, {"clear", "Clear seed selection", "x"},
-	{"library", "Library", "1"}, {"branches", "Branches", "2"},
-	{"kept", "Anthology", "3"}, {"notes", "Notes", "4"}, {"simulator", "Simulator", "5"}, {"sim-config", "Configure simulator", ""}, {"simulate", "Run conversations", ""}, {"grow-config", "Configure Grow", ""}, {"grow-policy", "Grow selection criteria", ""},
-	{"run", "Run Simulator conversations", ""}, {"configure", "Configure this page", ""},
-	{"find", "Filter this list", "ctrl+f"}, {"active", "View active generation", ""}, {"rename", "Rename document", ""},
-	{"visitor", "Write a visitor message in a conversation fork", ""}, {"grid", "Show Loom grid", ""}, {"loom-policy", "Configure conversation warnings and stop rules", ""},
-	{"character-sampling", "Character temperature, top-p and output tokens", ""}, {"visitor-sampling", "Visitor temperature, top-p and output tokens", ""},
-	{"import", "Import a document into Library", ""},
-	{"policy", "Monitoring, selection and evaluation criteria", ""}, {"eval", "Evaluate selected material", ""}, {"evaluations", "Evaluation datasets", "6"},
-}
-
 func (m *model) perform(id string) tea.Cmd {
+	if id == "remove.alt" {
+		id = "remove"
+	}
+	if (m.section == 0 || m.section == 4) && (id == "branch" || id == "continue" || id == "loom" || id == "generate" || id == "grow") {
+		m.status = "Open material in Branches or Simulator to generate"
+		return nil
+	}
+	if m.inNotesContext() {
+		switch id {
+		case "remove", "delete", "branch", "keep", "eval", "snapshot", "continue", "loom", "grow", "generate":
+			m.status = "This action applies to documents; focus the document or return to Branches"
+			return nil
+		}
+	}
+	if id == "grow" {
+		return m.loom(generationOptions{Action: "loom"})
+	}
+	if id == "add" {
+		return m.addItem()
+	}
+	if id == "snapshot" {
+		return m.exportItems()
+	}
+	if id == "behaviors" {
+		return m.openBehaviorLibrary()
+	}
 	if id == "policy" {
 		return m.openPolicy()
 	}
@@ -43,7 +48,7 @@ func (m *model) perform(id string) tea.Cmd {
 	}
 	// Legacy keybindings enter the same generation operation as the command bar.
 	if id == "continue" || id == "generate" || id == "run" || id == "simulate" || id == "grow" {
-		return m.loom(generationOptions{})
+		return m.loom(generationOptions{Action: "continue"})
 	}
 	if id == "remove" && m.section == 1 {
 		id = "delete"
@@ -59,7 +64,7 @@ func (m *model) perform(id string) tea.Cmd {
 		return m.editConversation(true)
 	}
 	if id == "loom-policy" {
-		return m.openLoomPolicy()
+		return m.openOperationalPolicies("monitoring")
 	}
 	if id == "grid" {
 		m.conversationOpen = false
@@ -98,13 +103,20 @@ func (m *model) perform(id string) tea.Cmd {
 		return nil
 	}
 	if id == "inspect" && m.section == 3 {
+		if args, ok := m.conversationTarget(); ok {
+			return m.send("simulator.inspect", args)
+		}
+		if row := m.targetRow(); row.kind == "simulation" {
+			return m.send("simulator.inspect", map[string]any{"run": row.id})
+		}
 		if m.simulation == nil {
 			m.status = "Open a simulation run first"
 			return nil
 		}
 		return m.send("simulator.inspect", map[string]any{"run": m.simulation.ID})
 	}
-	if documentAction(id) && !(m.section == 3 && id == "branch") && (m.targetRow().kind != "node" || m.targetRow().id != m.currentID() || m.pending) {
+
+	if documentAction(id) && !(id == "branch" && len(m.actionNodeIDs()) > 0) && !(m.section == 3 && (id == "branch" || id == "rename")) && (m.targetRow().kind != "node" || m.targetRow().id != m.currentID() || m.pending) {
 		m.status = "Select a branch and wait for its preview before /" + id
 		return m.previewTarget()
 	}
@@ -132,7 +144,7 @@ func (m *model) perform(id string) tea.Cmd {
 	case "grow-config":
 		return m.openGrowConfig()
 	case "grow-policy":
-		return m.beginEdit("policy_spec")
+		return m.openOperationalPolicies("selection")
 	case "sim-config":
 		return m.openSimulatorConfig()
 	case "branch":
@@ -141,7 +153,7 @@ func (m *model) perform(id string) tea.Cmd {
 		return m.loom(generationOptions{})
 	case "clear":
 		if m.section == 3 {
-			m.loomConversation = nil
+			m.simSelection = nil
 			m.reflow()
 			return nil
 		}
@@ -156,7 +168,7 @@ func (m *model) perform(id string) tea.Cmd {
 	case "edit":
 		return m.beginEdit("document")
 	case "spec":
-		return m.beginEdit("policy_spec")
+		return m.openOperationalPolicies("selection")
 	case "prompt":
 		return m.beginEdit("policy_prompt")
 	case "import":
@@ -174,10 +186,10 @@ func (m *model) perform(id string) tea.Cmd {
 	case "active":
 		return m.openActive()
 	case "rename":
-		d := &dialog{kind: "rename", title: "Document title", args: map[string]any{"node": m.currentID()}}
-		d.add("Title", documentLabel(*m.data.Current))
-		m.dialog = d
-		return d.fields[0].input.Focus()
+		if m.section == 3 {
+			return m.renameSimulation()
+		}
+		return m.renameDocument()
 	case "character-sampling", "visitor-sampling":
 		return m.openSampling(strings.TrimSuffix(id, "-sampling") + "_settings")
 	case "workspaces", "review":
@@ -192,6 +204,15 @@ func (m *model) perform(id string) tea.Cmd {
 }
 
 func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
+	// Animation ticks only repaint: do not reflow, preview, or save workspace state.
+	if tick, ok := message.(labelScrollTick); ok {
+		return m, m.labelScroll.advance(tick)
+	}
+	updated, cmd := m.update(message)
+	return updated, tea.Batch(cmd, m.syncLabelScroll())
+}
+
+func (m *model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 	before, workspace := m.workspaceView(), m.data.Workspace.Path
 	defer func() {
 		if workspace == m.data.Workspace.Path && before != m.workspaceView() {
@@ -234,7 +255,9 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		key := m.navigationKey(raw)
-		if raw == "/" && !(m.dialog != nil && (strings.HasPrefix(m.dialog.kind, "setup-") || m.dialog.kind == "import")) && (m.focus != 3 || m.dialog != nil || m.searching || m.sectionFocus) && !m.keyCapture {
+		// File/URL setup forms need literal slashes.
+		literalSlash := m.dialog != nil && (strings.HasPrefix(m.dialog.kind, "setup-") || m.dialog.kind == "import")
+		if raw == "/" && !literalSlash && (m.focus != 3 || m.dialog != nil || m.searching || m.sectionFocus) && !m.keyCapture {
 			m.editor.Blur()
 			m.search.Blur()
 			return m, m.focusCommand(true)
@@ -256,7 +279,10 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if m.dialog != nil {
 			return m, m.dialogKey(msg)
 		}
-		if key == "nav.back" && m.section == 4 && m.evalCollection != "" && m.focus == 0 && !m.sectionFocus {
+		if key == "nav.back" && m.section == 4 && (m.evalCollection != "" || m.evalArea != "") && m.focus == 0 && !m.sectionFocus {
+			if m.evalCollection == "" {
+				m.evalArea = ""
+			}
 			m.enterCollection("")
 			return m, nil
 		}
@@ -286,7 +312,7 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.previewTarget()
 		}
 
-		if m.editing != "" && m.boundAction(raw, "editor") == "save" {
+		if m.editing != "" && m.saveKey(msg) {
 			return m, m.saveEditor()
 		}
 		if m.focus == 3 {
@@ -297,11 +323,22 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, m.commandKey(msg)
 		}
+		if m.adaptiveBranches() && m.focus == 0 && (m.boundAction(raw, "branches") == "tree.scroll-left" || m.boundAction(raw, "branches") == "tree.scroll-right") {
+			delta := 8
+			if m.boundAction(raw, "branches") == "tree.scroll-left" {
+				delta = -delta
+			}
+			m.scrollBranches(delta)
+			return m, nil
+		}
 		if m.notesOpen && m.focus == 0 {
 			return m, m.notesKey(msg)
 		}
 		if cmd, handled := m.gridKey(key); handled {
 			return m, cmd
+		}
+		if m.editing == "" && !m.searching && (m.boundAction(raw, "panels") == "remove" || m.boundAction(raw, "panels") == "remove.alt") {
+			return m, m.perform("remove")
 		}
 		if m.cursorActive() && documentInput(msg) {
 			if msg.Code == tea.KeyEnter {
@@ -354,6 +391,9 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch key {
 		case "nav.back":
+			if m.backFromInspection() {
+				return m, nil
+			}
 			if m.simulatorBack() {
 				return m, nil
 			}
@@ -366,13 +406,25 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, m.cycleFocus(step)
 		case "nav.enter":
+			if m.focus == 2 && m.showInspector && m.inspectionParent == nil {
+				m.openInspectionRaw()
+				return m, nil
+			}
 			if m.focus == 0 {
 				return m, m.activate()
 			}
 		case "nav.left", "nav.right":
+			if m.focus == 2 && m.showInspector && m.inspectionRoot != nil {
+				step := 1
+				if key == "nav.left" {
+					step = -1
+				}
+				m.cycleInspectionTab(step)
+				return m, nil
+			}
 			if m.focus == 0 && m.section == 3 {
 				m.conversationArrow(strings.TrimPrefix(key, "nav."))
-				return m, nil
+				return m, m.previewTarget()
 			}
 			if m.focus == 0 && m.section == 1 {
 				m.branchArrow(strings.TrimPrefix(key, "nav."))
@@ -457,11 +509,6 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		for i, r := range m.selectionRects() {
-			if r.contains(msg.X, msg.Y) {
-				return m, m.selectionAction([]string{"clear", m.collectionAction(), "delete"}[i])
-			}
-		}
 		choices := m.commandChoices()
 		first := m.layout().actionY + 3
 		if msg.Y >= first && msg.Y < first+m.suggestionCount() && msg.X >= 1 && msg.X < m.width-1 {
@@ -513,12 +560,21 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 					if m.section == 0 && msg.Y == panel.box.y+panel.box.h-3 {
 						return m, m.perform("clear")
 					}
-					index := msg.Y - panel.box.y - 3 + m.navStart(panel.box.h-6)
+					index := msg.Y - panel.box.y - 3 + m.navStart(m.navigationRows(panel.box))
 					if index >= 0 && index < len(m.rows()) {
-						m.selected = index
 						r := m.rows()[index]
+						rowX := m.treeRowX(r, panel.box)
+						m.selected = index
+						if m.section == 4 {
+							switch r.kind {
+							case "eval-area", "eval-policy", "eval-policy-new", "eval-collection", "eval-create", "eval-back", "eval-config", "eval-add", "eval-new-run", "eval-filter":
+								m.sectionFocus = false
+								m.reflow()
+								return m, m.activate()
+							}
+						}
 						if m.section == 1 || m.section == 2 {
-							checkX := panel.box.x + 2 + r.depth
+							checkX := rowX
 							if m.section == 1 {
 								checkX += 2
 							}
@@ -526,16 +582,18 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 								return m, m.toggleTarget()
 							}
 						}
-						if m.section == 3 && (strings.HasPrefix(r.label, "▾") || strings.HasPrefix(r.label, "▸")) && msg.X == panel.box.x+2+r.depth {
-							m.collapsed[r.id] = !m.collapsed[r.id]
-							return m, nil
-						}
-						if m.section == 1 && m.hasChildren(r.id) && msg.X == panel.box.x+2+r.depth {
+						if m.section == 3 && (strings.HasPrefix(strings.TrimPrefix(strings.TrimPrefix(r.label, "✓ "), "  "), "▾") || strings.HasPrefix(strings.TrimPrefix(strings.TrimPrefix(r.label, "✓ "), "  "), "▸")) && msg.X == rowX+2 {
 							m.collapsed[r.id] = !m.collapsed[r.id]
 							m.reflow()
 							return m, nil
 						}
-						return m, m.activate()
+						if m.section == 1 && m.hasChildren(r.id) && msg.X == rowX {
+							m.collapsed[r.id] = !m.collapsed[r.id]
+							m.reflow()
+							return m, nil
+						}
+						m.reflow()
+						return m, m.previewTarget()
 					}
 				}
 				m.reflow()
@@ -584,6 +642,8 @@ func (m *model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 				delta = -3
 			}
 			m.selected = max(0, min(m.selected+delta, len(m.rows())-1))
+			m.reflow()
+			return m, m.previewTarget()
 		}
 		return m, cmd
 	}
@@ -670,10 +730,13 @@ func (m *model) nodeTitle() string {
 		return "Behavior spec"
 	}
 	if m.editing == "policy_spec" {
-		return "Selection spec"
+		return "Behavior spec"
+	}
+	if m.editing == "selection_assessment_prompt" {
+		return "Behavior assessment template"
 	}
 	if m.editing == "policy_prompt" {
-		return "Selector prompt"
+		return "Branch selection template"
 	}
 	if m.section == 0 && m.editing == "" {
 		return "Source preview"
@@ -689,6 +752,7 @@ func (m *model) nodeTitle() string {
 	if n.Kept {
 		title = "★ " + title
 	}
+	title = documentStatusLabel(*n, title)
 	if n.Model != "" {
 		title += " · " + n.Model
 	}

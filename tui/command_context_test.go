@@ -9,7 +9,7 @@ func TestPageCommandsComeFirst(t *testing.T) {
 	for _, tc := range []struct {
 		section int
 		first   string
-	}{{0, "import"}, {1, "loom"}, {2, "snapshot"}, {3, "loom"}} {
+	}{{0, "add"}, {1, "continue"}, {2, "snapshot"}, {3, "continue"}} {
 		m := fixture()
 		m.section = tc.section
 		m.focus = 3
@@ -33,7 +33,7 @@ func TestSimulatorCommandAliasesAndGuards(t *testing.T) {
 	m.width, m.height = 120, 36
 	m.command.SetValue("/")
 	choices := m.commandChoices()
-	if choices[0].id != "loom" || choices[1].id != "configure" {
+	if choices[0].id != "continue" || choices[1].id != "loom" {
 		t.Fatal(choices)
 	}
 	m.command.SetValue("/configure")

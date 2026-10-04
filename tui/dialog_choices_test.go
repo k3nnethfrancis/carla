@@ -6,22 +6,24 @@ import (
 	"testing"
 )
 
-func TestQuickMonitorChoices(t *testing.T) {
-	for _, key := range []rune{tea.KeySpace, tea.KeyLeft, tea.KeyRight} {
-		m := policyFixture()
-		m.openLoomPolicy()
-		req := captureCommand(t, m, func() tea.Cmd { return m.dialogKey(tea.KeyPressMsg{Code: key}) })
-		if req.Command != "simulator.configure" || string(req.Args["monitor_mode"]) != `"off"` || m.dialog.kind != "loom-policy" || m.dialog.query != "" {
-			t.Fatal(req, m.dialog)
+func TestOperationalStatusRowsAreReadOnly(t *testing.T) {
+	for _, purpose := range []string{"monitoring", "selection"} {
+		for _, key := range []rune{tea.KeySpace, tea.KeyLeft, tea.KeyRight, tea.KeyEnter} {
+			m := namedOperationalFixture()
+			m.openOperationalPolicies(purpose)
+			m.submitDialog()
+			root := m.dialog
+			if root.rows[0].id != "status" {
+				t.Fatal("Status is not first", root.rows)
+			}
+			if _, ok := m.dialogChoice(); ok {
+				t.Fatal("status offers toggle")
+			}
+			m.dialogKey(tea.KeyPressMsg{Code: key})
+			if m.pending || m.dialog != root {
+				t.Fatal("readonly status changed config", purpose, key)
+			}
 		}
-	}
-	m := policyFixture()
-	m.data.MonitorKeySource = ""
-	m.data.SimulatorConfig["monitor_mode"] = "off"
-	m.openLoomPolicy()
-	m.dialogKey(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
-	if m.dialog.kind != "loom-policy-key" || m.simString("monitor_mode") != "off" {
-		t.Fatal("quick cycle bypassed key setup")
 	}
 }
 
@@ -42,7 +44,7 @@ func TestHeartbeatQuickTogglePreservesFilter(t *testing.T) {
 
 func TestQuickCycleDirectionAndTextEntry(t *testing.T) {
 	m := policyFixture()
-	m.openDimension("looping")
+	m.openMonitorAction("looping")
 	for i, r := range m.dialog.rows {
 		if r.id == "color" {
 			m.dialog.index = i

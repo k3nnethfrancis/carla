@@ -5,8 +5,9 @@
 Carla opens its model setup dialog when no configured base GGUF exists.
 Use arrows and Enter to select, and Escape to go back one step or skip setup.
 File paths and URLs are entered in the same input controls as other Carla dialogs.
-`carla --setup-model` opens setup explicitly; inside Carla, use `/model` →
-`+ Add model`. An explicit `--models FILE` bypasses automatic detection.
+`carla --setup-model` opens setup explicitly. In Branches, use `/config` →
+Generation model → `+ Add model`. In Simulator, use `/config` → Models →
+Character model or Visitor model → `+ Add model`. An explicit `--models FILE` bypasses automatic detection.
 Both the installed launcher and direct TUI binary use this same setup flow.
 
 The preset menu offers the Qwen3 8B, 14B and 30B-A3B Base Q4_K_M files used in local
@@ -32,7 +33,7 @@ inside Carla; Escape cancels the transfer and retains cached partial files.
 Errors appear in the same dialog, with a way back to edit the source.
 Setup registers a model only after successful acquisition. It leaves existing
 entries intact and selects a distinct configured port, though another external
-process can still occupy that port. Initial context is 8192 and GPU layers 99;
+process can still occupy that port. Initial context is 10,240 tokens (capped at a known smaller native limit) and GPU layers 99;
 adjust these in settings/configuration for your hardware. No RAM-fit or throughput
 claim is inferred from the download size. Skip remains available for offline
 browsing. The model manager does not install llama.cpp.
@@ -44,7 +45,7 @@ Each entry needs `alias`, `kind: "base"`, `path` and `port`. Optional fields are
 
 - Aliases must be unique. Endpoints must be loopback HTTP and match the configured
   port; use distinct ports for distinct models.
-- `context` defaults to 8192. Zero requests llama.cpp's model default. Large native
+- `context` defaults to 10,240, capped at the native limit read from GGUF when smaller. Zero (**Max** in `/config`) requests llama.cpp's model default. Large native
   contexts can exhaust memory; choose a capacity your machine can hold. Output
   budgets are separate and never silently reduced to admit more requests.
 - `gpu_layers` defaults to 99; use 0 for CPU or a supported layer count for your
@@ -59,12 +60,15 @@ Each entry needs `alias`, `kind: "base"`, `path` and `port`. Optional fields are
 
 For persistent defaults, place the array at `$CARLA_DATA_DIR/models.json`.
 Saved workspace model entries override matching registry entries; an explicit
-`--models FILE` replaces the workspace catalog. `/model` selects from that catalog.
+`--models FILE` replaces the workspace catalog. The model picker in `/config` selects from that catalog.
 
-Repeated Loom loops need a separate instruct selection model. `--policy-model FILE` accepts one object
-with the same fields and `kind: "instruct"`. Setup saves the persistent default at `$CARLA_DATA_DIR/policy-model.json`. Selection unloads
+Optional policy-guided split loops need a separate instruct selection model. `--policy-model FILE` accepts an object or a nonempty array
+with the same fields and `kind: "instruct"`. Setup appends registered judge models
+to `$CARLA_DATA_DIR/policy-model.json`; existing single-object files still work.
+Each Selection policy and Evals judge chooses its own model from this catalog. Selection unloads
 the generator before loading the selector. Selection instructions never enter
-raw generation context. Without a configured policy model, multi-loop Loom cannot run.
+raw generation context. Selection defaults to Off. Ordinary loops continue each output without a judge;
+Selection On requires a configured policy model for split loops.
 
 ## Prompts and templates
 
@@ -75,14 +79,14 @@ Selection and local evaluation are separate instruct-model judge calls.
 | Input | Editor | How it is used |
 | --- | --- | --- |
 | Document continuation | Branches → `/edit`, save, position cursor | Exact document prefix up to the cursor; no separate wrapper/template setting. |
-| Character template | Simulator → `/config` → Character prompt | Formatted with frozen anthology text and conversation history. |
-| Visitor template | Simulator → `/config` → Visitor prompt | Formatted with Visitor brief and conversation history by default. |
-| Visitor brief | Simulator → `/config` → Visitor brief | Text substituted into `{visitor_brief}`. |
-| Fixed opener | Simulator → `/config` → Opening → Fixed → Message | First Visitor message for fresh conversations; `--msg` overrides it for one run. |
-| Generated opener | Simulator → `/config` → Opening → Generated → Generation prompt | Raw completion using its selected model/sampling, once per fresh conversation. |
-| Selection | `/policy` → Selection | Criteria and system prompt for candidate classification; never injected into generator text. |
-| Monitoring | `/policy` → Monitoring → Behaviors | Named behavior specs sent to Jev with context. The provider envelope is managed by Carla. |
-| Evaluation | `/policy` → Judge configurations | Criteria and local judge system prompt, or Jev behavior spec/threshold. |
+| Character template | Simulator → `/config` → Prompts → Character prompt | Formatted with frozen anthology text and conversation history. |
+| Visitor template | Simulator → `/config` → Prompts → Visitor prompt | Formatted with Visitor brief and conversation history by default. |
+| Visitor brief | Simulator → `/config` → Prompts → Visitor brief | Text substituted into `{{visitor_brief}}`. |
+| Fixed opener | Simulator → `/config` → Opening → Mode: Fixed → Message | First Visitor message for fresh conversations; `--visitor` supplies the message for one run (`--msg` and `--message` are aliases). |
+| Generated opener | Simulator → `/config` → Opening → Mode: Generated → Generation prompt | Raw completion using its selected model/sampling, once per fresh conversation. |
+| Selection | `/policy` → Selection | Criteria and assessment/choice templates for candidate classification; never injected into generator text. |
+| Monitoring | `/policy` → Monitoring → a policy → Behaviors | Named behavior specs sent to local DiffusionGemma or Jev with context. The provider envelope is managed by Carla. |
+| Evaluation | Evaluate → Policies → a policy → Behaviors or Judge | Behavior criteria and the local LLM judge template. New policies offer registered LLMs; saved legacy classifier settings remain supported. |
 
 ### Document continuations
 
@@ -100,11 +104,11 @@ Current defaults are:
 Character:
 
 ```text
-{anthology}
+{{anthology}}
 
 Full conversation with Model C:
 
-{history}
+{{history}}
 
 **Model C:**
 ```
@@ -112,19 +116,19 @@ Full conversation with Model C:
 Visitor:
 
 ```text
-{visitor_brief}
+{{visitor_brief}}
 
 Full conversation with Model C:
 
-{history}
+{{history}}
 
 **User:**
 ```
 
-Both accept `{anthology}`, `{history}` and `{visitor_brief}`. `{history}` is
-required in both; `{anthology}` is required in the Character template. Unknown
-fields or invalid formatting are rejected. Use doubled braces `{{` and `}}` for
-literal braces. These are Python string-format fields, not executable templates.
+Both accept `{{anthology}}`, `{{history}}` and `{{visitor_brief}}`. History is
+required in both; anthology is required in the Character template. Unknown
+variables fail validation. Existing single-brace templates retain their prior
+rendering; new templates use the shared [data-only syntax](templates.md).
 
 History is rendered as `**User:**` and `**Model C:**` turns. Speaker-boundary stop
 strings use those labels too. They are not separately configurable: preserve
@@ -134,7 +138,7 @@ or add arbitrary new variables through configuration.
 
 The default Visitor brief is `A curious visitor talks with Model C.` The default
 fixed opener is `What would you like to talk about?`. Generated openings have an
-editable prompt and sampling; **Preview 3 openings** tests just that stage. The
+editable prompt and sampling. The
 opening generator does not receive anthology text automatically. A blank opening
 model selection follows the configured Visitor model.
 
@@ -149,7 +153,10 @@ added. Configuration changes do not alter saved traces.
 
 The selection prompt must preserve its JSON contract: review each candidate once,
 include valid evidence, and return an eligible candidate ID or null. The local
-evaluation prompt must return `passed` (boolean), `reason` and `evidence`. Full
+assessment prompt must return `passed` (boolean observation of the criteria),
+`reason` and `evidence`. Carla then applies the behavior’s Present/Absent expectation.
+Selection has a Behavior assessment template for this step and a Branch selection template for
+comparing eligible candidates. Full
 contracts/defaults are visible in their editors and in saved judge requests.
 Monitoring allows behavior specs, thresholds and actions; its transport envelope
 is not a free-form prompt editor. See [policies and evaluations](evaluations.md).
@@ -159,14 +166,15 @@ is not a free-form prompt editor. See [policies and evaluations](evaluations.md)
 Document `/config` exposes model and shared sampling/context settings. Simulator
 has separate Character, Visitor and generated-opening sampling. Explicit Loom
 flags override one run; they do not rewrite saved configuration. Bare Loom always
-uses one alternative and one loop, plus one Character reply in Simulator.
+uses one alternative and one loop. Simulator uses the saved Turns value from
+`/config` → Generation unless `--turns` overrides it.
 
 `--tokens N` caps new output tokens; it is not a minimum length. `Max` uses the
 remaining available context. EOS and speaker boundaries may end output sooner.
 Simulator `--tokens` overrides both Character and Visitor ceilings, while the
 opening generator keeps its own settings. `--turns` counts Character replies per
-alternative per loop. `--loops` enables selection-driven repetition. See the
-[complete syntax](commands.md#loom-configure-one-set-then-repeat).
+alternative per loop. `--loops` repeats continuation; Selection On instead enables policy-guided split loops. See the
+[complete syntax](commands.md#generation-arguments).
 
 ## Storage and launch
 
@@ -194,7 +202,7 @@ with `CARLA_PYTHON` when needed. The documented installation is from source.
 ## Document library
 
 The library is shared across workspaces, but loading a workspace does not select
-all its documents. In the TUI, use `/import` or **+ Add document** in Library.
+all its documents. In the TUI, use `/add` or **+ Add document** in Library.
 Enter a local UTF-8 `.txt` or `.md` file path, an optional title (defaults to the
 filename), and optional author/source URL. Tab or Enter moves between fields; Enter on the last field imports.
 Ctrl+Enter imports from any field; Escape cancels. The document appears immediately, without selecting it as a seed.
@@ -238,11 +246,17 @@ The texts are not covered by Carla’s MIT software license.
 
 ## Optional monitoring
 
-The Monitoring policy under `/policy` configures Jev via OpenRouter System One. Enable it only when you
+Monitoring is Off by default. For an entirely local classifier, select
+**DiffusionGemma (classifier)** and follow [local judge setup](local-judge.md).
+After the one-time installation, Carla starts the cached local judge automatically
+on an available loopback port and stops it on exit. No server address or API key
+is needed. Choose the model under `/policy` → Monitoring → a policy → Judge → Model.
+
+The Jev option uses OpenRouter System One. Choose it only when you
 intend to send the full conversation history, including character output and
 human messages, to that external service. Its requests may incur charges.
 Monitoring defaults to Off. Choose Jev to open a masked OpenRouter API-key form;
-other monitoring controls appear only after a key is configured. Cancelling this
+its other monitoring controls appear only after a key is configured. Cancelling this
 step leaves monitoring Off. An existing `OPENROUTER_API_KEY` in the launching
 environment also satisfies setup.
 
@@ -254,8 +268,24 @@ retains the key for later use. Keys are not included in state events, generation
 configs, traces or dataset exports. Saving a key does not make a paid request or
 verify provider authentication; provider errors remain visible when used.
 
-Checks apply to character replies and document continuations. In `/policy` →
-Monitoring → Heartbeat, toggle after-reply and during-reply checks separately.
+**Call mode** defaults to **Separate**: one request per enabled behavior,
+using the same captured text. **Bundled** asks all enabled behaviors in one
+request. Choosing Bundled opens a confirmation warning: it can reduce calls,
+cost and latency, but asking behaviors together can change scores or miss
+behaviors. Switching back to Separate takes effect directly. Each score remains
+an independent yes/no probability in either mode; the scores do not sum to one.
+Missing settings in older workspaces use Separate; explicit Bundled choices are
+retained. Historical traces are unchanged.
+
+Separate calls run sequentially within a check. Traces retain each request,
+response, timing and error. If one behavior fails, the check is marked partial;
+successful behavior scores and their configured actions still apply. A failed
+behavior is never treated as a negative score or a reason to stop. This setting
+covers live monitoring, not named evaluation judge execution.
+
+Simulator checks apply to character replies when its monitoring policy is On.
+Document continuations require `--monitoring on` for each operation. In `/policy` →
+Monitoring → a policy → Heartbeat, toggle after-reply and during-reply checks separately.
 Both default to on, with a 512-output-token interval when monitoring is enabled.
 Turning during-reply checks off preserves the interval. Legacy interval 0 still
 disables mid-reply checks. Only one check per
@@ -267,21 +297,56 @@ not a locally calibrated guarantee. A Stop affects only the flagged conversation
 
 ## Policy and evaluation configuration
 
-Use `/policy` for monitoring, selection and reusable judge configurations.
-Each judge chooses a local LLM or Jev, criteria, and (for Jev) a probability
-threshold. Local judging exposes its complete system prompt. Definitions are
-workspace-local and revisioned; results keep the definition used at execution.
-In Evaluate, `/config` configures the opened collection: its name, judges and
-active status. Elsewhere it configures generation. Adding collection items and
-running judges are separate actions. See
-[commands](commands.md#policies-and-evaluated-datasets) for targeting and exports.
+`/policy` always opens Monitoring, Selection and Evals, from every tab.
+Choose a named policy within a category to edit it. Monitoring and Selection
+use On/Off; editing an Off policy does not enable it. Evaluate → Policies
+opens the same Evals policy list; there is no separate evaluation configuration.
+Policies own behaviors separately from their judge settings. The judge owns the
+model, prompt and Call mode. Behaviors own specs, enabled states and passing
+rules. Each evaluation policy has one judge assessing its enabled behaviors.
+Evals currently offers registered local LLMs; Monitoring offers local DiffusionGemma or hosted Jev.
+Classifiers use probability thresholds; local LLM judges expose an input template
+and return a boolean observation with evidence under a separate validated response contract. DiffusionGemma uses the
+managed local OpenJev worker after [one-time setup](local-judge.md).
+
+Data collections and policies are independent. Choose an active policy for bare
+`/eval`, or use `/eval "policy name"`. `/config` handles the current view's
+settings. `/behaviors` opens the workspace spec library. Importing into a policy copies the
+spec with its library revision; enabled states, detection rules and actions remain
+local to the policy. Selection/Evals imports start Off for review of the spec and
+**Pass when · Present/Absent**. Evals **On pass** chooses whether passing data is
+only recorded or also marked for training. Saved runs
+retain the configurations used at execution. Adding data never invokes a model.
+See [evaluations](evaluations.md) for the Data / Policies / Runs workflow.
+
+Named Monitoring and Selection policy rows show only **On/Off**. Space or
+Left/Right toggles the focused policy; Enter opens its configuration. Inside,
+**Status · Active/Inactive** reports that same On/Off state; use the policy list
+to change it. It is not a separate activation setting. Turning
+one On switches the previous policy in that category Off and uses the newly
+enabled policy for future runs. All policies can be Off. New policies start
+Off; their judge and behavior settings remain saved when disabled. Enabling
+monitoring uses its remembered judge, with model/key setup when needed.
+Cancelling setup leaves the previously enabled policy unchanged.
 
 Choice rows in policy configuration support Space to cycle forward and Left/Right
 to cycle backward/forward, without opening a picker. Enter still opens the full
 picker. Heartbeat toggles use the same keys; Interval opens its numeric control.
 Typing filters the list, and the filter is retained after a setting changes.
 
-Monitoring's **Behaviors** panel lists each behavior's enabled state and action.
+Open a policy’s **Behaviors** panel to edit names, specs and enabled states.
+**Judge** contains model and Call mode. Each monitoring behavior contains its
+own **Detection rule** and, when applicable, threshold. Policy-level **Actions** configures Warn
+or Stop and warning colors by behavior.
+**Heartbeat** controls when monitoring runs. Selection has the same direct
+Behaviors / Judge layout, with separate **Behavior assessment template** and **Branch selection template**
+rows in Judge. Evals LLM judges expose **Prompt template**.
+LLM judge templates open the full multiline editor with highlighted `{{variables}}`.
+See [template variables and examples](templates.md) for input placement and object fields. Saving a changed template
+asks for confirmation: changing its instructions or required response format
+can change judge behavior. Cancel returns to the draft; confirm saves a workspace
+override without changing Carla’s built-in defaults. Classifier judges use their
+behavior specs and do not expose an LLM prompt template.
 **New behavior** shows the complete configuration before creation; edits stay in
 an unsaved draft until **Create behavior**. Specs use the multiline document
 editor (`/save` or the configured save binding; Escape cancels the text edit).
@@ -289,11 +354,23 @@ Leaving the new-behavior panel discards its unsaved draft.
 
 The **Detection rule** determines whether a behavior is flagged: **Most likely**
 requires estimated probability above 50%; **Threshold** uses your chosen cutoff.
-The separate **Action** determines what follows a detection: warn or stop.
+The behavior’s **Action** determines what follows a detection: warn or stop.
+Actions are stored with the policy, alongside its criteria and judge settings.
 Disabling a behavior skips it while retaining its settings.
 
 Long specs, criteria and prompts use the full document editor. Text wraps and
 scrolls with the cursor; use arrows, Page Up/Page Down or the mouse wheel to
-navigate. The heading shows the current line and total lines. New judges
+navigate. The heading shows the current line and total lines. New evaluation behaviors
 ask for a name first, then open this editor for criteria. Saving preserves the
 complete multiline text, including content outside the visible window.
+
+Saved local monitoring requests use `openjev-latest` as the OpenJev API identifier.
+It routes to DiffusionGemma in Carla’s managed worker; the model picker shows
+**DiffusionGemma (classifier)**, not a second model or alias control. The Actions row counts enabled Warn/Stop rules and disabled Off rules.
+
+Simulator Config groups settings into **Generation** (turns and output tokens),
+**Models** (speaker models and context limits), **Sampling**, **Opening**, and
+**Prompts**. Choose source documents in Anthology, rather than in Config.
+Numeric fields accept typed values; Left/Right move the cursor, Up/Down adjust
+integer settings by one. Temperature and top-p use fractional steps. Enter saves;
+Escape cancels. Token and context limits retain the M shortcut for Max.

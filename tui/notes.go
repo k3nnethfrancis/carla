@@ -8,7 +8,9 @@ import (
 )
 
 func (m *model) noteRows() []row {
-	rows := []row{{id: "back", kind: "note-back", label: "← Branches"}, {id: "new", kind: "note-new", label: "+ New note"}}
+	rows := []row{{id: "back", kind: "note-back", label: "← Branches"}, {id: "new", kind: "note-new", label: "+ New note"},
+		{id: "edit-document", kind: "document-edit", label: "Edit document", preview: "Edit this document. Save commits a new version; Escape cancels."},
+		{id: "rename-document", kind: "document-rename", label: "Rename document", preview: "Choose a memorable name. Clear it to restore the automatic ancestry name."}}
 	for _, a := range m.data.Annotations {
 		if a.Node != m.currentID() {
 			continue
@@ -27,7 +29,7 @@ func (m *model) openNotes(focus bool) tea.Cmd {
 		return nil
 	}
 	m.notesOpen = true
-	m.selected = 1
+	m.selected = 0
 	m.noteScroll = 0
 	m.showInspector = false
 	if focus {
@@ -50,20 +52,7 @@ func (m *model) backFromNotes() tea.Cmd {
 	m.notesOpen = false
 	m.section, m.focus = 1, 0
 	m.branchSelection = map[string]bool{}
-	// Reveal the current version even when its ancestors were collapsed.
-	parents := map[string]string{}
-	for _, n := range m.data.Nodes {
-		parents[n.ID] = n.Parent
-	}
-	for id := parents[m.currentID()]; id != ""; id = parents[id] {
-		delete(m.collapsed, id)
-	}
-	for i, r := range m.rows() {
-		if r.id == m.currentID() {
-			m.selected = i
-			break
-		}
-	}
+	m.selectDocument(m.currentID())
 	m.reflow()
 	return nil
 }
@@ -76,6 +65,10 @@ func (m *model) activateNote() tea.Cmd {
 	switch r.kind {
 	case "note-back":
 		return m.backFromNotes()
+	case "document-rename":
+		return m.renameDocument()
+	case "document-edit":
+		return m.editDocumentWithNotes()
 	case "note-new":
 		if m.editing == "document" {
 			m.status = "Use /save before attaching a note to these edits"
@@ -140,7 +133,7 @@ func moveTextCursor(area *textarea.Model, offset int) {
 }
 func (m *model) notesKey(msg tea.KeyPressMsg) tea.Cmd {
 	key := m.navigationKey(msg.String())
-	if m.boundAction(msg.String(), "editor") == "save" && m.editing == "document" {
+	if m.saveKey(msg) && m.editing == "document" {
 		return m.saveEditor()
 	}
 	switch key {
@@ -193,7 +186,15 @@ func (m *model) notesClick(y int, r rect) tea.Cmd {
 	if y >= 0 && y < visible && index < len(m.noteRows()) {
 		m.focus = 0
 		m.selected = index
-		return m.activateNote()
+		m.noteScroll = 0
+		m.editor.Blur()
+		m.reflow()
+		// Action rows are buttons; saved notes remain focus-first list items.
+		switch m.noteRows()[index].kind {
+		case "note-back", "note-new", "document-edit", "document-rename":
+			return m.activateNote()
+		}
+		return nil
 	}
 	return nil
 }
@@ -208,6 +209,9 @@ func (m *model) notesView(r rect) string {
 	for _, i := range indices {
 		label := line(safe(rows[i].label), r.w-4)
 		if i == m.selected {
+			if m.focus == 0 && !m.sectionFocus && m.dialog == nil && !m.searching {
+				label = m.scrollingLabel(safe(rows[i].label), r.w-4)
+			}
 			label = selectedStyle.Render(label)
 		}
 		lines = append(lines, label)
@@ -236,4 +240,15 @@ func (m *model) revealNote(a annotation) {
 		m.focus = 0
 	}
 	m.reflow()
+}
+
+func (m *model) renameDocument() tea.Cmd {
+	if m.data.Current == nil || m.pending {
+		return nil
+	}
+	d := &dialog{kind: "rename", title: "Rename document", args: map[string]any{"node": m.currentID()}}
+	d.add("Name (blank restores automatic)", m.data.Current.Title)
+	d.add("Update child ancestry names (SPACE toggles)", "Off")
+	m.dialog = d
+	return d.fields[0].input.Focus()
 }

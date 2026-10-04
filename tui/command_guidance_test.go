@@ -15,7 +15,7 @@ func TestCommandPrefixesExposeContextualFlags(t *testing.T) {
 		for _, input := range []string{"/lo", "/loom", "/generate", `/simulate 2 --eval "Voice"`} {
 			m.command.SetValue(input)
 			hints := strings.Join(m.commandHints(), " ")
-			for _, flag := range []string{"--tokens", "--eval", "--loops"} {
+			for _, flag := range []string{"--tokens", "--eval", "--model", "--selection", "--monitoring"} {
 				if !strings.Contains(hints, flag) {
 					t.Fatalf("%s: %s", input, hints)
 				}
@@ -40,7 +40,7 @@ func TestCommandGuideFollowsHighlightedChoice(t *testing.T) {
 		if a.id == "branch" && hints != "" {
 			t.Fatal("fork advertised generation flags", hints)
 		}
-		if m.commandHelp(a.id) == "" {
+		if m.helpText(m.canonicalCommand(a.id)) == "" {
 			t.Fatal("missing description", a.id)
 		}
 	}
@@ -53,7 +53,7 @@ func TestLoomFlagsAndFooterFitSmallTerminals(t *testing.T) {
 		m.command.SetValue("/lo")
 		m.reflow()
 		frame := ansi.Strip(m.View().Content)
-		for _, s := range []string{"/loom", "--eval", "--loops", "--turns", "ENTER run"} {
+		for _, s := range []string{"/loom", "--eval", "--loops", "--turns", "--selection", "--monitoring", "ENTER run"} {
 			if !strings.Contains(frame, s) {
 				t.Fatalf("%v missing %s:\n%s", size, s, frame)
 			}
@@ -87,7 +87,7 @@ func TestFullCommandHelpScrollsAndReturns(t *testing.T) {
 	}
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnd})
 	frame := ansi.Strip(m.View().Content)
-	if !strings.Contains(frame, "selection policy") || !strings.Contains(frame, "ESC back") {
+	if !strings.Contains(frame, "alternatives") || !strings.Contains(frame, "ESC back") {
 		t.Fatal(frame)
 	}
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -123,6 +123,8 @@ func TestHelpWheelDoesNotMoveBackgroundTarget(t *testing.T) {
 
 func TestHelpHintsUseConfiguredBindings(t *testing.T) {
 	m := evalFixture()
+	m.height = 18
+	m.width = 60
 	m.data.Bindings = map[string]string{"nav.up": "k", "nav.down": "j", "nav.enter": "o", "nav.back": "q"}
 	m.openHelp()
 	frame := ansi.Strip(m.View().Content)

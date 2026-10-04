@@ -18,15 +18,25 @@ func (m *model) dialogChoice() (dialogChoice, bool) {
 	id := d.rows[d.index].id
 	c := dialogChoice{field: id}
 	switch d.kind {
-	case "loom-policy":
+	case "operational-policy-list":
+		purpose, _ := d.args["purpose"].(string)
+		return c, m.operationalPolicy(purpose, id).ID != ""
+	case "loom-policy-judge":
+		if id == "monitor_call_mode" {
+			c.field, c.current, c.values = id, m.monitorCallMode(), []string{"separate", "bundled"}
+			break
+		}
 		if id != "mode" {
 			return c, false
 		}
-		c.field, c.current, c.values = "monitor_mode", m.simString("monitor_mode"), []string{"off", "jev"}
+		c.field, c.current, c.values = "monitor_mode", m.monitorString("monitor_mode"), []string{"off", "diffusion", "jev"}
+		if d.kind == "loom-policy-judge" {
+			c.values = []string{"diffusion", "jev"}
+		}
 	case "loom-policy-timing":
 		c.toggle = id == "monitor_after_reply" || id == "monitor_during_reply"
 		return c, c.toggle
-	case "loom-policy-dimension":
+	case "loom-policy-dimension", "loom-policy-actions":
 		item := m.dimension(d.args["id"].(string))
 		switch id {
 		case "enabled":
@@ -57,6 +67,10 @@ func (m *model) cycleDialogChoice(step int) tea.Cmd {
 		return nil
 	}
 	d := m.dialog
+	// List rows keep Enter for opening; only quick-choice keys toggle.
+	if d.kind == "operational-policy-list" {
+		return m.toggleOperationalPolicy()
+	}
 	if c.toggle {
 		return m.submitLoomPolicy(d)
 	}

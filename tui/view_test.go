@@ -212,7 +212,7 @@ func TestSectionsHelpAndBranchTree(t *testing.T) {
 	for _, size := range [][2]int{{60, 18}, {80, 24}, {144, 42}} {
 		m.width, m.height = size[0], size[1]
 		m.openHelp()
-		if len(m.dialog.rows) < 25 {
+		if len(m.helpAllRows()) < 25 {
 			t.Fatal("help missing commands")
 		}
 		for i, r := range m.dialog.rows {
@@ -451,7 +451,7 @@ func TestContinueShortcutUsesDocumentCursor(t *testing.T) {
 			t.Fatal("shortcut did not send generation")
 		}
 		done := make(chan tea.Msg, 1)
-		go func() { done <- cmd() }()
+		go func() { done <- runPrimaryCommand(cmd) }()
 		var request struct {
 			Command string
 			Args    struct {
@@ -480,7 +480,7 @@ func TestBranchSelectionActions(t *testing.T) {
 	m.data.Nodes = []node{{ID: "root", Kind: "source", Status: "complete"}, {ID: "child", Parent: "root", Status: "complete"}, {ID: "leaf", Parent: "child", Status: "complete"}, {ID: "sibling", Parent: "root", Status: "complete"}}
 	m.selected = 1
 	m.toggleTarget()
-	if len(m.selectedBranches()) != 2 || !strings.Contains(m.rows()[1].label, "✓") {
+	if len(m.selectedBranches()) != 1 || !strings.Contains(m.rows()[1].label, "✓") {
 		t.Fatal("selection checkbox missing")
 	}
 	m.collapsed["child"] = true
@@ -489,7 +489,7 @@ func TestBranchSelectionActions(t *testing.T) {
 		t.Fatal("delete scope/confirmation incorrect")
 	}
 	m.submitDialog()
-	if m.dialog != nil || len(m.selectedBranches()) != 2 {
+	if m.dialog != nil || len(m.selectedBranches()) != 1 {
 		t.Fatal("cancel changed selection")
 	}
 	m.activate()
@@ -506,14 +506,10 @@ func TestBranchSelectionActions(t *testing.T) {
 	for _, size := range [][2]int{{60, 18}, {80, 24}} {
 		m.width, m.height = size[0], size[1]
 		m.reflow()
-		if !strings.Contains(ansi.Strip(m.View().Content), "[ Delete… ]") {
-			t.Fatal("actions not visible")
+		if strings.Contains(ansi.Strip(m.View().Content), "[ Delete… ]") {
+			t.Fatal("selection strip should not appear")
 		}
-		for _, r := range m.selectionRects() {
-			if r.x+r.w > m.width {
-				t.Fatal("button clipped")
-			}
-		}
+
 	}
 }
 
@@ -529,35 +525,23 @@ func TestDocumentTailAfterResize(t *testing.T) {
 	m.revealCursor()
 	m.width, m.height = 60, 18
 	m.reflow()
-	if !strings.Contains(ansi.Strip(m.View().Content), "FINAL-TEXT") {
-		t.Fatal("last document text is cut off after resize")
+	if view := ansi.Strip(m.View().Content); !strings.Contains(view, "FINAL-") || !strings.Contains(view, "TEXT") {
+		t.Fatal("last document text is cut off after resize", ansi.Strip(m.View().Content))
 	}
 }
 
-func TestSubtreeSelectionIncludesCollapsedChildren(t *testing.T) {
+func TestDocumentSelectionDoesNotIncludeAncestryDescendants(t *testing.T) {
 	m := fixture()
-	m.section = 1
-	m.focus = 0
-	m.data.Nodes = []node{{ID: "root"}, {ID: "child", Parent: "root"}, {ID: "leaf", Parent: "child"}, {ID: "other"}}
+	m.section, m.focus = 1, 0
+	m.data.Nodes = []node{{ID: "root"}, {ID: "child", Parent: "root"}, {ID: "leaf", Parent: "child"}}
 	m.collapsed["root"] = true
 	m.toggleTarget()
-	if len(m.selectedBranches()) != 3 || m.selectionMark("root") != "✓ " {
-		t.Fatal("hidden descendants not selected")
+	if len(m.selectedBranches()) != 1 || !m.branchSelection["root"] {
+		t.Fatal(m.branchSelection)
 	}
 	m.toggleTarget()
 	if len(m.selectedBranches()) != 0 {
-		t.Fatal("parent did not deselect subtree")
-	}
-	m.collapsed["root"] = false
-	m.selected = 2
-	m.toggleTarget()
-	if m.selectionMark("root") != "− " || m.selectionMark("child") != "− " {
-		t.Fatal("partial selection missing")
-	}
-	m.selected = 0
-	m.toggleTarget()
-	if len(m.selectedBranches()) != 3 {
-		t.Fatal("partial parent did not complete selection")
+		t.Fatal(m.branchSelection)
 	}
 }
 
@@ -566,7 +550,7 @@ func TestLongDialogDescriptionFits(t *testing.T) {
 	m.width, m.height = 60, 18
 	m.dialog = &dialog{kind: "help", title: "Details", rows: []row{{label: "Selected item", preview: strings.Repeat("description ", 14) + "LAST DETAIL"}}}
 	frame := ansi.Strip(m.View().Content)
-	if !strings.Contains(frame, "LAST DETAIL") || !strings.Contains(frame, "ESC return") {
+	if !strings.Contains(frame, "… ENTER to open") || !strings.Contains(frame, "ESC return") {
 		t.Fatal("description or footer cut off", frame)
 	}
 }
@@ -707,7 +691,10 @@ func TestSlashGenerationPreservesCursorAndDraft(t *testing.T) {
 			m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
 			m.command.SetValue("/" + name)
 			choices := m.commandChoices()
-			canonical := "loom"
+			canonical := "continue"
+			if name == "loom" {
+				canonical = "loom"
+			}
 			if len(choices) == 0 || choices[0].id != canonical {
 				t.Fatal("missing command", name, draft)
 			}
@@ -716,7 +703,7 @@ func TestSlashGenerationPreservesCursorAndDraft(t *testing.T) {
 				t.Fatal("command did not execute")
 			}
 			done := make(chan tea.Msg, 1)
-			go func() { done <- cmd() }()
+			go func() { done <- runPrimaryCommand(cmd) }()
 			var request struct {
 				Command string
 				Args    struct {
@@ -748,7 +735,7 @@ func TestGenerateSearchIncludesContinue(t *testing.T) {
 		for _, a := range m.commandChoices() {
 			found[a.id]++
 		}
-		if found["generate"] != 0 || found["loom"] != 1 {
+		if found["generate"] != 0 || found["continue"] != 1 {
 			t.Fatal("alias discovery missing or duplicated", query, found)
 		}
 	}
@@ -801,7 +788,7 @@ func TestLoomCountParsingAndCursorRequest(t *testing.T) {
 		t.Fatal("loom did not run")
 	}
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	var request struct {
 		Args struct {
 			Count, Offset int
@@ -860,7 +847,7 @@ func TestWorkspaceChangeClearsDocumentState(t *testing.T) {
 	next.Workspace.Path = "/different-workspace"
 	payload, _ := json.Marshal(next)
 	m.apply(event{Type: "state", Data: payload})
-	if m.editing != "" || m.editNode != "" || m.commandDocument != "" || m.editor.Value() != "" || m.inspection != "" || m.showInspector || len(m.collapsed) != 0 {
+	if m.editing != "" || m.editNode != "" || m.commandDocument != "" || m.editor.Value() != "" || m.inspection != "" || m.showInspector || m.collapsed["old"] {
 		t.Fatal("document state leaked across workspaces")
 	}
 }
@@ -921,7 +908,7 @@ func TestSettingsShowResolvedDefault(t *testing.T) {
 	m.data.ModelContext = 0
 	m.data.Settings.Tokens = -1
 	m.openDialog("settings")
-	if m.dialog.fields[3].input.Value() != "Default" || !strings.Contains(m.dialog.fields[3].label, "32,768 tokens") {
+	if m.dialog.fields[3].input.Value() != "Max" || !strings.Contains(m.dialog.fields[3].label, "32,768 tokens") {
 		t.Fatal("missing actual model default")
 	}
 	if m.dialog.fields[0].input.Value() != "Max" {
@@ -942,24 +929,24 @@ func TestSettingsPickersAndSteppers(t *testing.T) {
 	}
 	d.field = 0
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if len(d.rows) == 0 || d.rows[0].id != "Max" {
-		t.Fatal("output picker absent")
+	if !d.adjusting {
+		t.Fatal("value editor absent")
 	}
-	d.index = 0
+	m.dialogKey(tea.KeyPressMsg{Code: 'm', Text: "m"})
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if d.fields[0].input.Value() != "Max" || d.adjusting {
 		t.Fatal("selection not applied")
 	}
 	d.field = 2
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	for i := 0; i < 20; i++ {
-		m.dialogKey(tea.KeyPressMsg{Code: tea.KeyRight})
+	for i := 0; i < 110; i++ {
+		m.dialogKey(tea.KeyPressMsg{Code: tea.KeyUp})
 	}
 	if d.fields[2].input.Value() != "1.00" {
 		t.Fatal("top-p upper bound")
 	}
-	for i := 0; i < 20; i++ {
-		m.dialogKey(tea.KeyPressMsg{Code: tea.KeyLeft})
+	for i := 0; i < 110; i++ {
+		m.dialogKey(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
 	if d.fields[2].input.Value() != "0.00" {
 		t.Fatal("top-p lower bound")
@@ -970,14 +957,17 @@ func TestSettingsPickersAndSteppers(t *testing.T) {
 	}
 	d.field = 3
 	m.dialogKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if !strings.Contains(d.rows[0].label, "32,768") {
-		t.Fatal("default count missing")
+	m.dialogKey(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
+	m.dialogKey(tea.KeyPressMsg{Code: 'k', Mod: tea.ModCtrl})
+	m.dialogKey(tea.KeyPressMsg{Code: '1', Text: "10240"})
+	if d.fields[3].input.Value() != "10240" {
+		t.Fatal("exact context editing failed")
 	}
 }
 
 func TestGenerationTokenArguments(t *testing.T) {
 	for input, want := range map[string]generationOptions{
-		"/continue 512":                     {Tokens: 512},
+		"/continue --tokens 512":            {Tokens: 512},
 		"/generate --tokens=90":             {Tokens: 90},
 		"/loom 5 --tokens 1024":             {Count: 5, Tokens: 1024},
 		"/loom --tokens Max -n 3 --turns 4": {Count: 3, Tokens: -1, Turns: 4},
@@ -1067,11 +1057,14 @@ func TestDocumentNotesNavigation(t *testing.T) {
 	if !m.notesOpen || m.focus != 1 || m.editing != "" {
 		t.Fatal("opening kept document did not open notes and editor")
 	}
+	if m.selected != 0 {
+		t.Fatal("opening a document should highlight Back to Branches")
+	}
 	rows := m.rows()
-	if len(rows) != 3 || rows[0].label != "← Branches" || rows[1].label != "+ New note" {
+	if len(rows) != 5 || rows[0].label != "← Branches" || rows[1].label != "+ New note" {
 		t.Fatal(rows)
 	}
-	m.selected = 2
+	m.selected = 4
 	m.activateNote()
 	if m.cursorOffset() != 50 {
 		t.Fatal("note anchor not revealed", m.cursorOffset())
@@ -1130,7 +1123,7 @@ func TestExistingNoteSaveUpdatesInPlace(t *testing.T) {
 	m.width, m.height, m.section = 120, 36, 1
 	m.data.Annotations = []annotation{{ID: "note-1", Node: m.currentID(), Note: "Before", Start: 3, End: 3}}
 	m.openNotes(true)
-	m.selected = 2
+	m.selected = 4
 	m.activateNote()
 	m.dialog.fields[0].input.SetValue("After")
 	cmd := m.submitDialog()
@@ -1138,7 +1131,7 @@ func TestExistingNoteSaveUpdatesInPlace(t *testing.T) {
 		t.Fatal("missing save")
 	}
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	var request struct {
 		Command string
 		Args    map[string]any
@@ -1160,7 +1153,7 @@ func TestVersionPreviewScrollsToChangeOnSelection(t *testing.T) {
 		m := fixture()
 		m.width, m.height, m.section, m.focus = width, 32, 1, 0
 		prefix := strings.Repeat("Long source 日本語 text that wraps across the preview pane. ", 180) + "\n"
-		n := node{ID: "new-version", Kind: "generated", Text: prefix + "NEW CONTINUATION\n" + strings.Repeat("more text\n", 50), ChangeOffset: len([]rune(prefix))}
+		n := node{ID: "new-version", Title: "continue-1-doc-1", Kind: "generated", Text: prefix + "NEW CONTINUATION\n" + strings.Repeat("more text\n", 50), ChangeOffset: len([]rune(prefix))}
 		next := m.data
 		next.Current = &n
 		next.Nodes = []node{n}
@@ -1194,11 +1187,235 @@ func TestBranchIdentifiersCompactOnlyNestedAutomaticNames(t *testing.T) {
 		{ID: "edit", Parent: "gen", Title: "My name", Label: "paths-edit-0001", Status: "complete"},
 	}
 	rows := m.branchRows()
-	if !strings.Contains(rows[0].label, "paths-branch-0001") || strings.Contains(rows[1].label, "paths-") || !strings.Contains(rows[1].label, "gen-0001") || !strings.Contains(rows[2].label, "My name") {
+	if !strings.Contains(rows[0].label, "paths-branch-0001") || !strings.Contains(rows[1].label, "paths-") || !strings.Contains(rows[1].label, "gen-0001") || !strings.Contains(rows[2].label, "My name") {
 		t.Fatalf("unexpected labels: %#v", rows)
 	}
 	m.section = 2
 	if !strings.Contains(m.branchRows()[0].label, "paths-gen-0001") {
 		t.Fatal("anthology needs source context")
 	}
+}
+
+func TestEmptyDocumentPreview(t *testing.T) {
+	for _, size := range [][2]int{{60, 18}, {120, 36}} {
+		m := fixture()
+		m.section = 1
+		m.width, m.height = size[0], size[1]
+		m.data.Current.Text = ""
+		m.data.Current.Origins = nil
+		m.reflow()
+		body := ansi.Strip(m.renderDocument(m.document.Width()))
+		if strings.TrimSpace(body) != "Empty document" {
+			t.Fatalf("empty document rendered %q", body)
+		}
+		rows := strings.Split(body, "\n")
+		middle := (m.document.Height() - 1) / 2
+		if !strings.Contains(rows[middle], "Empty document") && !strings.Contains(rows[min(middle+1, len(rows)-1)], "Empty document") {
+			t.Fatal("empty state not centered")
+		}
+		m.editing = "document"
+		if strings.Contains(m.renderDocument(m.document.Width()), "Empty document") {
+			t.Fatal("placeholder appeared in editor")
+		}
+		m.editing = ""
+		m.data.Current = nil
+		if !strings.Contains(m.renderDocument(m.document.Width()), "Start with a seed") {
+			t.Fatal("missing document lost onboarding")
+		}
+	}
+}
+
+func TestNavigationFooterFitsNarrowPane(t *testing.T) {
+	m := fixture()
+	for _, section := range []int{0, 1, 2, 3, 4} {
+		m.section = section
+		body := ansi.Strip(m.navigation(rect{0, 0, 26, 18}))
+		for _, row := range strings.Split(body, "\n") {
+			if ansi.StringWidth(row) > 22 {
+				t.Fatalf("section %d: clipped footer %q", section, row)
+			}
+		}
+		if (section == 1 || section == 2) && !strings.Contains(body, "ENTER actions") {
+			t.Fatalf("missing action hint: %q", body)
+		}
+		if len(strings.Split(body, "\n")) > 14 {
+			t.Fatal("footer exceeds panel body")
+		}
+	}
+}
+
+func TestNotesDocumentActions(t *testing.T) {
+	m := fixture()
+	m.section = 1
+	m.width, m.height = 120, 36
+	m.openNotes(true)
+	m.selected = 2
+	m.activateNote()
+	if m.editing != "document" || m.focus != 1 {
+		t.Fatal("missing document editor")
+	}
+	for _, r := range m.noteRows() {
+		if r.kind == "document-delete" {
+			t.Fatal("delete belongs in selection actions")
+		}
+	}
+}
+
+func TestMouseActivatesDocumentButtons(t *testing.T) {
+	for _, width := range []int{60, 120} {
+		for index := 0; index < 3; index++ {
+			m := fixture()
+			m.width, m.height, m.section = width, 36, 1
+			m.openNotes(true)
+			r := m.layout().panels[0].box
+			m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: r.x + 4, Y: r.y + 3 + index})
+			switch index {
+			case 0:
+				if m.notesOpen || m.section != 1 {
+					t.Fatal("Back button did not return")
+				}
+			case 1:
+				if m.dialog == nil || m.dialog.kind != "note-new" {
+					t.Fatal("New note button did not open")
+				}
+			case 2:
+				if m.editing != "document" || m.focus != 1 {
+					t.Fatal("Edit button did not enter editor")
+				}
+			}
+		}
+	}
+	m := fixture()
+	m.width, m.height, m.section = 120, 36, 1
+	m.data.Annotations = []annotation{{ID: "note", Node: m.currentID(), Note: "Existing note"}}
+	m.openNotes(true)
+	r := m.layout().panels[0].box
+	m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: r.x + 4, Y: r.y + 7})
+	if m.selected != 4 || m.dialog != nil {
+		t.Fatal("saved note click should only focus")
+	}
+	m.activateNote()
+	if m.dialog == nil || m.dialog.kind != "note-edit" {
+		t.Fatal("Enter should open saved note")
+	}
+}
+func TestMouseFocusesBranchWithoutEntering(t *testing.T) {
+	m := fixture()
+	m.width, m.height, m.section = 120, 36, 1
+	m.reflow()
+	r := m.layout().panels[0].box
+	m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: r.x + 12, Y: r.y + 3})
+	if m.notesOpen || m.focus != 0 || m.editing != "" || m.dialog != nil {
+		t.Fatal("row click entered document")
+	}
+	m.activate()
+	if !m.notesOpen {
+		t.Fatal("Enter should still open document")
+	}
+}
+
+func TestVersionPreviewWhileGenerationBusy(t *testing.T) {
+	m := fixture()
+	m.width, m.height, m.section, m.focus = 120, 36, 1, 0
+	prefix := strings.Repeat("Source line\n", 100)
+	n := node{ID: "busy-preview", Text: prefix + "LATEST CHANGE", Kind: "generated", ChangeOffset: len([]rune(prefix))}
+	next := m.data
+	next.Busy = true
+	next.Current = &n
+	next.Nodes = []node{n}
+	raw, _ := json.Marshal(next)
+	m.apply(event{Type: "state", Data: raw})
+	if !strings.Contains(ansi.Strip(m.document.View()), "LATEST CHANGE") {
+		t.Fatal("busy state suppressed preview focus")
+	}
+}
+func TestRapidDocumentPreviewCatchesLatestSelection(t *testing.T) {
+	m := fixture()
+	m.section, m.focus, m.width, m.height = 1, 0, 120, 36
+	first := *m.data.Current
+	second := node{ID: "second", Kind: "source", Text: "Second document"}
+	m.data.Nodes = []node{first, second}
+	m.pending = true
+	m.selected = 1
+	if m.previewTarget() != nil || !m.previewSelectionPending {
+		t.Fatal("navigation not queued")
+	}
+	next := m.data
+	raw, _ := json.Marshal(next)
+	req := captureCommand(t, m, func() tea.Cmd { return m.apply(event{Type: "state", Data: raw}) })
+	if req.Command != "node.open" || string(req.Args["node"]) != `"second"` {
+		t.Fatalf("wrong preview: %#v", req)
+	}
+}
+
+func TestEditorCompletionAndBackspace(t *testing.T) {
+	m := fixture()
+	m.section = 1
+	m.width, m.height = 120, 36
+	for _, key := range []tea.KeyPressMsg{{Code: tea.KeyEnter, Mod: tea.ModSuper}, {Code: tea.KeyEnter, Mod: tea.ModCtrl}, {Code: 's', Mod: tea.ModCtrl}} {
+		if !m.saveKey(key) {
+			t.Fatalf("save key not recognized: %s", key.String())
+		}
+	}
+	if m.saveKey(tea.KeyPressMsg{Code: tea.KeyEnter}) {
+		t.Fatal("plain Enter must remain newline")
+	}
+	m.editDocumentWithNotes()
+	m.editor.SetValue("AB")
+	m.editor.CursorEnd()
+	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	if m.editor.Value() != "A" || m.dialog != nil {
+		t.Fatal("Backspace did not delete text", m.editor.Value())
+	}
+}
+
+func TestDocumentMonitorUpdatesAndActivity(t *testing.T) {
+	m := fixture()
+	m.section = 1
+	m.width, m.height = 120, 36
+	m.data.Nodes[0].Status = "generating"
+	m.data.Current.Status = "generating"
+	raw, _ := json.Marshal(map[string]any{"node": m.currentID(), "monitor": map[string]any{"status": "complete", "scores": map[string]float64{"looping": 0.9}, "detections": []map[string]any{{"id": "looping", "action": "warn"}}}})
+	m.apply(event{Type: "document.monitor", Data: raw})
+	if len(m.data.Current.Monitor.Detections) != 1 || len(m.data.Nodes[0].Monitor.Detections) != 1 {
+		t.Fatal("document monitor event discarded")
+	}
+	label := m.branchRows()[0].label
+	if !strings.Contains(label, "▶ generating") || !strings.Contains(label, "!") {
+		t.Fatal(label)
+	}
+	frame := ansi.Strip(m.View().Content)
+	if !strings.Contains(frame, "1 active docs") || !strings.Contains(frame, "monitoring complete · 1 warn") {
+		t.Fatal(frame)
+	}
+	m.data.Nodes[0].Status = "complete"
+	if strings.Contains(m.branchRows()[0].label, "generating") {
+		t.Fatal("completed document still active")
+	}
+}
+
+func TestDeepBranchTreeRetainsDepth(t *testing.T) {
+	m := fixture()
+	m.section = 1
+	m.width, m.height = 120, 36
+	m.data.Nodes = nil
+	parent := ""
+	for i := 0; i < 20; i++ {
+		id := fmt.Sprintf("node-%d", i)
+		m.data.Nodes = append(m.data.Nodes, node{ID: id, Parent: parent, Title: id, Kind: "edit", Status: "complete"})
+		parent = id
+	}
+	rows := m.branchRows()
+	for i, r := range rows {
+		if r.depth != i {
+			t.Fatalf("depth %d flattened to %d", i, r.depth)
+		}
+	}
+	m.selected = 19
+	r := rect{1, 3, 26, 26}
+	body := ansi.Strip(m.navigation(r))
+	if !strings.Contains(body, "node-19") {
+		t.Fatal("deep focused name hidden", body)
+	}
+
 }

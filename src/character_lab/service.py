@@ -5,19 +5,34 @@ emission, so a slow frontend applies backpressure rather than dropping tokens.
 """
 
 import asyncio
+import copy
 import json
 import math
 import random
 from contextlib import aclosing
 from pathlib import Path
 
-from . import credentials, evaluation, evaluation_sets, simulator
+from . import (
+    assessments,
+    credentials,
+    document_actions,
+    evaluation,
+    evaluation_policies,
+    evaluation_sets,
+    exploration,
+    exports,
+    inspection,
+    operational_policies,
+    policy_overrides,
+    simulator,
+    templates,
+)
 from .domain import Project, display_title, generation_status, library, now
 from .exploration import explore, require_selector
 from .model_metadata import native_context
-from .models import available_models
+from .models import available_judges, available_models
 from .policy import DEFAULT_PROMPT, DEFAULT_SPEC, default_model
-from .runtime import Runtime
+from .runtime import Runtime, release_for_selection
 from .scheduling import parallel_map
 from .stream_monitor import DocumentMonitor
 from .workspaces import Workspaces, acquire
@@ -38,7 +53,14 @@ class Session:
         self.emit = emit
         self.workspaces = workspaces or Workspaces()
         self.runtime_factory = runtime_factory
-        self.policy_model = policy_model or default_model()
+        self.judge_models = copy.deepcopy(
+            policy_model
+            if isinstance(policy_model, list)
+            else [policy_model]
+            if policy_model
+            else available_judges() or [default_model()]
+        )
+        self.policy_model = self.judge_models[0]
         self.sources = library()
         self.job = None
         self.job_id = None
@@ -75,6 +97,7 @@ class Session:
             project.data["model_alias"] = model["alias"]
             project.data["selected"] = []
             evaluation_sets.migrate(project)
+            operational_policies.migrate(project, model["alias"], self.policy_model)
             project.save()
         except Exception:
             lock.close()
@@ -89,6 +112,47 @@ class Session:
     def read_bindings(self):
         path = self.workspaces.home / "keybindings.json"
         return json.loads(path.read_text()) if path.exists() else {}
+
+    def judge_model(self, alias):
+        """Resolve the exact judge model; a missing alias must never run another."""
+        model = next(
+            (
+                m
+                for m in self.judge_models
+                if operational_policies.model_key(m) == alias
+            ),
+            None,
+        )
+        if model is None:
+            raise ValueError(
+                f"Judge model {alias!r} is unavailable; choose a configured model"
+            )
+        return copy.deepcopy(model)
+
+    def selection_model(self):
+        """Resolve the remembered selection policy, including while it is Off."""
+        key = self.project.data.get("active_operational_policies", {}).get("selection")
+        item = next(
+            (
+                p
+                for p in self.project.data.get("operational_policies", {}).get(
+                    "selection", []
+                )
+                if p["id"] == key
+            ),
+            None,
+        )
+        alias = (
+            item["config"].get("model_alias")
+            if item
+            else operational_policies.model_key(self.policy_model)
+        )
+        try:
+            return self.judge_model(alias)
+        except ValueError:
+            # An unavailable, disabled policy must not block ordinary generation.
+            # Selection preflight rejects this explicit unconfigured model if used.
+            return dict(name=alias or "Unconfigured judge", alias=alias, path="")
 
     @property
     def busy(self):
@@ -132,18 +196,42 @@ class Session:
                         "title",
                         "label",
                         "created",
+                        "document_id",
+                        "revision_of",
+                        "document_set",
+                        "set_member",
                     )
                 }
                 | {
                     "status": generation_status(n),
                     "preview": n["text"][len(n.get("prompt", "")) :][:100],
+                    "monitor": {
+                        k: v
+                        for k, v in n.get("monitor", {}).items()
+                        if k
+                        in {
+                            "status",
+                            "scores",
+                            "detections",
+                            "error",
+                            "phase",
+                            "tokens",
+                        }
+                    },
                     "title": display_title(n),
                     "model": n.get("trace", {}).get("model", {}).get("name", ""),
                 }
                 for n in p.data["nodes"]
             ],
+            document_sets=p.data.get("document_sets", []),
+            document_set_heads=p.data.get("document_set_heads", {}),
+            document_heads=p.data.get("document_heads", {}),
             current=node,
             models=p.data["models"],
+            model_contexts={
+                m["alias"]: dict(configured=m["context"], native=native_context(m))
+                for m in p.data["models"]
+            },
             model_alias=self.runtime.model["alias"],
             settings={**DEFAULT_SETTINGS, **p.data.get("settings", {})},
             model_context=self.runtime.model["context"],
@@ -151,16 +239,24 @@ class Session:
             evaluators=evaluation.definitions(p),
             evaluations=evaluation.summaries(p),
             evaluation_sets=evaluation_sets.summaries(p),
+            operational_policies=operational_policies.summaries(p),
+            active_operational_policies=p.data.get("active_operational_policies", {}),
+            behavior_library=p.data.get("behavior_library", []),
+            evaluation_policies=p.data.get("evaluation_policies", []),
+            active_evaluation_policy=p.data.get("active_evaluation_policy", ""),
+            evaluation_runs=evaluation_policies.run_summaries(p),
             active_evaluation=p.data.get("active_evaluation", ""),
-            evaluation_prompt=evaluation.DEFAULT_PROMPT,
+            evaluation_prompt=assessments.DEFAULT_TEMPLATE,
+            selection_enabled=p.data.get("selection_enabled", False),
             policy_spec=p.data.get("policy_spec", DEFAULT_SPEC),
             policy_prompt=p.data.get("policy_prompt", DEFAULT_PROMPT),
-            policy_model=self.policy_model["name"],
+            selection_assessment_prompt=p.data.get(
+                "selection_assessment_prompt", assessments.DEFAULT_PROMPT
+            ),
+            selection_call_mode=p.data.get("selection_call_mode", "separate"),
+            policy_model=self.selection_model()["name"],
             annotations=p.data.get("annotations", []),
-            policy_runs=[
-                {k: r.get(k) for k in ("id", "status", "selected", "created")}
-                for r in p.data.get("policy_runs", [])
-            ],
+            policy_runs=[exploration.summary(r) for r in p.data.get("policy_runs", [])],
             simulator_config=simulator.configuration(p, self.runtime.model["alias"]),
             monitor_key_source=credentials.openrouter_key()[1],
             simulation_runs=[
@@ -171,7 +267,7 @@ class Session:
                 **p.data.get("settings", {}),
                 **p.data.get("grow_settings", {}),
             },
-            selector_models=[self.policy_model],
+            selector_models=copy.deepcopy(self.judge_models),
             bindings=self.read_bindings(),
             busy=self.busy,
             active_node=self.active_node,
@@ -193,10 +289,14 @@ class Session:
             "simulator.inspect",
             "evaluation.open",
             "evaluation.item.open",
+            "evaluation.run.open",
         }:
             raise ValueError(
                 "Stop the active operation before changing the workspace or document"
             )
+        if command.startswith(("operational.policy.", "behavior.")):
+            await operational_policies.dispatch(self, command, args, request_id)
+            return
         if command.startswith("evaluation."):
             await evaluation.dispatch(self, command, args, request_id)
             return
@@ -239,9 +339,17 @@ class Session:
         eval_plan = (
             evaluation_sets.plan(self, args["eval"]) if args.get("eval") else None
         )
+        if command == "policy.retry":
+            self.job_id = request_id
+            self.job = asyncio.create_task(
+                self.retry_selection(args["run"], request_id)
+            )
+            return
         if command == "grow.selector":
-            if args["alias"] != self.policy_model["alias"]:
-                raise ValueError("Selector model is not configured")
+            self.policy_model = self.judge_model(args["alias"])
+            p.data["selection_model_alias"] = args["alias"]
+            operational_policies.reconcile_model(p, self.policy_model)
+            p.save()
             await self.snapshot(request_id)
             return
         if command == "grow.configure":
@@ -299,23 +407,10 @@ class Session:
                     or (command == "seed.remove" and ref in p.selected)
                 ):
                     p.toggle(ref)
-            if not p.source_root(self.sources):
-                p.data["current"] = None
-                p.save()
         elif command == "seed.open":
             if not p.selected:
                 raise ValueError("Select source passages with Space first")
-            node = next(
-                (
-                    n
-                    for n in reversed(p.data["nodes"])
-                    if n["kind"] == "source"
-                    and set(n.get("passage_ids", [])) == set(p.selected)
-                ),
-                None,
-            )
-            if node is None:
-                node = p.source_root(self.sources)
+            node = p.source_root(self.sources)
             p.data["current"] = node["id"]
             p.save()
         elif command == "seed.clear":
@@ -325,6 +420,23 @@ class Session:
             self.view_node = args["node"] if self.busy else None
             p.data["current"] = p.node(args["node"])["id"]
             p.save()
+        elif command == "node.fork" and (
+            "nodes" in args or "set" in args or "scope" in args
+        ):
+            offsets = args.get("offsets")
+            if "offset" in args:
+                if len(args.get("nodes", [])) != 1 or "offsets" in args:
+                    raise ValueError("A cursor position requires one selected document")
+                offsets = {args["nodes"][0]: args["offset"]}
+            plan = document_actions.plan(
+                p,
+                "branch",
+                args.get("nodes"),
+                set_id=args.get("set"),
+                offsets=offsets,
+                scope=args.get("scope"),
+            )
+            document_actions.branch(p, plan)
         elif command == "node.fork":
             original = p.node(args["node"])
             parent = (
@@ -338,9 +450,10 @@ class Session:
             )
         elif command == "node.rename":
             title = args.get("title", "").strip()
-            if not title:
-                raise ValueError("Enter a document title")
-            p.node(args["node"])["title"] = title
+            node = p.node(args["node"])
+            node["title"] = title
+            if args.get("rename_children", False):
+                node["ancestry_name"] = title
             p.save()
         elif command == "node.edit":
             self.edit(args)
@@ -396,9 +509,21 @@ class Session:
                 args["verdict"],
                 args["note"],
             )
+        elif command == "export":
+            path = exports.export(p, self.sources, args)
+            await self.emit("result", {"path": str(path)}, request_id)
         elif command == "snapshot":
             await self.emit("result", {"path": str(p.snapshot())}, request_id)
         elif command == "configure":
+            if "selection_assessment_prompt" in args:
+                templates.validate_assessment(args["selection_assessment_prompt"])
+            if "policy_prompt" in args:
+                templates.validate_choice(args["policy_prompt"])
+            if "selection_call_mode" in args and args["selection_call_mode"] not in {
+                "separate",
+                "bundled",
+            }:
+                raise ValueError("Choose Separate or Bundled call mode")
             settings = {
                 **DEFAULT_SETTINGS,
                 **p.data.get("settings", {}),
@@ -419,11 +544,34 @@ class Session:
                 model["context"] = context
                 self.runtime = self.runtime_factory(p.folder, model)
             p.data.update(settings=settings, model_alias=alias)
-            for field in ("policy_spec", "policy_prompt"):
+            for field in (
+                "policy_spec",
+                "policy_prompt",
+                "selection_assessment_prompt",
+            ):
                 if field in args:
                     if not args[field].strip():
                         raise ValueError("Policy instructions cannot be empty")
                     p.data[field] = args[field]
+                    if field == "policy_spec":
+                        p.data["selection_behaviors"] = [
+                            dict(
+                                id="criteria",
+                                name="Selection criteria",
+                                spec=args[field],
+                                enabled=True,
+                            )
+                        ]
+            if "selection_call_mode" in args:
+                p.data["selection_call_mode"] = args["selection_call_mode"]
+            operational_policies.sync(self, "selection")
+            p.save()
+        elif command == "policy.configure":
+            enabled = args.get("selection_enabled")
+            if type(enabled) is not bool:
+                raise ValueError("Selection enabled must be true or false")
+            p.data["selection_enabled"] = enabled
+            operational_policies.sync(self, "selection")
             p.save()
         elif command == "bindings.save":
             bindings = args["bindings"]
@@ -437,35 +585,17 @@ class Session:
             tmp.write_text(json.dumps(bindings, indent=2) + "\n")
             tmp.replace(path)
         elif command == "inspect":
-            if args.get("run"):
-                record = next(
-                    r for r in p.data["policy_runs"] if r["id"] == args["run"]
-                )
-            else:
-                node = self.current()
-                ancestor = node
-                while not ancestor.get("trace") and ancestor.get("parent"):
-                    ancestor = p.node(ancestor["parent"])
-                record = dict(
-                    node=node,
-                    generation=ancestor,
-                    origins=p.origins(node["id"]),
-                    selection_runs=[
-                        r
-                        for r in p.data.get("policy_runs", [])
-                        if any(
-                            node["id"] in step.get("candidates", [])
-                            for step in r.get("steps", [])
-                        )
-                    ],
-                    annotations=[
-                        a
-                        for a in p.data.get("annotations", [])
-                        if a["node"] == node["id"]
-                    ],
-                )
+            record = (
+                inspection.selection(p, args["run"])
+                if args.get("run")
+                else inspection.document(p, self.current())
+            )
             await self.emit("inspection", record, request_id)
             return
+        elif command in {"continue", "grow"} and "action" in args:
+            from .document_generation import start
+
+            await start(self, args, request_id, eval_plan)
         elif command in {"continue", "grow"}:
             loops = args.get(
                 "loops",
@@ -478,7 +608,7 @@ class Session:
             if type(loops) is not int or loops < 1:
                 raise ValueError("Loops must be a positive integer")
             if loops > 1:
-                require_selector(self.policy_model)
+                require_selector(self.selection_model())
             override = args.get("count")
             if override is not None and (type(override) is not int or override < 1):
                 raise ValueError("Generation count must be a positive integer")
@@ -556,8 +686,32 @@ class Session:
             raise ValueError("Document changed before the edit was saved")
         self.project.edit(node["id"], args["text"])
 
-    async def generate(self, command, parent, prefix, settings, count, *, nested=False):
+    async def generate(
+        self,
+        command,
+        parent,
+        prefix,
+        settings,
+        count,
+        *,
+        nested=False,
+        candidates=None,
+        policy_config=None,
+    ):
         p = self.project
+        policy_config = (
+            copy.deepcopy(policy_config)
+            if policy_config is not None
+            else policy_overrides.monitoring(
+                simulator.configuration(p, self.runtime.model["alias"]),
+                {"monitoring": False},
+            )
+        )
+        policy_record = {
+            key: value
+            for key, value in policy_config.items()
+            if key.startswith("monitor_") or key in {"selection_enabled", "loops"}
+        }
         self.view_node = None
         job_id = self.job_id
         node = None
@@ -570,6 +724,22 @@ class Session:
             await self.emit("operation", dict(stage="loading", command=command), job_id)
             await self.emit("loom.start", dict(count=count), job_id)
             branches = []
+            # Reserve every member before awaiting inference. A cancelled queue
+            # still has the complete selected set, with honest stopped members.
+            if candidates is not None:
+                for i, candidate in enumerate(candidates):
+                    item = document_actions.create_revision(
+                        p,
+                        candidate,
+                        prompt=candidate.target.prefix,
+                        settings={**settings, "seed": random.randrange(2**31)},
+                        trace={},
+                        status="queued",
+                        loom_index=i,
+                    )
+                    item["policy_config"] = copy.deepcopy(policy_record)
+                    branches.append(item)
+                await self.snapshot()
 
             async def schedule(data):
                 await self.emit("capacity", data, job_id)
@@ -579,15 +749,22 @@ class Session:
             async def sample(i):
                 nonlocal empty_count, output_chars
                 branch_settings = {**settings, "seed": random.randrange(2**31)}
-                node = p.add(
-                    prefix,
-                    parent=parent,
-                    fork_offset=len(prefix),
-                    prompt=prefix,
-                    settings=branch_settings,
-                    trace={},
-                )
-                branches.append(node)
+                candidate = candidates[i] if candidates is not None else None
+                sample_prefix = candidate.target.prefix if candidate else prefix
+                if candidate:
+                    node = branches[i]
+                else:
+                    node = p.add(
+                        sample_prefix,
+                        parent=parent,
+                        fork_offset=len(sample_prefix),
+                        prompt=sample_prefix,
+                        settings=branch_settings,
+                        trace={},
+                    )
+                if candidate is None:
+                    branches.append(node)
+                node["policy_config"] = copy.deepcopy(policy_record)
                 node["loom_index"] = i
                 node["status"] = "generating"
                 self.active_node = node["id"]
@@ -610,7 +787,7 @@ class Session:
                     job_id,
                 )
                 try:
-                    config = simulator.configuration(p, self.runtime.model["alias"])
+                    config = policy_config
 
                     async def monitor_event(kind, data):
                         await self.emit(kind, data, job_id)
@@ -619,7 +796,9 @@ class Session:
                         config, p, node, monitor_event
                     ) as watcher:
                         async with aclosing(
-                            self.runtime.stream(prefix, node["settings"], node["trace"])
+                            self.runtime.stream(
+                                sample_prefix, node["settings"], node["trace"]
+                            )
                         ) as stream:
                             while True:
                                 try:
@@ -637,6 +816,12 @@ class Session:
                                     job_id,
                                 )
                                 watcher.checkpoint()
+                        if watcher.enabled:
+                            await self.emit(
+                                "operation",
+                                dict(stage="monitoring", index=i + 1, count=count),
+                                job_id,
+                            )
                         await watcher.finish()
                         node["policy_stopped"] = watcher.stopped
                 except asyncio.CancelledError:
@@ -654,7 +839,7 @@ class Session:
                     else generation_status(node)
                 )
                 empty_count += node["status"] == "empty"
-                output_chars += len(node["text"]) - len(prefix)
+                output_chars += len(node["text"]) - len(sample_prefix)
                 node["finished"] = now()
                 p.save()
                 await self.emit(
@@ -663,7 +848,7 @@ class Session:
                         index=i,
                         id=node["id"],
                         title=f"Branch {i + 1} · {node['id'][:6]}",
-                        text=node["text"][len(prefix) :],
+                        text=node["text"][len(node.get("prompt", prefix)) :],
                         status=node["status"],
                     ),
                     job_id,
@@ -692,7 +877,7 @@ class Session:
             await self.emit("error", dict(message=str(exc)), job_id)
         finally:
             for branch in branches:
-                if branch["status"] == "generating":
+                if branch["status"] in {"generating", "queued"}:
                     branch.update(status=status, finished=now())
             if branches:
                 p.save()
@@ -704,7 +889,7 @@ class Session:
                             index=i,
                             id=branch["id"],
                             title=f"Branch {i + 1} · {branch['id'][:6]}",
-                            text=branch["text"][len(prefix) :],
+                            text=branch["text"][len(branch.get("prompt", prefix)) :],
                             status=branch["status"],
                         ),
                         job_id,
@@ -752,12 +937,7 @@ class Session:
             candidates = await self.generate(
                 "continue", parent, prefix, settings, count, nested=True
             )
-            # A selector cannot compete with an externally owned model server.
-            if self.runtime.process is None:
-                raise ValueError(
-                    "Stop the externally managed generator before switching to selection"
-                )
-            self.runtime.close()
+            await release_for_selection(self.runtime)
             for candidate in candidates:
                 candidate.update(policy_run=run_id, loop=index + 1)
             self.project.save()
@@ -777,7 +957,7 @@ class Session:
                 await explore(
                     self.project,
                     loops,
-                    self.policy_model,
+                    self.selection_model(),
                     self.runtime_factory,
                     batch,
                     advance,
@@ -824,6 +1004,8 @@ class Session:
 
     async def simulate(self, config, seed=None, eval_plan=None):
         p = self.project
+        if config.get("action"):
+            return await self.simulate_action(config, seed, eval_plan)
         before = {r["id"] for r in p.data.get("simulation_runs", [])}
 
         async def emit(kind, data):
@@ -855,11 +1037,21 @@ class Session:
                         raise ValueError(
                             latest.get("error", "Conversation batch failed")
                         )
-                    prefix = transcript(current_seed["turns"]) if current_seed else ""
+                    prefix = (
+                        transcript(current_seed["turns"])
+                        if current_seed and "turns" in current_seed
+                        else ""
+                    )
                     return [
                         dict(
                             id=str(c["index"]),
-                            prompt=prefix,
+                            prompt=(
+                                transcript(
+                                    current_seed["conversations"][c["index"]]["turns"]
+                                )
+                                if current_seed and "conversations" in current_seed
+                                else prefix
+                            ),
                             text=transcript(c["turns"]),
                         )
                         for c in latest["conversations"]
@@ -875,7 +1067,7 @@ class Session:
                 await explore(
                     p,
                     loops,
-                    self.policy_model,
+                    self.selection_model(),
                     self.runtime_factory,
                     batch,
                     advance,
@@ -901,3 +1093,110 @@ class Session:
                 self.view_node = None
                 p.save()
             await self.snapshot()
+
+    async def simulate_action(self, config, seed=None, eval_plan=None):
+        """Run one action over a preserved item/set shape, then judge exact outputs."""
+        from . import simulator_actions
+
+        p = self.project
+        latest = []
+        generated_targets = []
+        current_seed = seed
+        batch_config = dict(config)
+
+        async def emit(kind, data):
+            await self.emit(kind, data, self.job_id)
+
+        async def batch(policy_id=None, index=0):
+            nonlocal latest
+            latest = await simulator.generate_alternatives(
+                p, batch_config, self.runtime_factory, emit, current_seed
+            )
+            generated_targets.extend(simulator_actions.affected_targets(latest))
+            if policy_id:
+                for run in latest:
+                    run.update(policy_run=policy_id, loop=index + 1)
+                p.save()
+            if any(r["status"] == "stopped" for r in latest):
+                raise asyncio.CancelledError
+            if any(r["status"] != "complete" for r in latest):
+                errors = list(
+                    dict.fromkeys(r["error"] for r in latest if r.get("error"))
+                )
+                raise ValueError(
+                    (
+                        "; ".join(errors)
+                        if errors
+                        else "Conversation generation incomplete"
+                    )
+                    + "; partial outputs retained"
+                )
+            return simulator_actions.group_candidates(latest)
+
+        async def advance(key):
+            nonlocal current_seed
+            current_seed = simulator_actions.selected_seed(p, latest, key)
+
+        try:
+            if config.get("loops", 1) == 1 and not config.get(
+                "selection_enabled", False
+            ):
+                await batch()
+            elif (
+                config.get("selection_enabled", False)
+                and config.get("alternatives", 1) > 1
+            ):
+                await explore(
+                    p,
+                    config["loops"],
+                    self.selection_model(),
+                    self.runtime_factory,
+                    batch,
+                    advance,
+                    emit,
+                )
+            else:
+                for index in range(config["loops"]):
+                    await batch(index=index)
+                    current_seed = simulator_actions.seed_from_runs(p, latest)
+                    batch_config["action"] = "continue"
+                    batch_config["alternatives"] = 1
+            if eval_plan and not asyncio.current_task().cancelling():
+                await evaluation_sets.after_generation(
+                    self, eval_plan, generated_targets
+                )
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            await emit("error", dict(message=str(exc)))
+        finally:
+            self.job = None
+            if self.view_node:
+                p.data["current"] = self.view_node
+                self.view_node = None
+                p.save()
+            await self.snapshot()
+
+    async def retry_selection(self, run_id, request_id):
+        async def emit(kind, data):
+            await self.emit(kind, data, request_id)
+
+        try:
+            await release_for_selection(self.runtime)
+            await exploration.retry(self.project, run_id, self.runtime_factory, emit)
+            await emit(
+                "operation",
+                dict(
+                    stage="complete",
+                    message="Selection retry finished; no text generated. Open Selection results to inspect.",
+                ),
+            )
+        except asyncio.CancelledError:
+            await emit(
+                "operation", dict(stage="stopped", message="Selection retry stopped")
+            )
+        except Exception as exc:
+            await emit("error", dict(message=str(exc)))
+        finally:
+            self.job = None
+            await self.snapshot(request_id)

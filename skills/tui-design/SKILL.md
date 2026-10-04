@@ -14,7 +14,8 @@ This is contributor guidance, never a prompt for a character or selector model.
 - `tui/`: Bubble Tea **v2**, Bubbles v2 and Lip Gloss v2. Use the APIs in `go.mod`;
   don't copy v1 `View() string` examples into this v2 application.
 - `model.go`, `update.go`, `view.go`: UI state, event handling and layout/rendering.
-- `command.go`, `bindings.go`, `help.go`: completion, customizable bindings and help.
+- `command_registry.go`: shared command names, aliases, descriptions and help text.
+- `command.go`, `bindings.go`, `help.go`: completion, customizable bindings and help views.
 - `navigation_context.go`, `target.go`: focused context, page restoration and targets.
 - `document.go`, `branches.go`, `notes.go`: document navigation and lineage.
 - `loom_grid.go`, `conversations.go`, `simulator.go`: streaming comparison and traces.
@@ -34,15 +35,22 @@ Keep effects in commands/update handling and rendering free of file/network writ
   operate on the item that was selected on another page.
 - Arrows move within the focused area; Tab/Shift+Tab move forward/backward between
   areas. Enter activates or opens. Space selects collection items; selecting a
-  branch parent includes descendants. A selected mark must not shift other rows.
+  set parent includes its contained members; document rows select exact versions.
+  Ancestry is not generation scope; deletion previews descendants separately. A selected mark
+  must not shift other rows.
 - Escape unwinds one level. In Simulator: conversation → its grid → conversation
   list → tabs. Editing Escape cancels the draft before broader navigation.
 - `/` opens the command bar, including from document navigation/editing. Preserve
   literal slashes in path/URL forms. Text-entry focus must not invoke letter hotkeys.
+- Continue and Loom1 advance items; Loom2+ creates alternative futures; Branch copies
+  without inference. Preserve selected set shape and immutable evaluated versions.
+  `/add`, `/remove` and `/export` act on the current collection. The default palette
+  stays small; legacy shortcuts remain searchable without duplicate primary rows.
 - Commands and visible controls use the same handlers. Rank page-relevant commands
   first, show purpose before argument syntax, and name counts for the context
   (branches versus conversations). The top completion is already selected.
-- `/keys` owns editable bindings. Display configured key names such as `CTRL+ENTER`,
+- `/config` exposes editable keybindings (`/keys` remains a compatibility shortcut).
+  Display configured key names such as `CTRL+ENTER`,
   not hard-coded defaults or caret notation. Avoid function keys and Command-key
   requirements; terminals do not reliably distinguish those combinations.
 - Keep essential controls discoverable without remembering commands. Use explicit

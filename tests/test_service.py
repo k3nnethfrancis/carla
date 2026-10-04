@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -14,8 +15,11 @@ from character_lab.workspaces import Workspaces, acquire
 class FakeRuntime:
     def __init__(self, folder, model):
         self.model = model
-        self.process = object()
+        self.process = SimpleNamespace(poll=lambda: None)
         self.closed = False
+
+    async def preflight(self, prompt, settings):
+        return {}
 
     async def stream(self, prompt, settings, trace):
         trace.update(request={"prompt": prompt}, model=self.model, events=[])
@@ -27,6 +31,11 @@ class FakeRuntime:
     async def judge(self, messages, trace):
         trace["messages"] = messages
         data = json.loads(messages[1]["content"])
+        if "text" in data:
+            result = dict(passed=True, reason="Criteria met", evidence=data["text"])
+            if "behaviors" in data:
+                return {"results": {b["id"]: result.copy() for b in data["behaviors"]}}
+            return result
         candidates = data["candidates"]
         return {
             "reviews": [
@@ -116,6 +125,7 @@ async def test_cancel_preserves_partial_and_blocks_switch(session):
 async def test_clear_edit_keep_review_snapshot_and_restart(session):
     s = session
     await s.execute("seed.toggle", {"ref": "meditations:1.1"}, "select")
+    await s.execute("seed.open", {}, "open")
     root = s.current().copy()
     await s.execute(
         "node.edit", {"node": root["id"], "text": "Source\nA path remembers."}, "edit"
@@ -249,7 +259,7 @@ async def test_bindings_saved_across_workspaces(session):
 
 
 @pytest.mark.asyncio
-async def test_open_seed_set_without_generation_or_duplicates(session):
+async def test_open_seed_set_creates_explicit_copies_without_generating(session):
     s = session
     with pytest.raises(ValueError, match="Space"):
         await s.execute("seed.open", {}, "empty")
@@ -261,8 +271,10 @@ async def test_open_seed_set_without_generation_or_duplicates(session):
     await s.execute("seed.open", {}, "open")
     root = s.current()
     await s.execute("seed.open", {}, "open-again")
-    assert s.current()["id"] == root["id"]
-    assert len(s.project.data["nodes"]) == count
+    assert s.current()["id"] != root["id"]
+    assert s.current()["text"] == root["text"]
+    assert count == 0  # Checking source passages does not create documents.
+    assert len(s.project.data["nodes"]) == count + 2
     assert set(root["passage_ids"]) == set(refs)
     assert s.job is None
 
@@ -876,6 +888,8 @@ async def test_loops_validate_selector_before_generating(session):
 async def test_no_selection_does_not_start_an_extra_loop(session, monkeypatch):
     async def none(self, messages, trace):
         data = json.loads(messages[1]["content"])
+        if "text" in data:
+            return dict(passed=True, reason="Criteria met", evidence=data["text"])
         return dict(
             reviews=[
                 dict(
@@ -911,14 +925,15 @@ async def test_cancel_during_selection_preserves_batch_and_trace(session, monkey
     loaded = Project(session.project.folder)
     run = loaded.data["policy_runs"][-1]
     assert run["status"] == "stopped" and len(run["steps"]) == 1
-    assert len(run["steps"][0]["trace"]["request"]) == 2
+    assert len(run["steps"][0]["assessments"][0]["records"][0]["trace"]["request"]) == 2
     assert all(n["status"] == "complete" for n in loaded.data["nodes"])
     assert not session.busy
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("provider", ["jev", "diffusion"])
 async def test_document_monitor_stop_preserves_output_and_never_selects(
-    session, monkeypatch
+    session, monkeypatch, provider
 ):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-only")
     from character_lab import monitor
@@ -933,8 +948,12 @@ async def test_document_monitor_stop_preserves_output_and_never_selects(
 
     monkeypatch.setattr(monitor, "scan", scan)
     session.project.add("Seed", kind="source")
-    await session.execute("simulator.configure", {"monitor_mode": "jev"}, "config")
-    await session.execute("continue", {"count": 1, "loops": 1}, "loom")
+    await session.execute("simulator.configure", {"monitor_mode": provider}, "config")
+    await session.execute(
+        "continue",
+        {"action": "loom", "count": 1, "loops": 1, "monitoring": True},
+        "loom",
+    )
     await session.job
     node = session.project.data["nodes"][-1]
     assert node["status"] == "policy_stopped"
@@ -983,3 +1002,144 @@ async def test_create_behavior_with_full_configuration(session):
     with pytest.raises(ValueError):
         await session.execute("loom-policy.add", values | {"threshold": 2}, "bad")
     assert len(session.project.data["simulator_config"]["monitor_dimensions"]) == 4
+
+
+async def test_local_monitor_config_without_credentials_and_bad_endpoint_rejected(
+    session, monkeypatch
+):
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    await session.execute("simulator.configure", {"monitor_mode": "diffusion"}, "local")
+    assert session.project.data["simulator_config"]["monitor_mode"] == "diffusion"
+    with pytest.raises(ValueError, match="loopback"):
+        await session.execute(
+            "simulator.configure",
+            {"monitor_local_url": "https://remote.example:443"},
+            "bad",
+        )
+    assert session.project.data["simulator_config"]["monitor_local_url"] == "auto"
+
+
+@pytest.mark.asyncio
+async def test_selection_policy_toggle_is_explicit_and_persisted(session):
+    s = session
+    await s.snapshot()
+    state = next(event[1] for event in reversed(s.events) if event[0] == "state")
+    assert state["selection_enabled"] is False
+    await s.execute("policy.configure", {"selection_enabled": True}, "enable")
+    assert s.project.data["selection_enabled"] is True
+    with pytest.raises(ValueError, match="true or false"):
+        await s.execute("policy.configure", {"selection_enabled": "false"}, "invalid")
+    assert s.project.data["selection_enabled"] is True
+    await s.execute("policy.configure", {"selection_enabled": False}, "disable")
+    assert json.loads(s.project.path.read_text())["selection_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_rename_keeps_ancestry_and_can_restore_label(session):
+    s = session
+    doc = s.project.add("Unchanged text", kind="source")
+    label = doc["label"]
+    await s.execute(
+        "node.rename", {"node": doc["id"], "title": "Favorite path"}, "name"
+    )
+    assert doc["title"] == "Favorite path"
+    assert doc["label"] == label
+    await s.execute("node.rename", {"node": doc["id"], "title": ""}, "reset")
+    assert doc["title"] == ""
+    assert doc["label"] == label
+    assert doc["text"] == "Unchanged text"
+
+
+@pytest.mark.asyncio
+async def test_rename_children_uses_ancestry_not_text_replacement(session):
+    s = session
+    p = s.project
+    root = p.add("Seed", kind="source")
+    child = p.add("Seed continuation", parent=root["id"])
+    grandchild = p.add("Edited", parent=child["id"], kind="edit")
+    other = p.add("Other", kind="source")
+    grandchild["title"] = "My favorite"
+    await s.execute("node.rename", {"node": root["id"], "title": "paths"}, "local")
+    assert child["label"] == "continue-1-doc-1"
+    await s.execute(
+        "node.rename",
+        {"node": root["id"], "title": "paths", "rename_children": True},
+        "children",
+    )
+    assert child["label"] == "continue-1-paths"
+    assert grandchild["label"] == "edit-1-continue-1-paths"
+    assert grandchild["title"] == "My favorite"
+    assert other["label"] == "doc-2"
+    assert p.add("Next", parent=root["id"])["label"] == "continue-2-paths"
+    await s.execute(
+        "node.rename",
+        {"node": root["id"], "title": "", "rename_children": True},
+        "restore",
+    )
+    assert child["label"] == "continue-1-doc-1"
+    assert grandchild["text"] == "Edited"
+
+
+@pytest.mark.asyncio
+async def test_selection_retry_releases_generator_before_loading_frozen_judge(session):
+    s = session
+    root = s.project.add("A seed", kind="source")
+    await s.execute("continue", {"node": root["id"], "count": 2, "loops": 2}, "loom")
+    await s.job
+    source = s.project.data["policy_runs"][-1]
+    frozen_nodes = json.loads(json.dumps(s.project.data["nodes"]))
+    frozen_source = json.loads(json.dumps(source))
+    # A later document generation leaves its model resident before retry.
+    s.runtime.closed = False
+    loaded = []
+
+    def judge_factory(folder, model):
+        assert s.runtime.closed, "Generator must be released before creating judge"
+        loaded.append(model)
+        return FakeRuntime(folder, model)
+
+    s.runtime_factory = judge_factory
+    await s.execute("policy.retry", {"run": source["id"]}, "retry")
+    await s.job
+    retried = s.project.data["policy_runs"][-1]
+    assert loaded == [source["policy_model"]]
+    assert retried["status"] == "complete"
+    assert retried["retry_of"] == source["id"]
+    assert s.project.data["nodes"] == frozen_nodes
+    assert source == frozen_source
+
+
+@pytest.mark.asyncio
+async def test_selection_retry_refuses_external_generator_without_changing_saved_run(
+    session, monkeypatch
+):
+    from unittest.mock import Mock
+
+    import httpx
+
+    s = session
+    root = s.project.add("A seed", kind="source")
+    await s.execute("continue", {"node": root["id"], "count": 2, "loops": 2}, "loom")
+    await s.job
+    source = s.project.data["policy_runs"][-1]
+    original = json.loads(json.dumps(s.project.data["policy_runs"]))
+    s.runtime.process = None
+    s.runtime.closed = False
+    s.runtime_factory = Mock(side_effect=AssertionError("Judge must not load"))
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200)), **kwargs
+        ),
+    )
+    await s.execute("policy.retry", {"run": source["id"]}, "retry")
+    await s.job
+    s.runtime_factory.assert_not_called()
+    assert not s.runtime.closed
+    assert s.project.data["policy_runs"] == original
+    assert any(
+        kind == "error" and "externally managed generator" in data["message"]
+        for kind, data, _ in s.events
+    )

@@ -23,7 +23,7 @@ func TestConversationViewerIsolationAndEscapePath(t *testing.T) {
 	m := simulatorFixture()
 	m.openGridTile(1)
 	text := ansi.Strip(m.conversationDocument(70))
-	if strings.Contains(text, "ONLY FIRST") || !strings.Contains(text, "ONLY SECOND") || !strings.Contains(text, "// policy") {
+	if strings.Contains(text, "ONLY FIRST") || !strings.Contains(text, "ONLY SECOND") || strings.Contains(text, "// policy") {
 		t.Fatal(text)
 	}
 	m.reflow()
@@ -46,6 +46,20 @@ func TestConversationViewerIsolationAndEscapePath(t *testing.T) {
 	m.openGridTile(0)
 	if strings.Contains(m.conversationDocument(70), "ONLY SECOND") {
 		t.Fatal("second conversation leaked")
+	}
+}
+
+func TestFailedConversationKeepsErrorOutsideTranscript(t *testing.T) {
+	m := simulatorFixture()
+	m.simulation.Status, m.simulation.Error = "failed", "Input needs 8213 tokens; context is 8192."
+	m.simulation.Conversations[0].Status = "failed"
+	items := m.gridItems()
+	if strings.Contains(items[0].Text, m.simulation.Error) || strings.Contains(items[1].Text, m.simulation.Error) || items[0].Status != "failed" {
+		t.Fatal("error mixed into transcript or failed status missing", items)
+	}
+	m.openGridTile(0)
+	if strings.Contains(ansi.Strip(m.conversationDocument(80)), m.simulation.Error) || !strings.Contains(m.conversationHeading(80), "failed") {
+		t.Fatal("opened trace mixes in error or hides status")
 	}
 }
 func TestConversationTreeAndTargets(t *testing.T) {
@@ -126,6 +140,7 @@ func TestConversationEditDraftAndCustomVisitor(t *testing.T) {
 
 func TestNewLoomSelectsItsTreeRowOnce(t *testing.T) {
 	m := fixture()
+	m.awaitingSimulation = true // This stream follows an explicit run request.
 	m.section = 3
 	m.selected = 1
 	data := json.RawMessage(`{"id":"new-run","status":"running","conversations":[{"index":0},{"index":1}]}`)

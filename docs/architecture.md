@@ -16,6 +16,20 @@ Python / asyncio Session
        └─ evaluation + evaluation_sets: judges, frozen collections and exports
 ```
 
+## Domain terminology
+
+**Behavior**: A named specification of something a judge can observe in text. Each policy configures its expected outcome and detection rule; policy actions determine what happens after assessment.
+
+**Judge**: The model and assessment configuration used to observe behaviors, including its prompt and call mode.
+
+**Policy**: A set of behaviors, one judge configuration and rules for using their results. Monitoring can warn or stop; Selection chooses a path; Evals records acceptance and may mark passing data for training.
+
+**Observation**: What a judge reports about a behavior. It remains distinct from whether that result is wanted.
+
+**Expected outcome**: Whether a policy requires a behavior to be present or absent for acceptance.
+
+**Run**: A recorded execution over frozen data and configuration, including observations, outcomes and incomplete results.
+
 ## Boundaries and protocol
 
 Go starts one Python child. Python binds `127.0.0.1:0` and sends `{v, port, token}`
@@ -44,10 +58,12 @@ checkpoint and journal on next open; interrupted output is labeled accordingly.
 ## Persistence
 
 `domain.py` owns source, generated and edited document lineage, annotations,
-selection, simulation runs and anthology snapshots. Document versions receive stable
-workspace-wide identifiers such as `paths-branch-0001`, `paths-gen-0001`,
-and `paths-edit-0001`. Nested tree rows omit the source prefix; headings and
-Anthology retain it. Counters survive deletion; explicit user titles override labels.
+selection, simulation runs and anthology snapshots. `document_names.py` assigns
+operation-first labels such as `doc-1`, `branch-2-loom-1-doc-1` and
+`continue-1-branch-2-loom-1-doc-1`. These are display/provenance labels; immutable
+node IDs remain reference keys. Parent-scoped counters survive deletion; explicit
+user titles override labels. A shared operation ID groups Loom alternatives without
+changing document ancestry or evaluation references.
 Existing workspaces receive labels on their next save without changing text or lineage.
 Source text and generation
 prompts are copied into the artifacts so later library edits cannot rewrite history.
@@ -62,7 +78,8 @@ selection, curation and export remain document operations rather than new layers
 `persistence.WorkspaceStore` loads the JSON snapshot, replays its stream journal,
 and owns the write → atomic replace → journal compaction sequence. `Project`
 retains interrupted-status decisions and document labels; both share the same
-in-memory data object. The existing file layout and schema are unchanged.
+in-memory data object. The snapshot/journal file layout is unchanged. Additive identity and grouping fields
+are initialized lazily; older node IDs remain valid version references.
 The store appends new chunks and provider events to `stream.jsonl`.
 Full snapshots at turn/operation boundaries include a journal sequence and are
 atomically renamed before the journal is removed. Recovery skips records at or
@@ -70,6 +87,33 @@ below that sequence; this prevents duplicate text if interrupted between those
 steps. Writes are not fsynced, so this is process-crash recovery rather than a
 power-loss durability guarantee. Full checkpoints remain synchronous and can
 pause very large workspaces; per-token writes no longer serialize the workspace.
+
+## Action identity and grouping
+
+`document_actions.py` resolves document versions and cursor prefixes, then allocates
+logical identities and ordered set membership. Node IDs remain immutable revision
+references. `document_heads` points to current versions; `document_sets` records
+frozen membership with logical set heads. Continue advances a head; older versions
+and prefixes branch. `document_generation.py` orchestrates these plans through
+Session's existing bounded streaming path. Unjudged loops advance every output;
+explicit selection can choose whole alternatives between split loops.
+Queued members are allocated before inference so cancellation retains set shape.
+
+`simulator_actions.py` resolves explicit item/subset/set targets, validates visitor
+message conflicts and records alternative groups. Continue archives the previous
+run under `revisions` before advancing selected heads. Loom sets share an
+`alternative_group` and retain ordered member runs. Generation uses one scheduler
+across all sets; groups are domain structure, not extra model processes. Frozen
+seeds record parent revision numbers, so moving a live head does not erase ancestry.
+
+The frontend action contract exposes a reduced palette and common target plans.
+Go does not create persistent IDs or implement selection policy. Backend validation
+rejects unsupported scopes; execution cannot depend on a UI-only promise.
+
+`exports.py` resolves saved selections and writes versioned JSON manifests with
+text reading copies. It preserves structured turns, exact document ancestry and
+judgment metadata without choosing training masks or a training framework. Export
+is independent of the live snapshot/journal persistence and is not workspace restore.
 
 ## Inference and scheduling
 
@@ -101,7 +145,7 @@ Each turn records model, settings, prompt, response events and observations.
 The policy selector has a separate instruct-model chat request; its specification
 is never added to the character context.
 
-`stream_monitor.py` snapshots character prefixes for optional OpenRouter scans.
+`stream_monitor.py` snapshots character prefixes for optional local OpenJev or hosted OpenRouter scans.
 It permits one in-flight check per conversation, coalesces additional tokens,
 and keeps exact request/response evidence. Final checks are awaited before that
 conversation advances; other conversations can proceed. Explicit Stop actions
@@ -112,8 +156,8 @@ capacity reservation. Warn and monitor-provider errors do not stop generation.
 ## Frontend
 
 `tui/` owns command routing, contextual completion, keybindings, tree selection,
-conversation grids and the document editor. Library, Branches, Anthology and
-Simulator are the main views. Notes belong to documents. The terminal supplies
+conversation grids and the document editor. Library, Branches, Anthology,
+Simulator and Evaluate are the main views. Notes belong to documents. The terminal supplies
 light/dark base colors; provenance and speaker roles use distinct accents.
 Narrow terminals collapse panels; below 60 × 18 only a resize/quit view is shown.
 
@@ -121,7 +165,7 @@ See [commands](commands.md) for the command contract. `exploration.py` owns repe
 batches and evidence-backed selection; document and conversation generators own
 their outputs. `stream_monitor.py` shares bounded monitoring across both.
 
-See `service.py` for backend commands, `tui/command.go` for command descriptions,
+See `service.py` for backend commands, `tui/command_registry.go` for command names, descriptions, help and completion metadata,
 and tests alongside each subsystem for its executable behavioral contract.
 
 ## Model onboarding
@@ -134,34 +178,130 @@ weights. The transfer runs in a child process so cancellation stops the Hub's
 worker threads and leaves its partial cache reusable. Registration and model
 selection happen in the owning Session only after a successful transfer.
 
-## Evaluation records
+The optional DiffusionGemma classifier runs in a Carla-owned OpenJev MLX process.
+`local_judge.py` starts its cached runtime on a kernel-assigned loopback port, shares
+it across checks, and stops it when its owning backend disconnects. It is separate
+from the generator admission/swap system;
+its memory and GPU work coexist with llama.cpp. Local HTTP endpoints are loopback
+only, with redirects/proxy inheritance disabled, no credentials and no remote
+fallback. The pinned launcher disables OpenJev routing and loads cached weights
+offline after setup. See [local judge setup](local-judge.md).
 
-`evaluation.py` owns versioned judge definitions and execution. Local judging
-reuses `Runtime.judge`; Jev evaluation and monitoring share `monitor.classify`,
-retaining exact requests and provider results. Evaluation prompts never enter
-generation context. Monitoring and selection retain their operational owners.
+## Evaluation data, policies and runs
 
-`evaluation_sets.py` owns named collections, frozen item membership, evidence
-references and training metadata. Workspace `evaluators` holds current judge
-definitions; `evaluations` holds immutable completed judgment records;
-`evaluation_sets` holds collections and `active_evaluation` selects the default.
-A one-time additive migration references historical results without rewriting them.
-Adding snapshots or attaching completed judgments requires no model call. Policy
-evidence retains turn/candidate scope rather than becoming a whole-item grade.
+`evaluation_judges.py` owns policy-level judge and behavior definitions, validation
+and legacy definition conversion. `assessments.py` owns whole-input model calls,
+response validation and the deterministic observation → expected outcome mapping.
+`evaluation.py` owns evaluation execution and sequential per-judge model resolution.
+Selection calls the same assessment engine for each candidate, saves those records,
+then submits only eligible candidates to its separate choice call. Monitoring keeps
+its heartbeat owner and classifier execution, sharing the classifier transport.
+Local LLM assessment reuses `Runtime.judge`; DiffusionGemma/Jev assessment shares
+`monitor.classify`, retaining exact requests and provider results. Assessment
+prompts never enter generation context. Monitoring and selection retain their
+operational owners and context-specific actions.
 
-`/eval` captures targets before a cancellable session job. `/loom --eval name`
-freezes judge configuration at dispatch and chains evaluation after generation
-under the same operation lock. Re-evaluation appends results. Item notes and
-training membership have metadata histories. Normal state events carry collection
-summaries; opening an item requests its full text/evidence separately. Export
-writes training-marked items to a new workspace-local JSONL; it does not train.
+`operational_policies.py` stores named Monitoring and Selection configurations,
+exclusive On/Off routing, and the workspace behavior-spec library. Enabling a
+policy projects its settings into the generation runtime and switches the
+previous policy Off. Disabled policies retain their settings without affecting
+runtime; all policies may be Off. Legacy configuration commands update the
+remembered policy through the same routing contract.
+The UI uses one `/policy` hub in every tab. Evaluate Policies is another entry
+to the same Evals catalog. Library imports copy the spec and its revision;
+changing a library entry does not mutate existing uses or historical runs.
 
-`tui/evaluation_collections.go` owns collection navigation, membership/configuration
-dialogs and item rendering. `tui/evaluation.go` owns judge dialogs and command
-execution. Both reuse the app's focus, editor and parent/back mechanisms.
+`evaluation_sets.py` owns data collections, frozen item membership, evidence
+references and training metadata. `evaluation_policies.py` owns reusable policy
+groups and run envelopes. The workspace stores:
+
+- `evaluators`: retained legacy definitions for compatibility and migration.
+- `evaluation_sets`: data collections and frozen items.
+- `behavior_library`: reusable, revisioned names and specs.
+- `operational_policies`: named Monitoring and Selection configurations, with
+  at most one On policy per category. `active_operational_policies` is the legacy
+  internal routing reference, retained to remember settings while all are Off;
+  it is not a separate user-visible activation state.
+- `evaluation_policies`: sibling actions, one judge (model, prompt, call mode) and
+  versioned behaviors (spec, enabled state, expected Present/Absent, threshold). Execution expands each
+  judge against every enabled behavior, retaining both identities in the result.
+  Exact resolved LLM configurations are frozen for execution; model changes unload
+  the previous runtime before the next starts.
+- `evaluations`: individual assessment records with frozen inputs and definitions.
+- `evaluation_runs`: execution envelopes referencing those records and preserving
+  the policy used. Historical run status comes from its records, not current policy.
+
+The additive migration creates policies from legacy collection configurations
+and run envelopes from historical result batches. It does not rewrite original
+judgments. Adding snapshots or attaching completed judgments invokes no model.
+Policy evidence retains turn/candidate scope rather than becoming a whole-item grade.
+
+`/eval [policy]` captures targets before a cancellable session job. Generation
+`--eval` freezes the chosen policy, judges and behaviors at dispatch and chains
+assessment after generation under the same operation lock. Reruns append results.
+Item notes and training membership have metadata histories. Snapshot events carry
+data, policy and run summaries; opening an item or run requests full results.
+Exports preserve frozen data, judgment history, notes and training marks in a
+workspace-local structured manifest plus text copies; they do not train a model.
+
+The Evaluate TUI uses the existing focus, editor, selection and Escape mechanisms
+for Data, Policies and Runs. Data collection membership and policy selection are
+independent; no additional named evaluation container is required.
 
 The frontend saves the last tab and document/trace row in each workspace's
 `view-state.json`, separately from project data. Startup restores that location
 with keyboard focus in the command bar. It does not restore checked Loom targets,
 editing, dialogs, or command input. Missing/deleted rows fall back to the tab's
 first item. Navigation writes are atomic and occur only when the location changes.
+
+### Action scope
+
+`action_scope.py` defines recursive containment (`document` or `conversation`
+leaves and `set` children). It is separate from parent/version ancestry.
+Go sends the explicit selected shape; Python validates/freeze-copies it, enumerates
+leaves for scheduling, and remaps saved output scopes to new IDs on splits.
+Continue retains conversation identities; document continuations save child
+versions. Current document sets resolve their current member heads, while old
+set snapshots and evaluated versions remain unchanged.
+
+
+### Prompt data and policy ownership
+
+`templates.py` resolves only `{{name}}` and dotted data lookups; list fields project
+in order and objects serialize as JSON. It never evaluates code or re-renders
+inserted text. `assessments.py` supplies behavior objects and full input; explicit
+templates own their placement, while a separate system message preserves the
+validated response contract. Instruction-only legacy prompts keep their prior
+JSON user envelope. Traces preserve template, context and rendered messages.
+Simulator uses the same renderer while accepting old single-brace formats.
+
+Monitoring policy storage owns `actions` keyed by behavior ID. Behaviors own their
+names, specs and detection rules (`decision`, `threshold`). The judge configures
+model, prompt and call mode. `expanded()` accepts the former `monitor_detection`
+map; migration folds it into behaviors without changing execution values or
+historical run snapshots. The UI exposes these settings at their owning level.
+
+Editable Evals policies allow zero judges while drafting and exactly one to run.
+The wire field remains `judges` for historical compatibility. Legacy multi-judge
+policies require an explicit replacement, which archives their prior settings in
+`previous_judges`. Frozen multi-judge run evidence remains supported by the harness.
+
+### Inspection boundary
+
+`inspection.py` builds read-only views of existing generation, monitoring,
+selection and evaluation evidence. The TUI presents these in document-pane tabs with independent scroll positions,
+with raw records and token events available on demand. Inspection never starts
+judging or changes a historical result. Saved monitoring metadata is rendered as
+a compact status beside document/conversation titles, separately from the source
+and generated text; detailed judge output belongs in the inspector.
+
+
+### Navigation during background work
+
+Focus identifies the previewed item; explicit selection identifies command scope.
+Preview requests carry their request identity. Enter during a pending preview
+retains only an open intent for that exact item, canceled by navigation or errors.
+Background tree refreshes preserve the focused row identity. Local document and
+conversation selection remains available during inference; mutation locks remain
+separate. Grid page following is explicit through `/active` and stops on manual
+navigation. Inspection tabs are local read-only views of the saved evidence.

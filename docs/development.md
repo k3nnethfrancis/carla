@@ -35,9 +35,8 @@ long-lived branches; branch deletion applies only to feature/fix branches. Relea
 still run only from `main`, after promotion.
 
 Routine changes go through PRs rather than direct pushes to `main` or `dev`. This is the
-collaborator workflow, not a claim that branch protection is enabled: the current
-private repository's plan does not support the requested ruleset API. Revisit
-mechanical enforcement if the plan or repository visibility changes.
+collaborator workflow, not a claim that branch protection is enabled. Check the
+repository rulesets before relying on mechanical enforcement.
 
 Use `bug`, `enhancement` and `documentation` labels for work type. Add `ready` when
 an issue is actionable and `blocked` only with a concrete dependency described in
@@ -93,7 +92,8 @@ use `make build` for a versioned binary. The installed launcher runs that binary
 ## App releases
 
 `pyproject.toml` is the app version source of truth. While Carla is experimental,
-use `0.1.x` for compatible fixes and a new minor version for a coherent new
+use patch releases within the current minor version for compatible fixes, and a
+new minor version for a coherent new
 capability or a breaking change. Describe compatibility changes explicitly even
 before 1.0. A release tag is `v` followed by the manifest version; tags are immutable.
 
@@ -102,8 +102,8 @@ do not tag or publish anything.
 
 1. Before opening the `dev` → `main` PR, bump `project.version` in
    `pyproject.toml` through a PR into `dev`, then run `uv lock` to update the
-   lockfile. The initial release uses `0.1.0`; subsequent compatible fixes use
-   `0.1.1`, `0.1.2`, etc. Document the user-visible changes in the PRs.
+   lockfile. For example, compatible fixes after `0.2.0` use `0.2.1`,
+   `0.2.2`, etc. Document the user-visible changes in the PRs.
 2. The promotion PR's **Release / validate** check rejects a reused or older
    version. Review the changes and wait for all checks before merging.
 3. A push to `main` starts **Release**, which tests/builds that exact commit on
@@ -119,8 +119,8 @@ stale commit if `main` moved during checks. API failures stop the release rather
 than being interpreted as missing tags. Manually created untagged drafts must be
 resolved before the workflow can claim their version.
 
-The private repository currently cannot enforce branch protection; passing the
-version check is a required maintainer convention. A direct push with a reused
+Passing the version check is a required maintainer convention, independent of
+repository visibility or branch protection. A direct push with a reused
 version will fail publication, not retag an existing release.
 
 Initial releases are source releases: clone/checkout the tag, run `make install`,
@@ -146,3 +146,21 @@ Before changing visibility or publishing a release:
   in the README. Publish the intended reviewed `main` revision.
 
 Documentation completion does not itself change repository visibility.
+
+## Command documentation
+
+`tui/command_registry.go` owns command names, compatibility aliases, default action
+labels/bindings, descriptions and argument/help text. Help and command completion
+reuse it. Contextual availability and execution remain with their existing handlers;
+this registry does not duplicate the backend command parser.
+
+After changing metadata, regenerate the reference:
+
+```sh
+cd tui
+CARLA_UPDATE_COMMAND_DOCS=1 go test -run TestCommandReferenceMatchesRegistry
+```
+
+Normal tests verify that `docs/command-reference.md` matches the registry and every
+registered action has a canonical description. Keep README's first-experiment
+walkthrough short and link to the reference for the full command scope.

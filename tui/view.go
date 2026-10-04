@@ -32,6 +32,22 @@ func (m *model) layout() layout {
 	height := max(4, m.height-10-m.suggestionCount()-len(m.commandHints()))
 	l := layout{bodyHeight: height, actionY: 4 + height}
 	width := max(1, m.width-2)
+	if m.width < 90 && m.showInspector && m.focus == 2 {
+		l.panels = []panel{{2, rect{1, 3, width, height}}}
+		return l
+	}
+	if m.adaptiveBranches() {
+		nav := m.branchPaneWidth(width)
+		l.panels = []panel{{0, rect{1, 3, nav, height}}}
+		if nav < width {
+			kind := 1
+			if m.showInspector && m.focus == 2 {
+				kind = 2
+			}
+			l.panels = append(l.panels, panel{kind, rect{nav + 2, 3, max(1, width-nav-1), height}})
+		}
+		return l
+	}
 	if (m.editing != "" && m.editing != "document") || m.width < 90 {
 		focus := m.focus
 		if focus == 3 {
@@ -46,17 +62,12 @@ func (m *model) layout() layout {
 	nav := 26
 	l.panels = append(l.panels, panel{0, rect{1, 3, nav, height}})
 	available := width - nav - 1
-	if m.showInspector && m.width >= 132 {
-		inspector := 34
-		document := available - inspector - 1
-		l.panels = append(l.panels, panel{1, rect{nav + 2, 3, document, height}}, panel{2, rect{nav + document + 3, 3, inspector, height}})
-	} else {
-		kind := 1
-		if m.showInspector && m.focus == 2 {
-			kind = 2
-		}
-		l.panels = append(l.panels, panel{kind, rect{nav + 2, 3, available, height}})
+	kind := 1
+	if m.showInspector && m.focus == 2 {
+		kind = 2
 	}
+	l.panels = append(l.panels, panel{kind, rect{nav + 2, 3, available, height}})
+
 	return l
 }
 func safe(s string) string {
@@ -112,7 +123,10 @@ func (m *model) renderDocument(width int) string {
 		}
 	}
 	text := m.currentText()
-	if text == "" {
+	if text == "" && m.data.Current != nil && m.editing == "" {
+		return lipgloss.Place(width, m.document.Height(), lipgloss.Center, lipgloss.Center, dim.Render("Empty document"))
+	}
+	if text == "" && m.data.Current == nil {
 		return "Start with a seed.\n\nOpen Library, expand a document and select the passages you want to explore.\n\nContinue writes from the end. Branch lets you choose a position in the text."
 	}
 	runes := []rune(text)
@@ -146,7 +160,18 @@ func (m *model) renderDocument(width int) string {
 }
 func (m *model) reflow() {
 	m.command.SetWidth(max(1, m.width-7))
-	for _, p := range m.layout().panels {
+	panels := m.layout().panels
+	if m.adaptiveBranches() && len(panels) == 1 && panels[0].kind == 0 && (m.focus == 1 || m.focus == 2) {
+		m.focus = 0
+	}
+	for _, p := range panels {
+		if p.kind == 0 && m.adaptiveBranches() {
+			m.branchScroll = m.branchHorizontalOffset(p.box)
+			rows := m.rows()
+			if len(rows) > 0 {
+				m.branchScrollRow = rows[min(m.selected, len(rows)-1)].id
+			}
+		}
 		width, height := max(1, p.box.w-4), max(1, p.box.h-5)
 		switch p.kind {
 		case 1:
@@ -166,6 +191,9 @@ func (m *model) reflow() {
 			}
 		case 2:
 			m.inspector.SetWidth(width)
+			if m.inspectionRoot != nil && m.inspectionParent == nil {
+				height = max(1, height-1)
+			}
 			m.inspector.SetHeight(height)
 			m.inspector.SetContent(ansi.Wrap(safe(m.inspection), width, ""))
 		}
@@ -183,14 +211,23 @@ func (m *model) navigation(r rect) string {
 		return m.notesView(r)
 	}
 	rows := m.rows()
-	visible := max(1, r.h-6)
+	footer := m.navigationFooter(r)
+	// Reserve every footer row so hints wrap instead of being clipped by the panel.
+	visible := m.navigationRows(r)
 	mIndex := min(m.selected, max(0, len(rows)-1))
 	start := max(0, mIndex-visible+1)
 	var lines []string
 	for i := start; i < min(len(rows), start+visible); i++ {
 		item := rows[i]
-		label := strings.Repeat(" ", item.depth) + safe(item.label)
-		label = line(label, r.w-4)
+		label := m.branchRowText(item, r)
+		if i == mIndex && m.focus == 0 && !m.sectionFocus && m.dialog == nil && !m.searching {
+			label = m.scrollingLabel(m.navigationLabel(item, r), r.w-4)
+		} else {
+			label = line(label, r.w-4)
+		}
+		if item.kind == "eval-run" && strings.Contains(item.label, "running") {
+			label = m.aiStyle().Render(label)
+		}
 		if item.kind == "evaluation" {
 			if strings.Contains(item.label, "PASS") {
 				label = m.aiStyle().Render(label)
@@ -200,6 +237,9 @@ func (m *model) navigation(r rect) string {
 		}
 		if i == mIndex {
 			label = selectedStyle.Render(label)
+		}
+		if item.kind == "node" {
+			label = m.pulseLabel(conversationKey(item.id, 0), label)
 		}
 		if item.kind == "conversation" && strings.Contains(item.label, "! ") {
 			label = m.pulseLabel(item.id, label)
@@ -212,44 +252,27 @@ func (m *model) navigation(r rect) string {
 	for len(lines) < visible {
 		lines = append(lines, "")
 	}
-	footer := fmt.Sprintf("%d selected · CTRL+F filter", len(m.data.Selected))
-	if m.section != 0 {
-		footer = fmt.Sprintf("%d items", len(rows))
-		if m.section == 3 {
-			count := 0
-			if m.loomConversation != nil {
-				count = 1
-			}
-			footer = fmt.Sprintf("%d selected · /clear", count)
-		}
-		if m.section == 4 {
-			count := 0
-			for _, selected := range m.evalSelection {
-				if selected {
-					count++
-				}
-			}
-			footer = fmt.Sprintf("%d selected · ENTER opens", count)
-		}
-		if m.section == 1 || m.section == 2 {
-			footer = fmt.Sprintf("%d selected · %s actions", len(m.selectedBranches()), m.keyLabel("nav.enter"))
-		}
-	}
-	if m.searching {
-		footer = m.search.View()
-	} else if m.filter != "" {
-		footer = "Filter: " + m.filter
-	}
+
 	return strings.Join(append(lines, dim.Render(footer)), "\n")
 }
 func (m *model) dialogRect() rect {
 	width := min(76, m.width-4)
 	height := min(m.height-6, 18)
+	if m.dialog != nil && (m.dialog.kind == "help" || m.dialog.kind == "help-detail") {
+		height = min(m.height-4, 32)
+		if m.dialog.kind == "help" {
+			height = min(height, max(1, len(m.dialog.rows))+7)
+		}
+	}
 	if m.dialog != nil && strings.HasPrefix(m.dialog.kind, "setup-") && len(m.dialog.rows) > 0 {
 		height = min(height, len(m.dialog.rows)+8)
 	}
 	if m.dialog != nil && len(m.dialog.fields) > 0 {
-		height = min(m.height-4, len(m.dialog.fields)*3+6)
+		extra := 0
+		if message, ok := m.dialog.args["error"].(string); ok {
+			extra = len(strings.Split(ansi.Wrap(safe("Error: "+message), width-4, ""), "\n"))
+		}
+		height = min(m.height-4, len(m.dialog.fields)*3+6+extra)
 	}
 	return rect{(m.width - width) / 2, (m.height - height) / 2, width, height}
 }
@@ -261,6 +284,12 @@ func (m *model) dialogPreviewLines() []string {
 	r := m.dialogRect()
 	lines := strings.Split(ansi.Wrap(safe(d.rows[d.index].preview), r.w-4, ""), "\n")
 	limit := max(1, min(4, r.h-7))
+	if d.kind == "help" {
+		limit = 2
+	}
+	if d.kind == "loom-policy-bundle-confirm" {
+		limit = max(1, r.h-7)
+	}
 	if len(lines) > limit {
 		lines = append(lines[:limit-1], "… ENTER to open")
 	}
@@ -282,7 +311,7 @@ func (m *model) renderDialog() string {
 		for len(body) < height {
 			body = append(body, "")
 		}
-		body = append(body, m.keyLabel("nav.up")+"/"+m.keyLabel("nav.down")+" scroll · "+m.keyLabel("nav.back")+" back")
+		body = append(body, fmt.Sprintf("%s/%s scroll · %s back · %d/%d", m.keyLabel("nav.up"), m.keyLabel("nav.down"), m.keyLabel("nav.back"), min(start+height, len(lines)), len(lines)))
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box(d.title, strings.Join(body, "\n"), r, true))
 	}
 	if len(d.rows) > 0 || d.allRows != nil {
@@ -291,7 +320,7 @@ func (m *model) renderDialog() string {
 		for i := start; i < min(len(d.rows), start+visible); i++ {
 			label := line(safe(d.rows[i].label), r.w-4)
 			if i == d.index {
-				label = selectedStyle.Render(label)
+				label = selectedStyle.Render(m.scrollingLabel(safe(d.rows[i].label), r.w-4))
 			}
 			body = append(body, label)
 		}
@@ -300,7 +329,7 @@ func (m *model) renderDialog() string {
 		}
 		for _, text := range m.dialogPreviewLines() {
 			style := dim
-			if d.kind == "setup-error" {
+			if d.kind == "setup-error" || d.kind == "loom-policy-bundle-confirm" {
 				style = m.accent("#A84F39", "#DB937C")
 			}
 			body = append(body, style.Render(line(text, r.w-4)))
@@ -319,7 +348,7 @@ func (m *model) renderDialog() string {
 			footer = "ESC cancel"
 		}
 		if d.kind == "help" {
-			footer = m.keyLabel("nav.up") + "/" + m.keyLabel("nav.down") + " · " + m.keyLabel("nav.enter") + " details · " + m.keyLabel("nav.back") + " return"
+			footer = "Type to search · " + m.keyLabel("nav.enter") + " details · " + m.keyLabel("nav.back") + " return"
 		}
 		if d.kind == "keys" {
 			footer = "ENTER bind · CTRL+S save · ESC cancel"
@@ -335,18 +364,26 @@ func (m *model) renderDialog() string {
 			footer = "SPACE / ←→ change · ENTER open · ESC back"
 			if choice.toggle {
 				footer = "SPACE / ←→ / ENTER toggle · ESC back"
+			} else if d.kind == "operational-policy-list" {
+				footer = "SPACE / ←→ toggle · ENTER open · ESC back"
 			}
 		}
 		if d.choicePicker() {
 			footer = "←→ choose · SPACE / ENTER apply · ESC back"
 		}
-		if d.kind == "sim-documents" || d.kind == "eval-judges" || d.kind == "eval-add-items" {
+		if d.kind == "loom-policy-bundle-confirm" {
+			footer = "↑↓ choose · ENTER select · ESC back"
+		}
+		if d.kind == "judge-prompt-confirm" {
+			footer = "↑↓ choose · " + m.keyLabel("nav.enter") + " select · " + m.keyLabel("nav.back") + " keep editing"
+		}
+		if d.kind == "sim-documents" || d.kind == "eval-add-items" {
 			footer = "SPACE select · CTRL+S save · ESC cancel"
 		}
 		if d.query != "" {
 			footer = "Filter: " + d.query + " · " + footer
-		} else if d.kind != "keys" && d.kind != "delete" && d.kind != "loom-policy-timing" && !strings.HasPrefix(d.kind, "setup-") {
-			if d.kind != "help" {
+		} else if d.kind != "keys" && d.kind != "delete" && d.kind != "loom-policy-bundle-confirm" && d.kind != "loom-policy-timing" && !strings.HasPrefix(d.kind, "setup-") {
+			if d.kind != "help" && d.kind != "judge-prompt-confirm" && ansi.StringWidth("Type to filter · "+footer) <= r.w-4 {
 				footer = "Type to filter · " + footer
 			}
 		}
@@ -362,8 +399,8 @@ func (m *model) renderDialog() string {
 				label = "› " + label
 			}
 			value := f.input.View()
-			if d.kind == "settings" {
-				value = f.input.Value() + " ▾"
+			if d.kind == "settings" && (!d.adjusting || i != d.field) {
+				value = f.input.Value()
 				if i == d.field {
 					value = selectedStyle.Render(value)
 				}
@@ -376,9 +413,9 @@ func (m *model) renderDialog() string {
 		}
 		if d.kind == "import" {
 			footer = "ENTER next/import · CTRL+ENTER import · ESC cancel"
-			if message, ok := d.args["error"].(string); ok {
-				body = append(body, m.accent("#A84F39", "#DB937C").Render(line("Error: "+message, r.w-4)))
-			}
+		}
+		if message, ok := d.args["error"].(string); ok {
+			body = append(body, m.accent("#A84F39", "#DB937C").Render(ansi.Wrap(safe("Error: "+message), r.w-4, "")))
 		}
 		if d.kind == "setup-input" {
 			footer = "ENTER continue · ESC back"
@@ -389,23 +426,25 @@ func (m *model) renderDialog() string {
 		if d.kind == "settings" {
 			footer = "↑↓ field · ENTER change · CTRL+S save · ESC cancel"
 			if d.adjusting {
-				footer = "↑↓ adjust · ←→ ×10 · ENTER set · ESC back"
+				footer = "↑↓ adjust · ←→ cursor · ENTER set · ESC back"
 			}
 			body = append(body, dim.Render(line(settingHelp(d.field), r.w-4)))
 		}
 		if d.kind == "config-number" {
-			footer = "↑↓ adjust · ←→ ×10 · ENTER save · ESC cancel"
+			footer = "↑↓ adjust · ←→ cursor · ENTER save · ESC cancel"
 		}
 		if choice, ok := m.dialogChoice(); ok {
 			footer = "SPACE / ←→ change · ENTER open · ESC back"
 			if choice.toggle {
 				footer = "SPACE / ←→ / ENTER toggle · ESC back"
+			} else if d.kind == "operational-policy-list" {
+				footer = "SPACE / ←→ toggle · ENTER open · ESC back"
 			}
 		}
 		if d.choicePicker() {
 			footer = "←→ choose · SPACE / ENTER apply · ESC back"
 		}
-		if d.kind == "sim-documents" || d.kind == "eval-judges" || d.kind == "eval-add-items" {
+		if d.kind == "sim-documents" || d.kind == "eval-add-items" {
 			footer = "No anthology documents. Keep a branch first. ESC close"
 		}
 		body = append(body, line(footer, r.w-4))
@@ -432,6 +471,9 @@ func (m *model) View() tea.View {
 		switch p.kind {
 		case 0:
 			title = sections[m.section]
+			if m.section == 4 && m.evalArea != "" {
+				title = evaluationAreaTitle(m.evalArea)
+			}
 			if m.notesOpen {
 				title = "Notes"
 			}
@@ -442,6 +484,15 @@ func (m *model) View() tea.View {
 				continue
 			}
 			title = m.nodeTitle()
+			if m.section == 4 {
+				title = "Evaluate"
+				if m.evalArea != "" {
+					title += " / " + evaluationAreaTitle(m.evalArea)
+				}
+				if c := m.currentEvaluation(); c != nil {
+					title += " / " + c.Name
+				}
+			}
 			if m.section == 3 && m.editing == "" {
 				title = "Simulator"
 				if m.conversationOpen {
@@ -449,16 +500,45 @@ func (m *model) View() tea.View {
 				}
 			}
 			body = m.document.View() + "\n" + "Source · " + m.aiStyle().Render("AI") + " · " + m.humanStyle().Render("Human edits")
+			if (m.section == 1 || m.section == 2) && m.data.Current != nil {
+				if info := monitorSummary(m.data.Current.Monitor); info != "" {
+					title += " · " + safe(info)
+				}
+			}
 			if m.section == 3 || m.section == 4 {
 				body = m.document.View()
 			}
 			if m.editing != "" {
+				if (strings.HasPrefix(m.editing, "policy-") || m.editing == "policy_prompt" || m.editing == "selection_assessment_prompt" || m.editing == "library-spec") && m.editReturn != nil {
+					title = m.editReturn.title + " · Spec"
+					if m.editing == "policy-judge-prompt" || m.editing == "policy_prompt" || m.editing == "selection_assessment_prompt" {
+						title = m.editReturn.title + " · Prompt template"
+						if m.editing == "selection_assessment_prompt" {
+							title = m.editReturn.title + " · Behavior assessment template"
+						}
+						if m.editing == "policy_prompt" {
+							title = m.editReturn.title + " · Branch selection template"
+						}
+					}
+					if (m.editing == "policy-behavior-new" || m.editing == "library-spec") && len(m.editReturn.fields) > 0 {
+						title = m.editReturn.fields[0].input.Value() + " · Spec"
+					}
+				}
 				title += fmt.Sprintf(" · line %d/%d", m.editor.Line()+1, m.editor.LineCount())
-				body = m.editor.View()
+				body = m.templateEditorView()
 			}
 		case 2:
 			title = "Inspector"
+			if m.inspectionRoot != nil {
+				title = inspectionHeading(m.inspectionRoot.title)
+				if m.inspectionParent != nil {
+					title = "Raw evidence"
+				}
+			}
 			body = m.inspector.View()
+			if m.inspectionRoot != nil && m.inspectionParent == nil {
+				body = m.inspectionTabBar(p.box.w-4) + "\n" + body
+			}
 			if m.inspection == "" {
 				body = "Exact inputs, source attribution and policy decisions appear here."
 			}
@@ -505,16 +585,22 @@ func (m *model) View() tea.View {
 				}
 			}
 		}
-		modelName = fmt.Sprintf("%d collections · %d items · %d training", len(m.data.EvaluationSets), items, training)
+		modelName = fmt.Sprintf("%d items · %d training", items, training)
 	}
 
+	activeDocuments := 0
+	for _, n := range m.data.Nodes {
+		if n.Status == "generating" || n.Status == "running" || n.Status == "queued" {
+			activeDocuments++
+		}
+	}
+	if activeDocuments > 0 {
+		heading += fmt.Sprintf(" · ▶ %d active docs", activeDocuments)
+	}
 	header := line(bold.Render(heading), max(20, m.width/2)) + dim.Render(line(safe(modelName), max(1, m.width-2-max(20, m.width/2))))
 	lines := []string{"", " " + header, m.sectionBar(), lipgloss.NewStyle().PaddingLeft(1).Render(lipgloss.JoinHorizontal(lipgloss.Top, joinPanels(parts)...)), " " + dim.Render(line(m.targetLabel(), m.width-2))}
 	if m.section == 0 && m.editing == "" {
 		lines[len(lines)-1] = " " + dim.Render(line(m.seedSummary(), m.width-2))
-	}
-	if m.selectionVisible() {
-		lines[len(lines)-1] = m.selectionBar()
 	}
 	lines = append(lines, m.commandView())
 	status := m.status
@@ -524,8 +610,8 @@ func (m *model) View() tea.View {
 			status = m.capacityStatus + " · " + status
 		}
 	}
-	if m.editing != "" {
-		status = "Editing · " + m.keyLabel("save") + " save · " + m.keyLabel("nav.back") + " cancel"
+	if m.editing != "" && !strings.HasPrefix(status, "Error:") {
+		status = "Editing · " + m.keyLabel("save") + " / " + m.keyLabel("save.alt") + " save · " + m.keyLabel("nav.back") + " cancel"
 		if m.editing == "document" {
 			status += " · /save · /cancel"
 		}
@@ -561,7 +647,7 @@ func (m *model) View() tea.View {
 		}
 	}
 	if m.section == 3 && m.conversationOpen && m.focus == 1 && m.editing == "" {
-		legend = "ESC grid/list · SPACE select/clear · /loom · /fork · /edit · /visitor"
+		legend = "ESC grid/list · SPACE select/clear · /continue · /loom · /branch"
 	}
 	if m.editing != "" && m.editing != "document" {
 		legend = "↑↓ / PGUP/PGDN scroll · /save · ESC cancel"
@@ -577,6 +663,15 @@ func (m *model) View() tea.View {
 		if len(strings.Fields(m.command.Value())) > 1 || m.historyPosition > 0 {
 			legend = "↑↓ history · ENTER run · ESC return · /keys"
 		}
+	}
+	if m.showInspector && m.focus == 2 && m.inspectionRoot != nil {
+		legend = "←→ tabs · ↑↓ scroll · " + m.keyLabel("nav.enter") + " raw · " + m.keyLabel("nav.back") + " back"
+		if m.inspectionParent != nil {
+			legend = "↑↓ scroll · " + m.keyLabel("nav.back") + " back"
+		}
+	}
+	if hint := templateHint(m.editing); hint != "" {
+		legend = hint
 	}
 	lines = append(lines, m.footerView(legend, saved))
 	content := strings.Join(lines, "\n")
@@ -637,4 +732,44 @@ func (m *model) sectionBar() string {
 		}
 	}
 	return bar
+}
+
+func (m *model) navigationRows(r rect) int {
+	return max(1, r.h-6-strings.Count(m.navigationFooter(r), "\n"))
+}
+func (m *model) navigationFooter(r rect) string {
+	rows := m.rows()
+	footer := fmt.Sprintf("%d selected · CTRL+F filter", len(m.data.Selected))
+	if m.section != 0 {
+		footer = fmt.Sprintf("%d items", len(rows))
+		if m.section == 3 {
+			count := len(m.selectedConversations())
+			footer = fmt.Sprintf("%d selected · /clear", count)
+		}
+		if m.section == 4 {
+			count := 0
+			for _, selected := range m.evalSelection {
+				if selected {
+					count++
+				}
+			}
+			footer = fmt.Sprintf("%d selected · ENTER opens", count)
+		}
+		if m.section == 1 || m.section == 2 {
+			footer = fmt.Sprintf("%d selected · %s actions", len(m.selectedBranches()), m.keyLabel("nav.enter"))
+		}
+	}
+	if m.adaptiveBranches() && m.branchHorizontalLimit(r) > 0 {
+		footer += "\n" + m.keyLabel("tree.scroll-left") + "/" + m.keyLabel("tree.scroll-right") + " scroll"
+	}
+	if m.searching {
+		footer = m.search.View()
+	} else if m.filter != "" {
+		footer = "Filter: " + m.filter
+	}
+	if !m.searching && m.filter == "" && ansi.StringWidth(footer) > r.w-4 {
+		footer = strings.ReplaceAll(footer, " · ", "\n")
+	}
+	footer = ansi.Wrap(footer, max(1, r.w-4), "")
+	return footer
 }

@@ -1,52 +1,11 @@
 package main
 
 import (
-	"strings"
-
 	"github.com/charmbracelet/x/ansi"
 )
 
 // Share argument guidance between the highlighted completion and /help. This is
 // documentation, not a second parser; regression tests exercise the shown syntax.
-func (m *model) commandArguments(id string) []string {
-	switch id {
-	case "loom":
-		count := "[branches]"
-		if m.section == 3 {
-			count = "[conversations]"
-		}
-		args := []string{count, "--tokens N|Max"}
-		if m.section == 3 {
-			args = append(args, "--turns N", "--msg/--message \"text\"")
-		}
-		return append(args, "--eval \"name\"", "--loops N")
-	case "eval":
-		return []string{"[\"evaluation name\"]", "--train-on-pass true|false"}
-	case "models":
-		if m.section == 3 {
-			return []string{"[character|visitor]"}
-		}
-	case "configure":
-		if m.section == 3 {
-			return []string{"[setting]", "e.g. /config documents"}
-		}
-	}
-	return nil
-}
-
-func (m *model) commandHelp(id string) string {
-	text := commandDescriptions[id]
-	if args := m.commandArguments(id); len(args) > 0 {
-		text += "\n\n/" + commandName(action{id: id}) + " " + strings.Join(args, " · ")
-	}
-	if id == "loom" {
-		text += "\n\nCount can also be written --count N or -n N. Flags accept --flag=value and any order; examples put --loops last. --eval runs after generation, without changing generation prompts. Multiple loops require a configured selection policy."
-	}
-	if id == "configure" && m.section == 3 {
-		text += "\n\nSettings: documents, character_alias, visitor_alias, openings, visitor_brief, character_settings, visitor_settings, character_template, visitor_template."
-	}
-	return text
-}
 
 func (m *model) commandHints() []string {
 	choices := m.commandChoices()

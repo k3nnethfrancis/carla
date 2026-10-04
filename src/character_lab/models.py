@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from urllib.parse import urlparse
 
+from .model_metadata import default_context
 from .runtime import DEFAULT_MODEL
 from .workspaces import HOME
 
@@ -14,8 +15,6 @@ def load_models(path, kind="base"):
     entries = data if isinstance(data, list) else [data]
     if not entries:
         raise ValueError("Model configuration must contain at least one model")
-    if kind == "instruct" and len(entries) != 1:
-        raise ValueError("Configure exactly one policy model")
     aliases = set()
     for model in entries:
         if not isinstance(model, dict):
@@ -32,7 +31,7 @@ def load_models(path, kind="base"):
         location = Path(location).expanduser()
         model["path"] = str((path.parent / location).absolute())
         model.setdefault("name", alias)
-        model.setdefault("context", 8192)
+        model.setdefault("context", default_context(model))
         model.setdefault("gpu_layers", 99)
         port = model.get("port")
         if type(port) is not int or not 1 <= port <= 65535:
@@ -70,3 +69,9 @@ def available_models(saved=()):
     catalog = {m["alias"]: m for m in configured}
     catalog.update({m["alias"]: m for m in saved if m.get("path") or not configured})
     return list(catalog.values()) or [DEFAULT_MODEL.copy()]
+
+
+def available_judges():
+    """Judge aliases identify individual local models, independent of policy roles."""
+    path = HOME / "policy-model.json"
+    return load_models(path, "instruct") if path.exists() else []

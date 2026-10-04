@@ -10,6 +10,7 @@ from pathlib import Path
 
 import httpx
 
+from .model_metadata import native_context
 from .scheduling import MAX_WORKERS, Admission
 
 DEFAULT_MODEL = {
@@ -19,8 +20,28 @@ DEFAULT_MODEL = {
     "url": "http://127.0.0.1:18986",
     "port": 18986,
     "kind": "base",
-    "context": 8192,
+    "context": 10240,
 }
+
+
+async def release_for_selection(runtime):
+    """Unload our generator, but never compete with an externally owned server.
+
+    A retry may happen before any generation in this session, so an unowned runtime
+    can mean either an idle endpoint or an external model. Probe without loading it.
+    """
+    if runtime.process is None or runtime.process.poll() is not None:
+        async with httpx.AsyncClient(timeout=3, trust_env=False) as client:
+            try:
+                response = await client.get(runtime.model["url"] + "/health")
+            except httpx.ConnectError:
+                pass
+            else:
+                if response.status_code in {200, 503}:
+                    raise ValueError(
+                        "Stop the externally managed generator before switching to selection"
+                    )
+    runtime.close()
 
 
 class Runtime:
@@ -32,6 +53,7 @@ class Runtime:
         self._loading = asyncio.Lock()
         self.admission = Admission()
         self.on_schedule = None
+        self.on_judge_token = None
 
     async def ensure(self):
         # Concurrent requests share one startup and one model process.
@@ -131,32 +153,50 @@ class Runtime:
         )
         if type(capacity) is not int or capacity < 1:
             raise ValueError("Model server did not report a usable context capacity")
+        if self.model["context"] == 0:
+            expected = native_context(self.model)
+            if expected and capacity < expected:
+                raise ValueError(
+                    f"Model default context is {expected} tokens, but the server loaded {capacity}. Restart the model server or explicitly choose a smaller context."
+                )
         return capacity, props
+
+    async def _budget(self, client, prompt, settings, trace):
+        tokenized = await client.post(
+            self.model["url"] + "/tokenize",
+            json={"content": prompt, "add_special": True},
+        )
+        tokenized.raise_for_status()
+        count = len(tokenized.json()["tokens"])
+        capacity, props = await self.context(client)
+        trace["prompt_tokens"] = count
+        trace["context_capacity"] = capacity
+        output = (
+            capacity - count if settings["n_predict"] == -1 else settings["n_predict"]
+        )
+        requested_max = output
+        if output < 1 or count + requested_max > capacity:
+            raise ValueError(
+                f"Input needs {count} tokens plus {requested_max} requested output tokens; context is {capacity}. Select less text. Nothing was truncated."
+            )
+        return count, capacity, output, props
+
+    async def preflight(self, prompt, settings):
+        """Exact fit check against the loaded model; never sends a completion."""
+        await self.ensure()
+        async with httpx.AsyncClient(timeout=180, trust_env=False) as client:
+            trace = {}
+            await self._budget(client, prompt, settings, trace)
+            return trace
 
     async def stream(self, prompt, settings, trace):
         await self.ensure()
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(180, connect=10), trust_env=False
         ) as client:
-            tokenized = await client.post(
-                self.model["url"] + "/tokenize",
-                json={"content": prompt, "add_special": True},
+            count, capacity, output, props = await self._budget(
+                client, prompt, settings, trace
             )
-            tokenized.raise_for_status()
-            count = len(tokenized.json()["tokens"])
-            capacity, props = await self.context(client)
-            trace["prompt_tokens"] = count
-            trace["context_capacity"] = capacity
-            output = (
-                capacity - count
-                if settings["n_predict"] == -1
-                else settings["n_predict"]
-            )
-            requested_max = output
-            if output < 1 or count + requested_max > capacity:
-                raise ValueError(
-                    f"Input needs {count} tokens plus {requested_max} requested output tokens; context is {capacity}. Select less text. Nothing was truncated."
-                )
             request = {
                 "prompt": prompt,
                 "n_predict": output,
@@ -245,7 +285,7 @@ class Runtime:
             "messages": messages,
             "temperature": 0,
             "max_tokens": 1536,
-            "stream": False,
+            "stream": self.on_judge_token is not None,
             "response_format": {"type": "json_object"},
             "chat_template_kwargs": {"enable_thinking": False},
         }
@@ -273,6 +313,40 @@ class Runtime:
                 raise ValueError(
                     "Policy context overflow; reduce branch count or length. Nothing was truncated."
                 )
+            if self.on_judge_token is not None:
+                output, finished = "", None
+                trace["response_chunks"] = []
+                async with client.stream(
+                    "POST", self.model["url"] + "/v1/chat/completions", json=request
+                ) as response:
+                    trace["http_status"] = response.status_code
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        data = line[5:].strip()
+                        if data == "[DONE]":
+                            break
+                        chunk = json.loads(data)
+                        trace["response_chunks"].append(chunk)
+                        for choice in chunk.get("choices", []):
+                            text = choice.get("delta", {}).get("content") or ""
+                            if text:
+                                output += text
+                                trace["raw_response"] = output
+                                await self.on_judge_token(text)
+                            if choice.get("finish_reason"):
+                                finished = choice["finish_reason"]
+                trace["response"] = {
+                    "choices": [
+                        {"finish_reason": finished, "message": {"content": output}}
+                    ]
+                }
+                if finished != "stop":
+                    raise ValueError(
+                        "Judge response did not finish; partial output retained"
+                    )
+                return json.loads(output)
             response = await client.post(
                 self.model["url"] + "/v1/chat/completions", json=request
             )

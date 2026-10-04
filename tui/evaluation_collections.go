@@ -35,7 +35,7 @@ func (m *model) collectionRows() []row {
 		if filter == "" {
 			filter = "all"
 		}
-		rows := []row{{id: "back", kind: "eval-back", label: "← Evaluations"}, {id: "config", kind: "eval-config", label: "Configure · " + c.Name}, {id: "add", kind: "eval-add", label: "+ Add items / existing judgments"}, {id: "run", kind: "eval-execute", label: "Run selected / pending items"}, {id: "filter", kind: "eval-filter", label: "Show · " + filter}}
+		rows := []row{{id: "back", kind: "eval-back", label: "← Data"}, {id: "config", kind: "eval-config", label: "Settings", preview: "Rename or remove this data collection. Assessment behaviors belong in Policies."}, {id: "add", kind: "eval-add", label: "+ Add", preview: "Choose saved documents, conversations or existing judgments. Adding data does not run a model."}, {id: "filter", kind: "eval-filter", label: "Show · " + filter}}
 		for i := len(c.Items) - 1; i >= 0; i-- {
 			e := c.Items[i]
 			status := evaluationStatus(e)
@@ -54,7 +54,10 @@ func (m *model) collectionRows() []row {
 		}
 		return rows
 	}
-	rows := []row{{id: "new", kind: "eval-create", label: "+ New evaluation"}}
+	if m.evalArea != "data" {
+		return m.evaluationAreaRows()
+	}
+	rows := []row{{id: "back", kind: "eval-back", label: "← Evaluate"}, {id: "new", kind: "eval-create", label: "+ New dataset", preview: "Collect saved documents and conversation traces. Adding data does not run a model."}}
 	for _, c := range m.data.EvaluationSets {
 		pass, fail := 0, 0
 		for _, i := range c.Items {
@@ -66,25 +69,46 @@ func (m *model) collectionRows() []row {
 				}
 			}
 		}
-		active := ""
-		if c.ID == m.data.ActiveEvaluation {
-			active = " · active"
-		}
-		rows = append(rows, row{id: c.ID, kind: "eval-collection", label: c.Name + active, preview: fmt.Sprintf("%d items · %d pass · %d fail · %d pending/evidence", len(c.Items), pass, fail, len(c.Items)-pass-fail)})
+
+		rows = append(rows, row{id: c.ID, kind: "eval-collection", label: c.Name, preview: fmt.Sprintf("%d items · %d pass · %d fail · %d pending/evidence", len(c.Items), pass, fail, len(c.Items)-pass-fail)})
 	}
 	return rows
 }
 func (m *model) openCollectionConfig() tea.Cmd {
 	c := m.currentEvaluation()
 	if c == nil {
-		m.status = "Open an evaluation first"
+		m.status = "Open a data collection first"
 		return nil
 	}
-	active := "Make active"
-	if c.ID == m.data.ActiveEvaluation {
-		active = "Active evaluation"
+
+	m.dialog = &dialog{kind: "eval-collection-config", title: c.Name, rows: []row{{id: "name", label: "Name · " + c.Name, preview: "Rename this collection of data."}, {id: "remove", label: "Remove collection…", preview: "Remove this collection from Data. Source documents, conversations, policies and Runs remain."}}}
+	return nil
+}
+
+// Item targets take precedence; otherwise Remove acts on the open dataset.
+func (m *model) removableEvaluationCollection() string {
+	if m.section != 4 || len(m.evaluationIDs()) > 0 {
+		return ""
 	}
-	m.dialog = &dialog{kind: "eval-collection-config", title: c.Name, rows: []row{{id: "name", label: "Name · " + c.Name}, {id: "judges", label: fmt.Sprintf("Judges · %d selected", len(c.Judges))}, {id: "definitions", label: "Manage judge configurations"}, {id: "active", label: active}}}
+	if m.targetRow().kind == "eval-collection" {
+		return m.targetRow().id
+	}
+	if c := m.currentEvaluation(); c != nil {
+		return c.ID
+	}
+	return ""
+}
+
+func (m *model) confirmRemoveCollection(id string) tea.Cmd {
+	for _, c := range m.data.EvaluationSets {
+		if c.ID == id {
+			m.dialog = &dialog{kind: "eval-collection-delete", title: "Remove collection · " + c.Name + "?", parent: m.dialog, args: map[string]any{"collection": c.ID}, rows: []row{
+				{id: "cancel", label: "Cancel", preview: "Keep this collection."},
+				{id: "remove", label: "Remove collection", preview: fmt.Sprintf("Remove %d items from Data. Source documents, conversations, policies and Runs remain; a recovery record is retained.", len(c.Items))},
+			}}
+			break
+		}
+	}
 	return nil
 }
 func (m *model) enterCollection(id string) {
@@ -101,34 +125,64 @@ func (m *model) evaluationCollectionAction(kind, id string) tea.Cmd {
 	switch kind {
 	case "eval-collection":
 		m.enterCollection(id)
+	case "eval-area":
+		if id == "policies" {
+			return m.openEvaluationPolicies()
+		}
+		m.evalArea = id
+		m.enterCollection("")
+	case "eval-policy":
+		return m.openEvaluationPolicy(id)
+	case "eval-policy-new":
+		return m.newEvaluationPolicy(nil)
+	case "eval-run":
+		m.focus = 1
+		return m.send("evaluation.run.open", map[string]any{"id": id})
 	case "eval-back":
+		if m.evalCollection == "" {
+			m.evalArea = ""
+		}
 		m.enterCollection("")
 	case "eval-create":
-		m.dialog = &dialog{kind: "eval-collection-new", title: "New evaluation"}
+		m.dialog = &dialog{kind: "eval-collection-new", title: "New dataset", args: map[string]any{}}
 		m.dialog.add("Name", "")
 		return m.dialog.fields[0].input.Focus()
 	case "eval-config":
 		return m.openCollectionConfig()
 	case "eval-add":
 		return m.openCollectionItems()
-	case "eval-execute":
+	case "eval-new-run":
 		return m.openEval("/eval")
 	}
 	return nil
 }
 func (m *model) openCollectionItems() tea.Cmd {
-	d := &dialog{kind: "eval-add-items", title: "Add items · existing evidence is retained; no judging", args: map[string]any{"selected": map[string]bool{}, "targets": map[string]map[string]any{}}}
+	d := &dialog{kind: "eval-add-items", title: "Add", args: map[string]any{"selected": map[string]bool{}, "targets": map[string]map[string]any{}}}
 	targets := d.args["targets"].(map[string]map[string]any)
 	add := func(id, label string, target map[string]any) {
 		d.rows = append(d.rows, row{id: id, label: label})
 		targets[id] = target
 	}
-	for _, n := range m.data.Nodes {
-		add("node:"+n.ID, "Document · "+documentLabel(n), map[string]any{"node": n.ID})
+	// Curated Anthology versions come first; each document appears once.
+	for _, kept := range []bool{true, false} {
+		for _, n := range m.data.Nodes {
+			if n.Kept != kept {
+				continue
+			}
+			label := "Document · "
+			if kept {
+				label = "Anthology · "
+			}
+			add("node:"+n.ID, label+documentLabel(n), map[string]any{"node": n.ID})
+		}
 	}
 	for _, run := range m.data.SimulationRuns {
 		for i := 0; i < run.Count; i++ {
-			add(conversationKey(run.ID, i), fmt.Sprintf("Conversation %d · %s", i+1, run.ID), map[string]any{"run": run.ID, "conversation": i})
+			c := simulationConversation{Index: i}
+			if i < len(run.Conversations) {
+				c = run.Conversations[i]
+			}
+			add(conversationKey(run.ID, i), conversationName(c, false), map[string]any{"run": run.ID, "conversation": i})
 		}
 	}
 	for _, e := range m.data.Evaluations {
@@ -140,17 +194,27 @@ func (m *model) openCollectionItems() tea.Cmd {
 	return nil
 }
 func (m *model) submitCollection(d *dialog) tea.Cmd {
+	if d.kind == "eval-collection-delete" {
+		if len(d.rows) == 0 {
+			return nil
+		}
+		if d.rows[d.index].id == "cancel" {
+			m.dialog = d.parent
+			return nil
+		}
+		return m.saveDialog(d, "evaluation.collection.delete", map[string]any{"collection": d.args["collection"]})
+	}
 	c := m.currentEvaluation()
 	if d.kind == "eval-collection-new" {
 		name := strings.TrimSpace(d.fields[0].input.Value())
 		if name == "" {
-			m.status = "Name the evaluation"
+			m.status = "Name the collection"
 			return nil
 		}
-		cmd := m.send("evaluation.collection.save", map[string]any{"name": name, "judges": []string{}})
+		cmd := m.saveDialog(d, "evaluation.collection.save", map[string]any{"name": name})
 		if cmd != nil {
-			m.evalCreating = true
-			m.dialog = nil
+			m.status = "Collection created"
+			m.evalCreating = m.dialogRequest
 		}
 		return cmd
 	}
@@ -159,18 +223,9 @@ func (m *model) submitCollection(d *dialog) tea.Cmd {
 	}
 	switch d.kind {
 	case "eval-collection-name":
-		return m.saveDialog(d, "evaluation.collection.save", map[string]any{"id": c.ID, "name": d.fields[0].input.Value(), "judges": c.Judges})
-	case "eval-judges", "eval-add-items":
+		return m.saveDialog(d, "evaluation.collection.save", map[string]any{"id": c.ID, "name": d.fields[0].input.Value()})
+	case "eval-add-items":
 		selected := d.args["selected"].(map[string]bool)
-		if d.kind == "eval-judges" {
-			ids := []string{}
-			for _, j := range m.data.Evaluators {
-				if selected[j.ID] {
-					ids = append(ids, j.ID)
-				}
-			}
-			return m.saveDialog(d, "evaluation.collection.save", map[string]any{"id": c.ID, "name": c.Name, "judges": ids})
-		}
 		targets := []map[string]any{}
 		all := d.args["targets"].(map[string]map[string]any)
 		for _, r := range append(append([]row{}, d.rows...), d.allRows...) {
@@ -189,69 +244,105 @@ func (m *model) submitCollection(d *dialog) tea.Cmd {
 			return nil
 		}
 		switch d.rows[d.index].id {
+		case "workspaces", "keys":
+			cmd := m.perform(d.rows[d.index].id)
+			if m.dialog != nil {
+				m.dialog.parent = d
+			}
+			return cmd
 		case "name":
-			m.dialog = &dialog{kind: "eval-collection-name", title: "Evaluation name", parent: d}
+			m.dialog = &dialog{kind: "eval-collection-name", title: "Collection name", parent: d}
 			m.dialog.add("Name", c.Name)
 			return m.dialog.fields[0].input.Focus()
-		case "active":
-			return m.send("evaluation.collection.active", map[string]any{"collection": c.ID})
-		case "definitions":
-			m.openEvaluators()
-			m.dialog.parent = d
-		case "judges":
-			if len(m.data.Evaluators) == 0 {
-				m.openEvaluators()
-				m.dialog.parent = d
-				return nil
-			}
-			selected := map[string]bool{}
-			for _, id := range c.Judges {
-				selected[id] = true
-			}
-			next := &dialog{kind: "eval-judges", title: "Judges · SPACE select · CTRL+S save", parent: d, args: map[string]any{"selected": selected}}
-			for _, j := range m.data.Evaluators {
-				label := j.Name
-				if selected[j.ID] {
-					label = "✓ " + label
-				}
-				next.rows = append(next.rows, row{id: j.ID, label: label, preview: j.Spec})
-			}
-			m.dialog = next
+		case "remove":
+			return m.confirmRemoveCollection(c.ID)
+
 		}
 	}
 	return nil
 }
 
 func (m *model) collectionItemView(e *evaluationRecord, width int) string {
-	text := strings.ToUpper(evaluationStatus(evaluationSummary{Status: e.Status, Passed: e.Passed})) + " · " + e.Title + "\n"
+	status := strings.ToUpper(evaluationStatus(evaluationSummary{Status: e.Status, Passed: e.Passed}))
+	if e.Status == "failed" && len(e.Judgments) > 0 {
+		status = "INCOMPLETE"
+	}
+	text := safe(status) + " · " + safe(e.Title) + "\n"
 	if e.Training {
 		text += "★ Training\n"
 	}
 	if len(e.GenerationModels) > 0 {
-		text += "Generated by: " + strings.Join(e.GenerationModels, " · ") + "\n"
+		text += "Generated by: " + safe(strings.Join(e.GenerationModels, " · ")) + "\n"
 	}
 	for _, j := range e.Judgments {
+		details := ""
 		status := strings.ToUpper(j.Status)
+		if j.Status == "failed" {
+			status = "ERROR"
+		}
 		if j.Status == "complete" {
 			status = "FAIL"
 			if j.Result.Passed {
 				status = "PASS"
 			}
 		}
-		text += fmt.Sprintf("\n%s · %s · revision %d\nJudge: %s\nCriteria: %s\n", status, j.Definition.Name, j.Definition.Revision, j.Definition.Model, j.Definition.Spec)
-		if j.Result.Probability != nil {
-			text += fmt.Sprintf("Probability: %.1f%%\n", *j.Result.Probability*100)
+		details += fmt.Sprintf("\n%s · %s · revision %d\nModel: %s\nCriteria: %s\n", status, j.Definition.Name, j.Definition.Revision, m.evaluatorModelName(j.Definition), j.Definition.Spec)
+		if j.Result.Expected != "" {
+			details += "Pass when: " + expectedLabel(j.Result.Expected) + "\n"
 		}
-		text += j.Result.Reason + "\n" + j.Result.Evidence + "\n" + j.Error
+		if j.Result.Observed != nil {
+			observed := "Absent"
+			if *j.Result.Observed {
+				observed = "Present"
+			}
+			details += "Observed: " + observed + "\n"
+		}
+		if j.Result.Probability != nil {
+			label := "Probability"
+			if j.Result.Expected != "" {
+				label = "Presence probability"
+			}
+			details += fmt.Sprintf("%s: %.1f%%\n", label, *j.Result.Probability*100)
+		}
+		if j.Result.DesiredProbability != nil {
+			details += fmt.Sprintf("Desired outcome probability: %.1f%%\n", *j.Result.DesiredProbability*100)
+		}
+		if j.Result.Reason != "" {
+			details += "\nReason: " + j.Result.Reason + "\n"
+		}
+		if j.Result.Evidence != "" {
+			details += "\nEvidence: " + j.Result.Evidence + "\n"
+		}
+		if j.Error != "" {
+			details += "\nAssessment error: " + j.Error + "\n"
+		}
+		if j.Definition.JudgeName != "" {
+			details = "// Judge · " + j.Definition.JudgeName + "\n" + details
+		}
+		text += "\n" + m.judgeStyle().Render(ansi.Wrap(safe(strings.TrimSpace(details)), width, "")) + "\n"
 	}
 	for _, evidence := range e.Evidence {
 		var pretty bytes.Buffer
 		json.Indent(&pretty, evidence, "", "  ")
-		text += "\nAttached policy evidence · original scope (not a whole-item grade)\n" + pretty.String() + "\n"
+		text += "\nAttached policy evidence · original scope (not a whole-item grade)\n" + safe(pretty.String()) + "\n"
 	}
 	if e.Note != "" {
-		text += "\nNotes\n" + e.Note + "\n"
+		text += "\nNotes\n" + safe(e.Note) + "\n"
 	}
-	text += "\nSaved text\n\n" + e.Text
-	return ansi.Wrap(safe(text), width, "")
+	text += "\n\n" + strings.Repeat("─", max(1, min(width, 60))) + "\nSaved text · evaluated input\n\n" + m.evaluatedInput(e, width)
+	return ansi.Wrap(text, width, "")
+}
+
+// Use only the frozen source, never the current simulator conversation. Old
+// records without structured turns retain their exact plain-text fallback.
+func (m *model) evaluatedInput(e *evaluationRecord, width int) string {
+	if e.Kind == "conversation" {
+		var source struct {
+			Conversation *simulationConversation `json:"conversation"`
+		}
+		if json.Unmarshal(e.Source, &source) == nil && source.Conversation != nil && len(source.Conversation.Turns) > 0 {
+			return m.conversationTurns(source.Conversation.Turns, width)
+		}
+	}
+	return safe(e.Text)
 }

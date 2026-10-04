@@ -9,6 +9,17 @@ import (
 	"time"
 )
 
+// Dispatch the primary operation of a UI command, unwrapping the animation
+// commands Bubble Tea now batches alongside it. Request tests own the primary
+// result; timer behavior is exercised separately with deterministic tick messages.
+func runPrimaryCommand(cmd tea.Cmd) tea.Msg {
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok && len(batch) > 0 {
+		return runPrimaryCommand(batch[0])
+	}
+	return msg
+}
+
 type capturedRequest struct {
 	ID, Command string
 	Args        map[string]json.RawMessage
@@ -25,7 +36,7 @@ func captureCommand(t *testing.T, m *model, action func() tea.Cmd) capturedReque
 		t.Fatalf("no command: %s", m.status)
 	}
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	right.SetReadDeadline(time.Now().Add(time.Second))
 	var req capturedRequest
 	if err := json.NewDecoder(right).Decode(&req); err != nil {
@@ -168,10 +179,10 @@ func TestConversationBranchShortcutUsesSameRequestAsPalette(t *testing.T) {
 		if req.Command != "simulator.fork" {
 			t.Fatalf("shortcut=%v: %s", shortcut, req.Command)
 		}
-		var index int
-		json.Unmarshal(req.Args["conversation"], &index)
-		if index != 1 {
-			t.Fatalf("forked wrong conversation: %d", index)
+		var scope actionScope
+		json.Unmarshal(req.Args["scope"], &scope)
+		if scope.Conversation != 1 || scope.Kind != "conversation" {
+			t.Fatalf("forked wrong scope: %+v", scope)
 		}
 	}
 }

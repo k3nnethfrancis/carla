@@ -13,9 +13,9 @@ func TestCommandDescriptionPrecedesParameters(t *testing.T) {
 		m.focusCommand(true)
 		m.command.SetValue("/loom")
 		text := ansi.Strip(m.commandView())
-		description := "Generate branches"
+		description := "Continue documents"
 		if section == 3 {
-			description = "Generate conversations"
+			description = "Start conversations"
 		}
 		if strings.Index(text, description) < 0 || strings.Index(text, description) > strings.Index(text, "--tokens") {
 			t.Fatal(text)

@@ -9,7 +9,7 @@ import (
 )
 
 func TestLoomRejectsConversationOptionsInDocumentViews(t *testing.T) {
-	for _, section := range []int{0, 1, 2} {
+	for _, section := range []int{1} {
 		m := fixture()
 		m.section = section
 		if m.loom(generationOptions{Turns: 2}) != nil || !strings.Contains(m.status, "--turns") {
@@ -35,7 +35,7 @@ func TestSimulatorLoomRoutesCountAndTokenOverride(t *testing.T) {
 		t.Fatal("no simulator command")
 	}
 	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+	go func() { done <- runPrimaryCommand(cmd) }()
 	var request struct {
 		Command string
 		Args    struct {
@@ -43,7 +43,7 @@ func TestSimulatorLoomRoutesCountAndTokenOverride(t *testing.T) {
 			Tokens  int `json:"n_predict"`
 			Turns   int
 			Node    string
-			Message string
+			Message string `json:"visitor"`
 		}
 	}
 	if err := json.NewDecoder(right).Decode(&request); err != nil {

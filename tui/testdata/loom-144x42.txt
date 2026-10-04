@@ -1,38 +1,38 @@
                                                                                                                                                
  carla / Gunkel exploration                                              Next: Qwen3-14B Base                                                  
   Library   Branches   Anthology   Simulator   Evaluate                                                                                        
- ┌────────────────────────┐ ┌──────────────────────────────────────────────────────────────────────────────┐ ┌────────────────────────────────┐
- │   Library              │ │ › Source preview                                                             │ │   Inspector                    │
- │                        │ │                                                                              │ │                                │
- │ ▾ ✓ Gunkel · Paths · … │ │ ✓ Gunkel · Paths · 1 selected                                                │ │ Generation                     │
- │  ✓ paths Paths that l… │ │                                                                              │ │ Qwen3-14B Base                 │
- │ ▸   Meditations        │ │ Expand with →. Space selects passages; Enter opens the selected set in       │ │                                │
- │ ▸   Tractatus          │ │ Branches.                                                                    │ │ Raw completion                 │
- │ + Add document         │ │                                                                              │ │ No system prompt               │
- │                        │ │ ENTER opens together: Gunkel · Paths (1)                                     │ │                                │
- │                        │ │                                                                              │ │ Source: Gunkel / Paths         │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │                        │ │                                                                              │ │                                │
- │ 1 selected · CTRL+F f… │ │                                                                              │ │                                │
- │                        │ │ Source · AI · Human edits                                                    │ │                                │
- └────────────────────────┘ └──────────────────────────────────────────────────────────────────────────────┘ └────────────────────────────────┘
+ ┌────────────────────────┐ ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+ │   Library              │ │ › Source preview                                                                                                │
+ │                        │ │                                                                                                                 │
+ │ ▾ ✓ Gunkel · Paths · … │ │ ✓ Gunkel · Paths · 1 selected                                                                                   │
+ │  ✓ paths Paths that l… │ │                                                                                                                 │
+ │ ▸   Meditations        │ │ Expand with →. Space selects passages; Enter opens the selected set in Branches.                                │
+ │ ▸   Tractatus          │ │                                                                                                                 │
+ │ + Add document         │ │ ENTER opens together: Gunkel · Paths (1)                                                                        │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │                        │ │                                                                                                                 │
+ │ 1 selected             │ │                                                                                                                 │
+ │ CTRL+F filter          │ │                                                                                                                 │
+ │                        │ │ Source · AI · Human edits                                                                                       │
+ └────────────────────────┘ └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
  ENTER opens together: Gunkel · Paths (1)                                                                                                      
  ┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
  │ Type / for commands                                                                                                                        │

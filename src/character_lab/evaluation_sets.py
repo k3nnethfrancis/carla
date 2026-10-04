@@ -10,9 +10,8 @@ import hashlib
 import json
 import uuid
 
-from . import evaluation
+from . import evaluation, evaluation_judges, evaluation_policies
 from .domain import now
-from .exploration import require_selector
 
 
 def uid():
@@ -27,13 +26,30 @@ def resolve(project, name=None):
     key = name or project.data.get("active_evaluation", "")
     matches = [s for s in collections(project) if s["id"] == key or s["name"] == key]
     if len(matches) != 1:
-        raise ValueError("Choose an active evaluation in Evaluate, or use /eval name")
+        raise ValueError("Choose a data collection in Evaluate")
     return matches[0]
+
+
+def remove_collection(project, key):
+    """Remove membership from Data, retaining frozen evidence for recovery."""
+    if not key:
+        raise ValueError("Choose a data collection to remove")
+    group = resolve(project, key)
+    project.data.setdefault("removed_evaluation_sets", []).append(
+        {"removed": now(), "collection": copy.deepcopy(group)}
+    )
+    project.data["evaluation_sets"] = [
+        s for s in collections(project) if s["id"] != group["id"]
+    ]
+    if project.data.get("active_evaluation") == group["id"]:
+        remaining = collections(project)
+        project.data["active_evaluation"] = remaining[0]["id"] if remaining else ""
 
 
 def migrate(project):
     """One-time, lossless membership migration; original records stay untouched."""
     if "evaluation_sets" in project.data:
+        evaluation_policies.migrate(project)
         return
     project.data["evaluation_sets"] = []
     definitions = {d["id"]: d for d in evaluation.definitions(project)}
@@ -58,6 +74,7 @@ def migrate(project):
                     item["note"] = record["note"]
     if collections(project):
         project.data["active_evaluation"] = collections(project)[0]["id"]
+    evaluation_policies.migrate(project)
     project.save()
 
 
@@ -90,15 +107,32 @@ def records_for(project, item):
 
 def item_summary(project, group, item):
     records = records_for(project, item)
-    # Aggregate the latest result of every currently configured judge revision.
-    latest = {}
-    for record in records:
-        definition = record["definition"]
-        latest[(definition["id"], definition["revision"])] = record
-    definitions = {d["id"]: d for d in evaluation.definitions(project)}
+    # Match the full effective configuration: copied judges may share IDs and
+    # revision counters but diverge in another policy.
+    policy = evaluation_policies.active(project)
+    definitions = (
+        evaluation_judges.flatten(policy)
+        if policy and not any(j.get("missing") for j in policy["judges"])
+        else []
+    )
+
+    def effective(definition):
+        # Resolved model details are execution provenance, not editable policy
+        # settings. Older results implicitly expected their criteria present.
+        return {k: v for k, v in definition.items() if k != "resolved_model"} | {
+            "expected": definition.get("expected", "present")
+        }
+
     relevant = [
-        latest.get((key, definitions[key]["revision"])) if key in definitions else None
-        for key in group["judges"]
+        next(
+            (
+                r
+                for r in reversed(records)
+                if effective(r["definition"]) == effective(definition)
+            ),
+            None,
+        )
+        for definition in definitions
     ]
     status, passed = "unjudged", None
     if relevant and all(r and r["status"] == "complete" for r in relevant):
@@ -121,27 +155,38 @@ def item_summary(project, group, item):
 
 def summaries(project):
     return [
-        {k: s[k] for k in ("id", "name", "judges")}
+        {k: s[k] for k in ("id", "name")}
         | {"items": [item_summary(project, s, i) for i in s["items"]]}
         for s in collections(project)
     ]
 
 
-def plan(session, name=None):
-    group = resolve(session.project, name)
-    if not group["judges"]:
-        raise ValueError("Configure at least one judge for this evaluation first")
-    definitions = [
-        copy.deepcopy(evaluation.find(evaluation.definitions(session.project), key))
-        for key in group["judges"]
-    ]
+def data_collection(project, key=None):
+    if key:
+        return resolve(project, key)
+    raise ValueError("Choose a data collection explicitly")
+
+
+def plan(session, name=None, collection=None):
+    policy = evaluation_policies.resolve(session.project, name)
+    if len(policy.get("judges", [])) != 1:
+        raise ValueError("Choose one judge in this evaluation policy before running it")
+    definitions = evaluation_policies.Definitions(
+        policy,
+        evaluation_judges.flatten(policy),
+    )
+    if not definitions:
+        raise ValueError("Add at least one behavior to this policy first")
     for definition in definitions:
         if definition["kind"] == "llm":
-            require_selector(session.policy_model)
-            if definition["model"] != session.policy_model.get("alias"):
-                raise ValueError(
-                    "Choose the configured local policy model for this judge"
-                )
+            definition["resolved_model"] = evaluation.resolve_model(
+                session, definition["model"]
+            )
+    group = (
+        data_collection(session.project, collection)
+        if collection
+        else dict(id="", name="", items=[])
+    )
     return group, definitions
 
 
@@ -180,15 +225,21 @@ def prepare(session, group, definitions, items):
             )
             records.append(record)
             item["judgments"].append(record["id"])
+    evaluation_policies.record_run(
+        session.project, batch, group, definitions, items, records
+    )
     session.project.data.setdefault("evaluations", []).extend(records)
     session.project.save()
     return records
 
 
-async def run(session, group, definitions, items, auto=False, *, nested=False):
+async def run(session, group, definitions, items, auto=None, *, nested=False):
+    if auto is None:
+        auto = definitions.policy.get("actions", {}).get("train_on_pass", False)
     records = prepare(session, group, definitions, items)
     session.runtime.close()
     try:
+        await evaluation_policies.publish_run(session, records[0]["batch"], opened=True)
         await evaluation.evaluate(session, records, manage_job=False)
         if auto:
             for item in items:
@@ -197,6 +248,8 @@ async def run(session, group, definitions, items, auto=False, *, nested=False):
                     r.get("passed") is True and r["status"] == "complete" for r in own
                 ):
                     item["training"] = True
+                    for record in own:
+                        record["training"] = True
                     item.setdefault("metadata_history", []).append(
                         dict(at=now(), training=True, origin="train_on_pass")
                     )
@@ -205,6 +258,7 @@ async def run(session, group, definitions, items, auto=False, *, nested=False):
         if not nested:
             session.job = None
         await session.snapshot()
+        await evaluation_policies.publish_run(session, records[0]["batch"])
 
 
 def attach_policy_evidence(project, item):
@@ -239,13 +293,21 @@ def attach_policy_evidence(project, item):
             if step.get("status") == "complete" and (
                 (
                     item["kind"] == "document"
-                    and item["target"].get("node") in step.get("candidates", [])
+                    and (
+                        item["target"].get("node") in step.get("candidates", [])
+                        or item["source"].get("document_set")
+                        in step.get("candidates", [])
+                    )
                 )
                 or (
                     item["kind"] == "conversation"
                     and run["id"] == item["source"].get("policy_run")
                     and step["loop"] == item["source"].get("loop")
-                    and str(item["target"]["conversation"])
+                    and str(
+                        item["source"].get(
+                            "alternative_index", item["target"]["conversation"]
+                        )
+                    )
                     in step.get("candidates", [])
                 )
             ):
@@ -271,23 +333,36 @@ async def dispatch(session, command, args, request_id):
     if command == "evaluation.collection.save":
         name = args.get("name", "").strip()
         if not name:
-            raise ValueError("Name the evaluation")
+            raise ValueError("Name the data collection")
         old = resolve(p, args["id"]) if args.get("id") else None
         if any(s["name"] == name and s is not old for s in collections(p)):
-            raise ValueError("An evaluation already has that name")
+            raise ValueError("A data collection already has that name")
         judges = list(dict.fromkeys(args.get("judges", [])))
         for key in judges:
             evaluation.find(evaluation.definitions(p), key)
         if old:
-            old.update(name=name, judges=judges)
+            old.update(name=name)
         else:
-            old = dict(id=uid(), name=name, judges=judges, items=[], created=now())
+            old = dict(id=uid(), name=name, items=[], created=now())
             p.data.setdefault("evaluation_sets", []).append(old)
             p.data["active_evaluation"] = old["id"]
+        # Older clients supplied judges here; move that configuration into a policy.
+        if "judges" in args:
+            policy = evaluation_policies.save(
+                p, {"id": old.get("legacy_policy"), "name": name, "judges": judges}
+            )
+            old["legacy_policy"] = policy["id"]
     elif command == "evaluation.collection.active":
         p.data["active_evaluation"] = resolve(p, args["collection"])["id"]
+    elif command == "evaluation.collection.delete":
+        remove_collection(p, args.get("collection"))
     else:
-        group = resolve(p, args.get("collection"))
+        if command == "evaluation.collection.run":
+            group, definitions = plan(
+                session, args.get("policy"), args.get("collection")
+            )
+        else:
+            group = data_collection(p, args.get("collection"))
         if command == "evaluation.item.open":
             item = evaluation.find(group["items"], args["id"])
             result = copy.deepcopy(item) | item_summary(p, group, item)
@@ -306,9 +381,27 @@ async def dispatch(session, command, args, request_id):
                     item["judgments"].append(target["evaluation"])
                 if args.get("attach_evidence"):
                     attach_policy_evidence(p, item)
+        elif command == "evaluation.collection.remove":
+            ids = args.get("ids")
+            if (
+                not isinstance(ids, list)
+                or not ids
+                or any(not isinstance(key, str) for key in ids)
+            ):
+                raise ValueError("Select evaluation items to remove")
+            items = [evaluation.find(group["items"], key) for key in dict.fromkeys(ids)]
+            # Removal changes membership, never destroys judgments or frozen
+            # research evidence. Keep a recoverable record outside active items.
+            for item in items:
+                group.setdefault("removed_items", []).append(
+                    {"removed": now(), "item": copy.deepcopy(item)}
+                )
+            group["items"] = [i for i in group["items"] if i["id"] not in ids]
         elif command == "evaluation.collection.run":
-            group, definitions = plan(session, group["id"])
-            auto = args.get("train_on_pass", False)
+            auto = args.get(
+                "train_on_pass",
+                definitions.policy.get("actions", {}).get("train_on_pass", False),
+            )
             if type(auto) is not bool:
                 raise ValueError("train_on_pass must be boolean")
             captured = [evaluation.capture(p, t) for t in args.get("targets", [])]
@@ -316,6 +409,7 @@ async def dispatch(session, command, args, request_id):
                 evaluation.find(group["items"], key) for key in args.get("items", [])
             ]
             items += [add_capture(group, c) for c in captured]
+            items = list({i["id"]: i for i in items}.values())
             if not items:
                 raise ValueError(
                     "Select items to run; adding and running are separate actions"

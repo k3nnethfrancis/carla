@@ -1,6 +1,6 @@
 [project]
 name = "character-lab"
-version = "0.1.1"
+version = "0.2.0"
 description = "A local terminal Loom for developing character seed documents"
 license = "MIT"
 readme = "README.md"

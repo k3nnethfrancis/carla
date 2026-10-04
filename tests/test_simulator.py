@@ -22,6 +22,9 @@ class Runtime:
         self.process = object()
         self.closed = False
 
+    async def preflight(self, prompt, settings):
+        return {}
+
     async def stream(self, prompt, settings, trace):
         trace.update(request={"prompt": prompt, **settings}, events=[self.final])
         yield self.output
@@ -199,7 +202,7 @@ async def test_preview_only_generates_openings(setup):
     assert len(run["conversations"]) == 3
     assert all(len(c["turns"]) == 1 for c in run["conversations"])
     assert all(c["turns"][0]["model"]["alias"] == "other" for c in run["conversations"])
-    assert simulator.summary(run)["label"].startswith("Opening preview")
+    assert simulator.summary(run)["models_label"].startswith("Opening preview")
 
 
 def test_opening_validation(setup):
@@ -322,12 +325,17 @@ async def test_high_monitor_scores_never_stop_next_turn(setup, monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("action", ["warn", "stop"])
-async def test_policy_applies_only_to_matching_conversation(setup, monkeypatch, action):
+@pytest.mark.parametrize("provider", ["jev", "diffusion"])
+async def test_policy_applies_only_to_matching_conversation(
+    setup, monkeypatch, action, provider
+):
     from character_lab import monitor
 
     project, config, emit, events = setup
     config.update(
-        conversations=2, monitor_mode="jev", monitor_dimensions=monitor.dimensions({})
+        conversations=2,
+        monitor_mode=provider,
+        monitor_dimensions=monitor.dimensions({}),
     )
     config["monitor_dimensions"][0]["action"] = action
 
@@ -409,6 +417,13 @@ async def test_resume_after_character_generates_visitor_first(setup):
         "visitor",
         "character",
     ]
+    turns = resumed["conversations"][0]["turns"]
+    assert turns[:2] == seed["turns"]
+    assert turns[2]["prompt"] == simulator.conversation_prompt(
+        config, "visitor", seed["documents"], seed["turns"]
+    )
+    assert "**Model C:**  A new path." in turns[2]["prompt"]
+    assert turns[2]["origin"] == "generated"
     assert simulator.summary(resumed)["parent"]["run"] == original["id"]
 
 
@@ -494,14 +509,15 @@ async def test_cancel_during_midturn_scan_drains_task(setup, monkeypatch):
             finally:
                 closed.set()
 
-    async def scan(cfg, conversation, turn):
+    async def classify(request, record):
+        record["request"] = request
         started.set()
         try:
             await asyncio.Event().wait()
         finally:
             cancelled.set()
 
-    monkeypatch.setattr(monitor, "scan", scan)
+    monkeypatch.setattr(monitor, "classify", classify)
     task = asyncio.create_task(simulator.generate(project, config, Streaming, emit))
     await asyncio.wait_for(started.wait(), 1)
     task.cancel()
@@ -512,6 +528,10 @@ async def test_cancel_during_midturn_scan_drains_task(setup, monkeypatch):
         run["conversations"][0]["turns"][-1]["monitor_checks"][0]["status"]
         == "cancelled"
     )
+
+    check = run["conversations"][0]["turns"][-1]["monitor_checks"][0]
+    assert check["calls"][0]["status"] == "cancelled"
+    assert check["calls"][0]["request"]["state"]["history"][-1]["text"] == "x"
 
 
 @pytest.mark.asyncio
@@ -756,3 +776,322 @@ def test_monitor_timing_defaults_and_validation(setup):
             simulator.validate(
                 {**config, key: "false"}, project, Session.validate_settings
             )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("indices", [None, [0, 2]])
+async def test_continue_selected_siblings_keeps_each_history(setup, indices):
+    project, config, emit, events = setup
+    config.update(conversations=4, turns=1)
+    original = await simulator.generate(project, config, Runtime, emit)
+    for c in original["conversations"]:
+        c["turns"][-1]["text"] = f"Unique sibling {c['index']}"
+    before = copy.deepcopy(original)
+    seed = simulator.batch_seed(project, original["id"], indices)
+    config.update(conversations=len(seed["conversations"]), turns=2)
+    continued = await simulator.generate(project, config, Runtime, emit, seed)
+    assert original == before
+    assert continued["parent"] == dict(run=original["id"], conversation=-1)
+    for c, index in zip(continued["conversations"], indices or range(4)):
+        assert c["parent"] == dict(run=original["id"], conversation=index)
+        assert c["turns"][:2] == before["conversations"][index]["turns"]
+        assert [t["role"] for t in c["turns"][2:]] == [
+            "visitor",
+            "character",
+            "visitor",
+            "character",
+        ]
+        assert f"Unique sibling {index}" in c["turns"][2]["prompt"]
+        assert all(
+            f"Unique sibling {other}" not in c["turns"][2]["prompt"]
+            for other in range(4)
+            if other != index
+        )
+
+
+@pytest.mark.asyncio
+async def test_continue_batch_with_different_final_speakers(setup):
+    project, config, emit, _ = setup
+    config.update(conversations=2, turns=1, visitor_alias="other")
+    original = await simulator.generate(project, config, Runtime, emit)
+    original["conversations"][1]["turns"].pop()
+    continued = await simulator.generate(
+        project, config, Runtime, emit, simulator.batch_seed(project, original["id"])
+    )
+    assert [t["role"] for t in continued["conversations"][0]["turns"]] == [
+        "user",
+        "character",
+        "visitor",
+        "character",
+    ]
+    assert [t["role"] for t in continued["conversations"][1]["turns"]] == [
+        "user",
+        "character",
+    ]
+    for indices in ([], [0, 0], [True], [999]):
+        with pytest.raises(ValueError):
+            simulator.batch_seed(project, original["id"], indices)
+
+
+@pytest.mark.asyncio
+async def test_continue_keeps_identity_and_archives_exact_prior_version(setup):
+    from character_lab import simulator_actions
+
+    project, config, emit, _ = setup
+    config.update(conversations=4, turns=1)
+    original = await simulator.generate(project, config, Runtime, emit)
+    before = copy.deepcopy(original)
+    seed = simulator.batch_seed(project, original["id"], [1, 3])
+    config.update(action="continue", turns=2)
+    results = await simulator.generate_alternatives(
+        project, config, Runtime, emit, seed
+    )
+    assert len(results) == len(project.data["simulation_runs"]) == 1
+    assert results[0] is original
+    assert original["revisions"] == [before]
+    assert "revisions" not in simulator.view(original)
+    assert original["conversations"][0] == before["conversations"][0]
+    assert original["conversations"][2] == before["conversations"][2]
+    assert [len(c["turns"]) for c in original["conversations"]] == [2, 6, 2, 6]
+    assert simulator_actions.affected_targets(results) == [
+        dict(run=original["id"], conversation=1),
+        dict(run=original["id"], conversation=3),
+    ]
+    await simulator.generate_alternatives(
+        project,
+        config,
+        Runtime,
+        emit,
+        simulator.conversation_seed(project, original["id"], 1),
+    )
+    assert original["revisions"][0] == before
+    assert len(original["revisions"]) == 2
+    assert "revisions" not in original["revisions"][1]
+    restored = Project(project.folder).data["simulation_runs"][0]
+    assert restored["revisions"][0] == before
+    assert restored["id"] == before["id"]
+
+
+@pytest.mark.asyncio
+async def test_loom_group_preserves_sets_with_one_shared_runtime(setup):
+    from character_lab import simulator_actions
+
+    project, config, emit, _ = setup
+    config.update(conversations=4, turns=1)
+    original = await simulator.generate(project, config, Runtime, emit)
+    before = copy.deepcopy(original)
+    instances = len(Runtime.instances)
+    config.update(action="loom", alternatives=3)
+    runs = await simulator.generate_alternatives(
+        project, config, Runtime, emit, simulator.batch_seed(project, original["id"])
+    )
+    assert len(runs) == 3
+    assert len(Runtime.instances) == instances + 1
+    assert original == before
+    assert len({run["alternative_group"] for run in runs}) == 1
+    assert [run["alternative_index"] for run in runs] == [0, 1, 2]
+    for run in runs:
+        assert len(run["conversations"]) == 4
+        assert simulator.summary(run)["alternative_group"] == run["alternative_group"]
+        for index, conversation in enumerate(run["conversations"]):
+            assert conversation["parent"] == dict(
+                run=original["id"], conversation=index
+            )
+            assert conversation["turns"][:2] == before["conversations"][index]["turns"]
+    assert len(simulator_actions.group_candidates(runs)) == 3
+    chosen = simulator_actions.selected_seed(project, runs, "1")
+    assert len(chosen["conversations"]) == 4
+    assert chosen["parent"]["run"] == runs[1]["id"]
+
+
+@pytest.mark.asyncio
+async def test_explicit_visitor_is_atomic_and_responded_to_without_extra_visitor(setup):
+    from character_lab import simulator_actions
+
+    project, config, emit, _ = setup
+    config.update(conversations=2, turns=1)
+    original = await simulator.generate(project, config, Runtime, emit)
+    before = copy.deepcopy(original)
+    seed = simulator.batch_seed(project, original["id"])
+    supplied = simulator_actions.add_visitor(seed, "My concrete question")
+    assert seed["conversations"][0]["turns"] == before["conversations"][0]["turns"]
+    config.update(action="continue")
+    await simulator.generate_alternatives(project, config, Runtime, emit, supplied)
+    for c in original["conversations"]:
+        assert [t["role"] for t in c["turns"]] == [
+            "user",
+            "character",
+            "visitor",
+            "character",
+        ]
+        assert c["turns"][2]["origin"] == "human"
+        assert "My concrete question" in c["turns"][3]["prompt"]
+    original["conversations"][1]["turns"].pop()
+    before = copy.deepcopy(original)
+    with pytest.raises(ValueError, match="unanswered visitor"):
+        simulator_actions.add_visitor(
+            simulator.batch_seed(project, original["id"]), "Another"
+        )
+    assert original == before
+
+
+@pytest.mark.asyncio
+async def test_multiple_source_sets_preserve_shape_and_select_as_whole_alternative(
+    setup,
+):
+    from character_lab import simulator_actions
+
+    project, config, emit, _ = setup
+    config.update(conversations=3, turns=1)
+    first = await simulator.generate(project, config, Runtime, emit)
+    second = await simulator.generate(project, config, Runtime, emit)
+    targets = [dict(run=first["id"], conversation=i) for i in [0, 2]] + [
+        dict(run=second["id"], conversation=1)
+    ]
+    seed = simulator_actions.resolve_seed(project, dict(targets=targets))
+    config.update(action="loom", alternatives=2)
+    runs = await simulator.generate_alternatives(project, config, Runtime, emit, seed)
+    assert [len(r["conversations"]) for r in runs] == [2, 1, 2, 1]
+    assert [r["alternative_index"] for r in runs] == [0, 0, 1, 1]
+    candidates = simulator_actions.group_candidates(runs)
+    assert len(candidates) == 2
+    selected = simulator_actions.selected_seed(project, runs, "1")
+    assert len(selected["sets"]) == 2
+    assert [len(s["conversations"]) for s in selected["sets"]] == [2, 1]
+    branched = simulator.fork_sets(project, selected, {})
+    assert [len(r["conversations"]) for r in branched] == [2, 1]
+    assert all(r["status"] == "draft" for r in branched)
+    before = copy.deepcopy([first, second])
+    config.update(action="continue")
+    advanced = await simulator.generate_alternatives(
+        project, config, Runtime, emit, seed
+    )
+    assert [r["id"] for r in advanced] == [first["id"], second["id"]]
+    assert first["conversations"][1] == before[0]["conversations"][1]
+    assert second["conversations"][0] == before[1]["conversations"][0]
+
+
+@pytest.mark.asyncio
+async def test_continue_cancellation_preserves_archived_head_and_new_partial(setup):
+    project, config, emit, _ = setup
+    config.update(conversations=2, turns=1)
+    run = await simulator.generate(project, config, Runtime, emit)
+    before = copy.deepcopy(run)
+    started = asyncio.Event()
+
+    class Slow(Runtime):
+        async def stream(self, prompt, settings, trace):
+            yield "new partial"
+            started.set()
+            await asyncio.Event().wait()
+
+    config.update(action="continue")
+    task = asyncio.create_task(
+        simulator.generate_alternatives(
+            project, config, Slow, emit, simulator.batch_seed(project, run["id"], [1])
+        )
+    )
+    await started.wait()
+    task.cancel()
+    await task
+    assert run["status"] == "stopped"
+    assert run["revisions"][0] == before
+    assert run["conversations"][0] == before["conversations"][0]
+    assert run["conversations"][1]["turns"][-1]["text"] == "new partial"
+    assert run["conversations"][1]["turns"][-1]["status"] == "stopped"
+
+
+@pytest.mark.asyncio
+async def test_action_dispatch_validates_before_start_and_records_overrides(setup):
+    from types import SimpleNamespace
+
+    from character_lab import simulator_commands
+
+    project, config, emit, _ = setup
+    config.update(conversations=2, turns=1)
+    original = await simulator.generate(project, config, Runtime, emit)
+    project.data["simulator_config"] = copy.deepcopy(config)
+    captured = []
+
+    async def start(*args):
+        captured.append(args)
+
+    session = SimpleNamespace(
+        project=project,
+        runtime=SimpleNamespace(model={"alias": "base"}),
+        validate_settings=Session.validate_settings,
+        start_simulation=start,
+        policy_model={},
+        selection_model=lambda: {},
+    )
+    before = copy.deepcopy(project.data)
+    for update, match in [
+        (dict(action="continue", count=2), "count belongs"),
+        (dict(action="continue", model="missing"), "configured local base"),
+        (dict(action="continue", visitor_model="missing"), "configured local base"),
+        (dict(action="loom", count=0), "positive integer"),
+        (dict(action="loom", visitor=""), "nonempty"),
+    ]:
+        with pytest.raises(ValueError, match=match):
+            await simulator_commands.dispatch(
+                session, "simulator.run", dict(run=original["id"], **update), "request"
+            )
+    assert not captured
+    assert project.data == before
+    await simulator_commands.dispatch(
+        session,
+        "simulator.run",
+        dict(
+            action="continue",
+            run=original["id"],
+            conversations=[1],
+            visitor="My question",
+            model="other",
+            visitor_model="base",
+        ),
+        "request",
+    )
+    effective, seed, request, evaluation = captured[0]
+    assert effective["action"] == "continue"
+    assert effective["character_alias"] == "other"
+    assert effective["visitor_alias"] == "base"
+    assert seed["conversations"][0]["turns"][-1]["text"] == "My question"
+    assert project.data == before
+    assert request == "request" and evaluation is None
+
+
+@pytest.mark.asyncio
+async def test_stale_continuation_seed_cannot_overwrite_a_newer_head(setup):
+    project, config, emit, _ = setup
+    config.update(conversations=1, turns=1)
+    run = await simulator.generate(project, config, Runtime, emit)
+    stale = simulator.conversation_seed(project, run["id"], 0)
+    config.update(action="continue")
+    await simulator.generate_alternatives(project, config, Runtime, emit, stale)
+    before = copy.deepcopy(project.data)
+    with pytest.raises(ValueError, match="changed"):
+        await simulator.generate_alternatives(project, config, Runtime, emit, stale)
+    assert project.data == before
+
+
+@pytest.mark.asyncio
+async def test_browse_preview_is_read_only_and_distinct_from_open(setup):
+    from types import SimpleNamespace
+
+    from character_lab import simulator_commands
+
+    project, config, emit, events = setup
+    original = await simulator.generate(project, config, Runtime, emit)
+    before = copy.deepcopy(project.data)
+    session = SimpleNamespace(
+        project=project, emit=lambda kind, data, request: emit(kind, data)
+    )
+    await simulator_commands.dispatch(
+        session,
+        "simulator.open",
+        {"run": original["id"], "conversation": 0, "preview": True},
+        "preview",
+    )
+    assert events[-1][1]["browsed"] is True
+    assert events[-1][1]["open_conversation"] == 0
+    assert project.data == before

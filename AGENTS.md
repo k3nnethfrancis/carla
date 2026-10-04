@@ -1,7 +1,8 @@
 # Carla contributor guidance
 
 Read [README.md](README.md) for setup, [architecture](docs/architecture.md) for
-ownership, and [development](docs/development.md) for issues, PRs and releases.
+ownership and [domain terminology](docs/architecture.md#domain-terminology),
+and [development](docs/development.md) for issues, PRs and releases.
 For UI work, use only the relevant guidance in
 [skills/tui-design/SKILL.md](skills/tui-design/SKILL.md), Carla's own adaptation.
 
