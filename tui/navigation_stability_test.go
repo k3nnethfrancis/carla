@@ -149,3 +149,22 @@ func TestLiveFollowKeepsLastPageOnCompletion(t *testing.T) {
 		t.Fatal("completion moved last live page")
 	}
 }
+
+func TestTypingCommandKeepsFocusedItemDuringInsertion(t *testing.T) {
+	m := fixture()
+	m.section, m.focus = 1, 0
+	m.width, m.height = 120, 36
+	root := m.data.Nodes[0]
+	m.data.Nodes = append(m.data.Nodes, node{ID: "reading", Title: "Reading"})
+	m.selected = 1
+	m.focusCommand(true)
+	m.command.SetValue("/inspect")
+	next := m.data
+	next.Busy = true
+	next.Nodes = append(next.Nodes, node{ID: "child", Parent: root.ID})
+	raw, _ := json.Marshal(next)
+	m.apply(event{Type: "state", Data: raw})
+	if m.targetRow().id != "reading" || m.command.Value() != "/inspect" {
+		t.Fatal("background update retargeted command draft")
+	}
+}

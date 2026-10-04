@@ -815,7 +815,7 @@ func (m *model) apply(e event) (cmd tea.Cmd) {
 		if !run.Opened {
 			focused := m.targetRow().id
 			defer func() {
-				if m.focus == 0 {
+				if m.focus == 0 || m.focus == 3 {
 					m.restoreFocusedRow(focused)
 					m.reflow()
 				}
@@ -956,7 +956,7 @@ func (m *model) apply(e event) (cmd tea.Cmd) {
 		}
 	case "state":
 		documentRow := ""
-		if m.pendingDocumentSelection != nil && m.section == 1 || m.focus == 0 {
+		if m.pendingDocumentSelection != nil && m.section == 1 || m.focus == 0 || m.focus == 3 {
 			documentRow = m.targetRow().id
 		}
 		if m.pendingDocumentSet != "" && documentRow != m.pendingDocumentSet {
