@@ -32,6 +32,10 @@ func (m *model) layout() layout {
 	height := max(4, m.height-10-m.suggestionCount()-len(m.commandHints()))
 	l := layout{bodyHeight: height, actionY: 4 + height}
 	width := max(1, m.width-2)
+	if m.width < 90 && m.showInspector && m.focus == 2 {
+		l.panels = []panel{{2, rect{1, 3, width, height}}}
+		return l
+	}
 	if m.adaptiveBranches() {
 		nav := m.branchPaneWidth(width)
 		l.panels = []panel{{0, rect{1, 3, nav, height}}}
@@ -58,17 +62,12 @@ func (m *model) layout() layout {
 	nav := 26
 	l.panels = append(l.panels, panel{0, rect{1, 3, nav, height}})
 	available := width - nav - 1
-	if m.showInspector && m.width >= 132 {
-		inspector := 34
-		document := available - inspector - 1
-		l.panels = append(l.panels, panel{1, rect{nav + 2, 3, document, height}}, panel{2, rect{nav + document + 3, 3, inspector, height}})
-	} else {
-		kind := 1
-		if m.showInspector && m.focus == 2 {
-			kind = 2
-		}
-		l.panels = append(l.panels, panel{kind, rect{nav + 2, 3, available, height}})
+	kind := 1
+	if m.showInspector && m.focus == 2 {
+		kind = 2
 	}
+	l.panels = append(l.panels, panel{kind, rect{nav + 2, 3, available, height}})
+
 	return l
 }
 func safe(s string) string {
@@ -162,7 +161,7 @@ func (m *model) renderDocument(width int) string {
 func (m *model) reflow() {
 	m.command.SetWidth(max(1, m.width-7))
 	panels := m.layout().panels
-	if m.adaptiveBranches() && len(panels) == 1 && (m.focus == 1 || m.focus == 2) {
+	if m.adaptiveBranches() && len(panels) == 1 && panels[0].kind == 0 && (m.focus == 1 || m.focus == 2) {
 		m.focus = 0
 	}
 	for _, p := range panels {
@@ -192,6 +191,9 @@ func (m *model) reflow() {
 			}
 		case 2:
 			m.inspector.SetWidth(width)
+			if m.inspectionRoot != nil && m.inspectionParent == nil {
+				height = max(1, height-1)
+			}
 			m.inspector.SetHeight(height)
 			m.inspector.SetContent(ansi.Wrap(safe(m.inspection), width, ""))
 		}
@@ -528,12 +530,15 @@ func (m *model) View() tea.View {
 		case 2:
 			title = "Inspector"
 			if m.inspectionRoot != nil {
-				title = "Inspect"
+				title = inspectionHeading(m.inspectionRoot.title)
 				if m.inspectionParent != nil {
 					title = "Raw evidence"
 				}
 			}
 			body = m.inspector.View()
+			if m.inspectionRoot != nil && m.inspectionParent == nil {
+				body = m.inspectionTabBar(p.box.w-4) + "\n" + body
+			}
 			if m.inspection == "" {
 				body = "Exact inputs, source attribution and policy decisions appear here."
 			}
@@ -660,7 +665,7 @@ func (m *model) View() tea.View {
 		}
 	}
 	if m.showInspector && m.focus == 2 && m.inspectionRoot != nil {
-		legend = "↑↓ scroll · " + m.keyLabel("nav.enter") + " raw evidence · " + m.keyLabel("nav.back") + " back"
+		legend = "←→ tabs · ↑↓ scroll · " + m.keyLabel("nav.enter") + " raw · " + m.keyLabel("nav.back") + " back"
 		if m.inspectionParent != nil {
 			legend = "↑↓ scroll · " + m.keyLabel("nav.back") + " back"
 		}

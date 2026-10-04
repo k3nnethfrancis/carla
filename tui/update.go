@@ -414,6 +414,14 @@ func (m *model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.activate()
 			}
 		case "nav.left", "nav.right":
+			if m.focus == 2 && m.showInspector && m.inspectionRoot != nil {
+				step := 1
+				if key == "nav.left" {
+					step = -1
+				}
+				m.cycleInspectionTab(step)
+				return m, nil
+			}
 			if m.focus == 0 && m.section == 3 {
 				m.conversationArrow(strings.TrimPrefix(key, "nav."))
 				return m, m.previewTarget()
@@ -634,6 +642,8 @@ func (m *model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 				delta = -3
 			}
 			m.selected = max(0, min(m.selected+delta, len(m.rows())-1))
+			m.reflow()
+			return m, m.previewTarget()
 		}
 		return m, cmd
 	}

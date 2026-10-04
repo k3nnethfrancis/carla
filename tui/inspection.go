@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Inspection is a read-only projection of saved evidence. The full payload stays
@@ -14,6 +15,7 @@ import (
 type inspectionPage struct {
 	title, text, retry string
 	children           []*inspectionPage
+	tabs               []*inspectionPage
 }
 
 func inspectionMap(v any) map[string]any { m, _ := v.(map[string]any); return m }
@@ -289,41 +291,45 @@ func inspectionTree(data map[string]any) *inspectionPage {
 	if enabled, ok := config["selection_enabled"]; ok {
 		overview.text += "\nSaved selection enabled: " + inspectionScalar(enabled)
 	}
-	root.text = overview.text
+	root.tabs = []*inspectionPage{overview}
 	var absent []string
 	if generation.text != "No generation evidence recorded." && (strings.TrimSpace(generation.text) != "" || len(generation.children) > 0) {
-		root.text += "\n\n── Generation ──\n\n" + inspectionSection(generation)
+		root.tabs = append(root.tabs, &inspectionPage{title: "Generation", text: inspectionSection(generation)})
 	}
 	if len(monitor.children) > 0 {
-		root.text += "\n\n── " + monitor.title + " ──\n\n"
+		text := monitor.title
 		for _, check := range monitor.children {
-			root.text += inspectionSection(check) + "\n\n"
+			text += "\n\n" + inspectionSection(check)
 		}
+		root.tabs = append(root.tabs, &inspectionPage{title: "Monitoring", text: text})
 	} else {
 		absent = append(absent, "monitoring")
 	}
 	if len(selection) > 0 {
-		root.text += "\n\n── Selection ──\n\n" + policies.text
+		text := policies.text
 		if len(inspectionList(data["selection_summaries"])) == 0 {
 			for _, attempt := range policies.children {
-				root.text += "\n\n" + attempt.text
+				text += "\n\n" + attempt.text
 			}
 		}
+		root.tabs = append(root.tabs, &inspectionPage{title: "Selection", text: text})
 	} else {
 		absent = append(absent, "selection")
 	}
 	if len(evaluations) > 0 {
-		root.text += "\n\n── Evaluations ──\n\n"
+		text := ""
 		for _, result := range evals.children {
-			root.text += result.text + "\n\n"
+			text += result.text + "\n\n"
 		}
+		root.tabs = append(root.tabs, &inspectionPage{title: "Evaluations", text: strings.TrimSpace(text)})
 	} else {
 		absent = append(absent, "evaluations")
 	}
 	if len(absent) > 0 {
-		root.text = strings.TrimSpace(root.text)
-		root.text += "\n\nNot recorded: " + strings.Join(absent, ", ") + "."
+		overview.text += "\n\nNot recorded: " + strings.Join(absent, ", ") + "."
 	}
+	root.text = overview.text
+	root.tabs = append(root.tabs, &inspectionPage{title: "Raw", text: "Open saved records and token streams with Enter. Exact evidence is preserved separately from the readable sections."})
 	raw, events := inspectionRaw(data, "Record")
 	root.children = append(root.children, &inspectionPage{title: "Raw record · without token events", text: inspectionJSON(raw)})
 	root.children = append(root.children, events...)
@@ -396,22 +402,25 @@ func (m *model) openInspection(raw json.RawMessage) {
 	}
 	m.inspectionOrigin = m.focus
 	m.inspectionRoot = inspectionTree(data)
+	m.inspectionTab = 0
+	m.inspectionScroll = make([]int, len(m.inspectionRoot.tabs))
 	m.inspectionParent = nil
 	m.dialog = nil
 	m.showInspectionReport()
 }
 func (m *model) showInspectionReport() {
-	m.inspection = m.inspectionRoot.title + "\n\n" + m.inspectionRoot.text
+	m.inspection = m.inspectionRoot.tabs[m.inspectionTab].text
 	m.showInspector = true
 	m.focus = 2
 	m.reflow()
-	m.inspector.GotoTop()
+	m.inspector.SetYOffset(m.inspectionScroll[m.inspectionTab])
 }
 func inspectionHeading(s string) string { return strings.Join(strings.Fields(safe(s)), " ") }
 func (m *model) openInspectionRaw() {
 	if m.inspectionRoot == nil {
 		return
 	}
+	m.inspectionScroll[m.inspectionTab] = m.inspector.YOffset()
 	d := &dialog{kind: "inspection", title: "Raw evidence", args: map[string]any{"page": m.inspectionRoot}}
 	for i, child := range m.inspectionRoot.children {
 		d.rows = append(d.rows, row{id: fmt.Sprint(i), label: inspectionHeading(child.title), preview: "ENTER opens saved evidence. ESC returns to the report."})
@@ -451,4 +460,41 @@ func (m *model) backFromInspection() bool {
 		m.reflow()
 	}
 	return true
+}
+
+func (m *model) cycleInspectionTab(step int) {
+	if m.inspectionRoot == nil || m.inspectionParent != nil {
+		return
+	}
+	m.inspectionScroll[m.inspectionTab] = m.inspector.YOffset()
+	m.inspectionTab = (m.inspectionTab + step + len(m.inspectionRoot.tabs)) % len(m.inspectionRoot.tabs)
+	m.showInspectionReport()
+}
+func (m *model) inspectionTabBar(width int) string {
+	if m.inspectionRoot == nil || m.inspectionParent != nil {
+		return ""
+	}
+	labels := make([]string, len(m.inspectionRoot.tabs))
+	for i, tab := range m.inspectionRoot.tabs {
+		labels[i] = tab.title
+		if i == m.inspectionTab {
+			labels[i] = "[" + labels[i] + "]"
+		}
+	}
+	start, end := 0, len(labels)
+	for end-start > 1 && ansi.StringWidth(strings.Join(labels[start:end], "  "))+4 > width {
+		if m.inspectionTab-start > end-1-m.inspectionTab {
+			start++
+		} else {
+			end--
+		}
+	}
+	text := strings.Join(labels[start:end], "  ")
+	if start > 0 {
+		text = "‹ " + text
+	}
+	if end < len(labels) {
+		text += " ›"
+	}
+	return text
 }

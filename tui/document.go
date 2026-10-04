@@ -9,6 +9,9 @@ import (
 )
 
 func (m *model) toggleTarget() tea.Cmd {
+	m.pendingActivation = nil
+	m.gridFollow = false
+	m.gridPinned = true
 	if r := m.targetRow(); r.kind == "document-set" {
 		if m.branchSelection == nil {
 			m.branchSelection = map[string]bool{}
@@ -48,7 +51,7 @@ func (m *model) toggleTarget() tea.Cmd {
 		return nil
 	}
 
-	if m.section == 4 && !m.data.Busy {
+	if m.section == 4 {
 		r := m.targetRow()
 		if r.kind == "evaluation" {
 			if m.evalSelection == nil {
@@ -62,7 +65,7 @@ func (m *model) toggleTarget() tea.Cmd {
 	if m.notesOpen {
 		return nil
 	}
-	if (m.section == 1 || m.section == 2) && !m.pending && !m.data.Busy {
+	if m.section == 1 || m.section == 2 {
 		r := m.targetRow()
 		if r.kind == "node" {
 			ids := map[string]bool{r.id: true}

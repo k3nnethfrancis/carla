@@ -147,9 +147,9 @@ func (m *model) gridPage(r rect) int {
 	items := m.gridItems()
 	_, _, size := m.gridGeometry(r)
 	selected := min(m.gridSelection, max(0, len(items)-1))
-	if !m.gridPinned {
+	if m.gridFollow {
 		for i, item := range items {
-			if item.Status == "generating" || item.Status == "running" {
+			if strings.HasPrefix(item.Status, "generating") || strings.HasPrefix(item.Status, "running") {
 				selected = i
 				break
 			}
@@ -246,6 +246,9 @@ func (m *model) gridSummary() string {
 					}
 				}
 			}
+			if m.gridFollow {
+				heading += " · following live"
+			}
 			return fmt.Sprintf("%s · %d outputs · page %d/%d", heading, n, m.gridPage(p.box)+1, (n+size-1)/size)
 		}
 	}
@@ -265,6 +268,8 @@ func (m *model) openGridTile(index int) tea.Cmd {
 		m.status = "Wait for the current preview"
 		return nil
 	}
+	m.gridFollow = false
+	m.gridPinned = true
 	m.loomGrid = false
 	m.conversationOpen = m.section == 3
 	m.focus = 1
@@ -318,6 +323,7 @@ func (m *model) gridKey(key string) (tea.Cmd, bool) {
 		return nil, false
 	}
 	m.gridPinned = true
+	m.gridFollow = false
 	m.gridSelection = max(0, min(len(m.gridItems())-1, m.gridSelection+step))
 	return nil, true
 }

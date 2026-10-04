@@ -262,7 +262,7 @@ func (m *model) openSampling(group string) tea.Cmd {
 	return nil
 }
 func (m *model) readOnlyAction(id string) bool {
-	if m.section == 3 && (id == "select" || id == "clear") {
+	if m.section >= 1 && (id == "select" || id == "clear") {
 		return true
 	}
 	switch id {
@@ -272,10 +272,12 @@ func (m *model) readOnlyAction(id string) bool {
 	return false
 }
 func (m *model) openActive() tea.Cmd {
+	m.gridFollow = false
 	m.loomGrid = true
 	m.gridPinned = false
 	if m.activeSimulation != nil && m.data.Busy {
 		m.switchSection(3)
+		m.gridFollow = true
 		m.simulation = m.activeSimulation
 		m.gridGroup = m.activeSimulation.AlternativeGroup
 		m.conversationOpen = len(m.simulation.Conversations) == 1 && m.gridGroup == ""
@@ -418,4 +420,26 @@ func (m *model) closeDialog() tea.Cmd {
 		return m.editor.Focus()
 	}
 	return nil
+}
+
+// A preview may be slow; retain only a read/open intent for its exact focused row.
+type navigationIntent struct {
+	section     int
+	rowID, kind string
+}
+
+func (m *model) sendPreview(command string, args map[string]any) tea.Cmd {
+	id, cmd := m.dispatch(command, args)
+	if id != "" {
+		m.previewRequest = id
+	}
+	return cmd
+}
+func (m *model) restoreFocusedRow(id string) {
+	for i, r := range m.rows() {
+		if r.id == id {
+			m.selected = i
+			return
+		}
+	}
 }

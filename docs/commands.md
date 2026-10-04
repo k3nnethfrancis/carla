@@ -218,9 +218,9 @@ The [generated command reference](command-reference.md) is checked against the s
 
 ### Inspect saved work
 
-`/inspect` opens one scrollable report with generation settings and prompts,
-monitoring findings, selection reasons and evaluation verdicts. Enter opens raw
-evidence; token streams remain separate. Escape returns to the report and then
+`/inspect` opens tabs inside the document pane. Left/Right changes sections and
+Up/Down scrolls, with a separate scroll position for each tab. Enter opens raw
+evidence; token streams remain separate. Escape returns to the same tab and then
 the original view. A monitoring error is separate from generation status and is
 not inserted into document text. See the
 [user guide](user-guide.md#inspect-a-generation-or-judgment) for the workflow.

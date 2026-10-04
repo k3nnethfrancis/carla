@@ -54,7 +54,7 @@ func (m *model) openSelectionActions() tea.Cmd {
 	return nil
 }
 func (m *model) selectionAction(id string) tea.Cmd {
-	if m.pending || m.data.Busy {
+	if id != "clear" && (m.pending || m.data.Busy) {
 		m.status = "Wait for the current operation"
 		return nil
 	}
@@ -99,6 +99,8 @@ func (m *model) selectionAction(id string) tea.Cmd {
 // Selection is a new working set on each Library visit, not saved provenance.
 // Defer its reset if another request is in flight; saved branch roots are intact.
 func (m *model) switchSection(section int) tea.Cmd {
+	m.pendingActivation = nil
+	m.gridFollow = false
 	if section == m.section && m.notesOpen {
 		return m.backFromNotes()
 	}

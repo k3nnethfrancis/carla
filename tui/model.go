@@ -230,6 +230,7 @@ type model struct {
 	simulationViews             map[string]*simulationRun
 	gridSelection               int
 	gridPinned                  bool
+	gridFollow                  bool
 	commandOrigin               *commandOrigin
 	pages                       [5]*pagePosition
 	restorePage                 *pagePosition
@@ -277,9 +278,13 @@ type model struct {
 	document, inspector         viewport.Model
 	previewChangePending        bool
 	previewSelectionPending     bool
+	previewRequest              string
+	pendingActivation           *navigationIntent
 	inspection                  string
 	inspectionParent            *dialog
 	inspectionRoot              *inspectionPage
+	inspectionTab               int
+	inspectionScroll            []int
 	inspectionOrigin            int
 	evalRunRaw                  json.RawMessage
 	showInspector               bool
@@ -408,6 +413,14 @@ func (m *model) rows() []row {
 	return rows
 }
 func (m *model) activate() tea.Cmd {
+	if m.pending && m.previewRequest != "" && m.focus == 0 {
+		r := m.targetRow()
+		switch r.kind {
+		case "node", "conversation", "simulation", "simulation-group", "evaluation", "eval-run":
+			m.pendingActivation = &navigationIntent{section: m.section, rowID: r.id, kind: r.kind}
+			return nil
+		}
+	}
 	if m.notesOpen {
 		return m.activateNote()
 	}
@@ -604,7 +617,46 @@ func (m *model) branch() tea.Cmd {
 	m.reflow()
 	return m.generateAtCursor(true)
 }
-func (m *model) apply(e event) tea.Cmd {
+func (m *model) apply(e event) (cmd tea.Cmd) {
+	defer func() {
+		if !m.gridFollow {
+			return
+		}
+		for i, item := range m.gridItems() {
+			if strings.HasPrefix(item.Status, "running") || strings.HasPrefix(item.Status, "generating") {
+				m.gridSelection = i
+				break
+			}
+		}
+		if e.Type == "state" && !m.data.Busy {
+			m.gridFollow = false
+			m.gridPinned = true
+		}
+	}()
+	// Only a matching preview response may complete deferred navigation.
+	previewReply := m.previewRequest != "" && e.ID == m.previewRequest && (e.Type == "state" || e.Type == "simulation" || e.Type == "evaluation" || e.Type == "evaluation_run" || e.Type == "error")
+	if previewReply {
+		m.previewRequest = ""
+	}
+	defer func() {
+		if !previewReply || m.pendingActivation == nil {
+			return
+		}
+		intent := m.pendingActivation
+		r := m.targetRow()
+		if e.Type == "error" || m.focus != 0 || m.sectionFocus || m.section != intent.section || r.id != intent.rowID || r.kind != intent.kind {
+			m.pendingActivation = nil
+			return
+		}
+		if m.previewRequest != "" {
+			return
+		}
+		m.pendingActivation = nil
+		if !m.pending {
+			cmd = tea.Batch(cmd, m.activate())
+		}
+	}()
+
 	switch e.Type {
 	case "evaluation_progress":
 		var progress evaluationProgress
@@ -754,12 +806,20 @@ func (m *model) apply(e event) tea.Cmd {
 			}
 			m.loomGrid = !m.conversationOpen
 			m.gridPinned = false
+			m.gridFollow = false
 			m.document.GotoTop()
 			m.reflow()
 			return nil
 		}
 
 		if !run.Opened {
+			focused := m.targetRow().id
+			defer func() {
+				if m.focus == 0 || m.focus == 3 {
+					m.restoreFocusedRow(focused)
+					m.reflow()
+				}
+			}()
 			updated := false
 			for i := range m.data.SimulationRuns {
 				if m.data.SimulationRuns[i].ID == run.ID {
@@ -794,6 +854,7 @@ func (m *model) apply(e event) tea.Cmd {
 			}
 			m.loomGrid = !m.conversationOpen && (len(run.Conversations) > 1 || m.gridGroup != "")
 			m.gridPinned = true
+			m.gridFollow = false
 			m.focus = 1
 		}
 		restored := run.Opened && m.restoringView
@@ -895,7 +956,7 @@ func (m *model) apply(e event) tea.Cmd {
 		}
 	case "state":
 		documentRow := ""
-		if m.pendingDocumentSelection != nil && m.section == 1 {
+		if m.pendingDocumentSelection != nil && m.section == 1 || m.focus == 0 || m.focus == 3 {
 			documentRow = m.targetRow().id
 		}
 		if m.pendingDocumentSet != "" && documentRow != m.pendingDocumentSet {

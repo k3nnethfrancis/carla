@@ -289,8 +289,19 @@ policies require an explicit replacement, which archives their prior settings in
 ### Inspection boundary
 
 `inspection.py` builds read-only views of existing generation, monitoring,
-selection and evaluation evidence. The TUI presents these in one scrollable report,
+selection and evaluation evidence. The TUI presents these in document-pane tabs with independent scroll positions,
 with raw records and token events available on demand. Inspection never starts
 judging or changes a historical result. Saved monitoring metadata is rendered as
 a compact status beside document/conversation titles, separately from the source
 and generated text; detailed judge output belongs in the inspector.
+
+
+### Navigation during background work
+
+Focus identifies the previewed item; explicit selection identifies command scope.
+Preview requests carry their request identity. Enter during a pending preview
+retains only an open intent for that exact item, canceled by navigation or errors.
+Background tree refreshes preserve the focused row identity. Local document and
+conversation selection remains available during inference; mutation locks remain
+separate. Grid page following is explicit through `/active` and stops on manual
+navigation. Inspection tabs are local read-only views of the saved evidence.
