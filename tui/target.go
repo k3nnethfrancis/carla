@@ -102,6 +102,15 @@ func (m *model) targetLabel() string {
 // Opening the highlighted branch keeps the preview and command target aligned.
 // If a request is pending, the next state event catches up to the latest highlight.
 func (m *model) previewTarget() tea.Cmd {
+	if m.focus == 0 {
+		m.gridFollow = false
+	}
+	if intent := m.pendingActivation; intent != nil {
+		r := m.targetRow()
+		if m.section != intent.section || r.id != intent.rowID || r.kind != intent.kind {
+			m.pendingActivation = nil
+		}
+	}
 	// Coalesce fast navigation: after the pending reply, preview the latest row.
 	if m.pending && m.focus == 0 && !m.notesOpen && (m.section == 1 || m.section == 2) {
 		m.previewSelectionPending = true
@@ -144,17 +153,17 @@ func (m *model) previewTarget() tea.Cmd {
 			m.reflow()
 			return nil
 		}
-		return m.send("simulator.open", args)
+		return m.sendPreview("simulator.open", args)
 	}
 	if m.section == 4 && r.kind == "eval-run" && m.evaluationRunStale(r.id) {
-		return m.send("evaluation.run.open", map[string]any{"id": r.id})
+		return m.sendPreview("evaluation.run.open", map[string]any{"id": r.id})
 	}
 	if m.section == 4 && r.kind == "evaluation" && (m.evaluation == nil || m.evaluation.ID != r.id) {
-		return m.send("evaluation.item.open", map[string]any{"collection": m.evalCollection, "id": r.id})
+		return m.sendPreview("evaluation.item.open", map[string]any{"collection": m.evalCollection, "id": r.id})
 	}
 	if (m.section == 1 || m.section == 2) && r.kind == "node" && r.id != m.currentID() {
 		m.loomGrid = false
-		return m.send("node.open", map[string]any{"node": r.id})
+		return m.sendPreview("node.open", map[string]any{"node": r.id})
 	}
 	return nil
 }

@@ -252,6 +252,7 @@ func (m *model) focusCommand(slash bool) tea.Cmd {
 			if p.kind == 1 {
 				m.gridSelection = m.gridSelected(p.box)
 				m.gridPinned = true
+				m.gridFollow = false
 			}
 		}
 	}
@@ -422,6 +423,7 @@ func (m *model) cycleFocus(step int) tea.Cmd {
 	return nil
 }
 func (m *model) outerFocus() {
+	m.pendingActivation = nil
 	m.command.Blur()
 	m.focus = 0
 	m.sectionFocus = true

@@ -34,19 +34,31 @@ See the [README](../README.md#quick-start) for installation and model setup.
 A conversation conditioned on anthology text is an experiment with a base model,
 not a newly trained model. Carla currently ends at dataset curation/export.
 
+## Browse while work runs
+
+Arrows, the mouse wheel and sidebar clicks focus an item and refresh its preview.
+Space selects command targets independently of focus, including during generation.
+Enter opens the focused item; if its preview is still loading, that open is retained
+unless you navigate away. In Simulator, opening a conversation also selects it.
+
+Background additions preserve the focused item's identity and do not move your
+grid page. `/active` explicitly follows the running output; browsing or moving in
+the grid pauses that following. You can scroll up to read earlier text while
+output continues. Generation and destructive commands still honor operation locks.
+
 ## Inspect a generation or judgment
 
-`/inspect` opens one scrollable report for the focused document or conversation.
-Generation settings and prompts, monitoring findings and errors, selection reasons,
-and evaluation verdicts appear directly in the report. Sections without saved
-results are omitted and listed in a compact “Not recorded” line. Missing historical
-information does not imply a policy was off.
+`/inspect` opens tabs inside the document pane. **Left/Right** switches between
+Overview, Generation, Monitoring, Selection, Evaluations and Raw; **Up/Down**
+scrolls the current section. Each tab keeps its own scroll position. Tabs without
+saved evidence are omitted, with missing evidence listed in Overview. Missing
+historical information does not imply a policy was off.
 
-Press **Enter** for raw evidence. The saved record and token-event streams are
-separate entries, so long streams do not bury judge results. **Escape** returns
-to the report, then to the original view. Saved policy evidence is historical;
-changing a policy now does not change those results. Selection retries remain
-available in the evidence list and require confirmation.
+**Enter** opens the raw evidence list. Saved records and token-event streams are
+separate entries. **Escape** returns to the same tab and scroll position, then to
+the original view. Saved policy evidence is historical; changing a policy now
+does not change those results. Selection retries remain available in the evidence
+list and require confirmation.
 
 Monitoring results are metadata, never part of the document or conversation text.
 A title such as **complete · monitoring error** means generation completed but a

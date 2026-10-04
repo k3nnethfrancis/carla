@@ -13,11 +13,11 @@ func TestInspectionSeparatesHistoryFromRawStream(t *testing.T) {
 	json.Unmarshal(raw, &data)
 	root := inspectionTree(data)
 	for _, want := range []string{"historical run", "Monitoring · error", "chosen", "Fits criteria", "judge unavailable"} {
-		if !strings.Contains(root.text, want) {
+		if !strings.Contains(inspectionReportText(root), want) {
 			t.Fatal(want, root.text)
 		}
 	}
-	if strings.Contains(root.text, "TOKEN_SENTINEL") || strings.Contains(root.text, "TOKEN_SENTINEL") {
+	if strings.Contains(inspectionReportText(root), "TOKEN_SENTINEL") || strings.Contains(root.children[0].text, "TOKEN_SENTINEL") {
 		t.Fatal("stream leaked")
 	}
 	found := false
@@ -68,7 +68,7 @@ func TestInspectionScopedConversationAndVerdict(t *testing.T) {
 	if !strings.Contains(tree.title, "convo-4") {
 		t.Fatal("scope lost")
 	}
-	text := tree.text
+	text := inspectionReportText(tree)
 	if !strings.Contains(text, "Status: failed") || !strings.Contains(text, "Error: judge transport error") {
 		t.Fatal(text)
 	}
@@ -101,7 +101,7 @@ func TestInspectionEvaluationSummaryUsesJudgmentAndBatchResults(t *testing.T) {
 	var data map[string]any
 	json.Unmarshal([]byte(`{"id":"eval-run","status":"complete","passed":false,"results":[{"status":"complete","definition":{"name":"Coherence","model":"judge"},"result":{"passed":false,"reason":"Repeated reply","evidence":"Again"}},{"status":"failed","error":"Unavailable"}]}`), &data)
 	tree := inspectionTree(data)
-	text := tree.text
+	text := inspectionReportText(tree)
 	for _, want := range []string{"Coherence", "Model: judge", "Verdict: FAIL", "Reason: Repeated reply", "Evidence: Again"} {
 		if !strings.Contains(text, want) {
 			t.Fatal(want, text)
@@ -155,6 +155,7 @@ func TestInspectEvaluationRunThroughCommandBar(t *testing.T) {
 		t.Fatal("saved run inspect missing from commands", choices)
 	}
 	m.commandKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m.cycleInspectionTab(1) // Evaluations, without a section menu.
 	if m.dialog != nil || !m.showInspector || !strings.Contains(m.inspection, "Coherent") {
 		t.Fatal("saved run report missing", m.status)
 	}
@@ -165,11 +166,69 @@ func TestFlatInspectionShowsPromptSettingsAndFindings(t *testing.T) {
 	json.Unmarshal([]byte(`{"kind":"document","node":{"label":"doc-1","status":"complete","monitor_checks":[{"status":"complete","scores":{"looping":0.9}}]},"generation":{"prompt":"First line\nSecond line","settings":{"tokens":128}}}`), &data)
 	report := inspectionTree(data)
 	for _, want := range []string{"First line\nSecond line", "Tokens: 128", "Looping: 0.9", "Not recorded: selection, evaluations."} {
-		if !strings.Contains(report.text, want) {
+		if !strings.Contains(inspectionReportText(report), want) {
 			t.Fatal(want, report.text)
 		}
 	}
-	if strings.Contains(report.text, "── Selection") || strings.Contains(report.text, "── Evaluations") {
+	if strings.Contains(inspectionReportText(report), "── Selection") || strings.Contains(inspectionReportText(report), "── Evaluations") {
 		t.Fatal("empty sections shown")
+	}
+}
+
+func TestInspectionTabsKeepIndependentScroll(t *testing.T) {
+	for _, size := range [][2]int{{120, 36}, {60, 18}} {
+		m := fixture()
+		m.width, m.height = size[0], size[1]
+		m.focus = 0
+		raw, _ := json.Marshal(map[string]any{"kind": "document", "node": map[string]any{"label": "doc", "status": "complete"}, "generation": map[string]any{"prompt": strings.Repeat("prompt line\n", 80)}, "evaluations": []any{map[string]any{"status": "complete", "result": map[string]any{"passed": true, "reason": "Coherent"}}}})
+		m.openInspection(raw)
+		m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+		if m.inspectionRoot.tabs[m.inspectionTab].title != "Generation" || m.dialog != nil {
+			t.Fatal("Right did not switch tab")
+		}
+		m.inspector.SetYOffset(20)
+		offset := m.inspector.YOffset()
+		m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+		if !strings.Contains(m.inspection, "Coherent") {
+			t.Fatal("evaluation inaccessible")
+		}
+		m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+		if m.inspector.YOffset() != offset {
+			t.Fatal("tab lost scroll position")
+		}
+		if !strings.Contains(m.inspectionTabBar(45), "[Generation]") {
+			t.Fatal("active tab hidden")
+		}
+		m.openInspectionRaw()
+		m.submitDialog()
+		m.backFromInspection()
+		m.closeDialog()
+		if m.inspector.YOffset() != offset || m.inspectionRoot.tabs[m.inspectionTab].title != "Generation" {
+			t.Fatal("raw return lost tab or scroll")
+		}
+	}
+}
+
+func inspectionReportText(root *inspectionPage) string {
+	text := ""
+	for _, tab := range root.tabs {
+		text += "\n── " + tab.title + " ──\n" + tab.text
+	}
+	return text
+}
+
+func TestInspectorUsesDocumentPaneAtWideAndCompactWidths(t *testing.T) {
+	for _, width := range []int{60, 144} {
+		m := fixture()
+		m.section = 1
+		m.width, m.height = width, 36
+		m.openInspection([]byte(`{"kind":"document","node":{"label":"doc"}}`))
+		panels := m.layout().panels
+		if m.focus != 2 || len(panels) > 2 {
+			t.Fatal("inspector took an extra pane or lost focus")
+		}
+		if width == 60 && (len(panels) != 1 || panels[0].kind != 2) {
+			t.Fatal("compact inspector squeezed behind tree")
+		}
 	}
 }

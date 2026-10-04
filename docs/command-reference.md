@@ -6,7 +6,7 @@ Availability depends on the current stage and target. Compatibility commands rem
 
 ## /active
 
-Jump to the active generation while leaving background work running.
+Jump to the active generation and follow its live grid page. Browsing or moving in the grid pauses following; background work keeps running.
 
 ## /add
 
@@ -167,7 +167,7 @@ Add a local UTF-8 .txt or .md document to the shared Library. Title defaults to 
 
 ## /inspect
 
-Read generation settings, monitoring findings, selection reasons and evaluation verdicts together in one scrollable report. Enter opens raw evidence; token events are separate. Escape returns. Missing historical evidence is labeled as not recorded. Retry selection asks for confirmation, uses frozen candidates and policy, saves a new attempt, and generates no text.
+Inspect generation settings, monitoring findings, selection reasons and evaluation verdicts in document-pane tabs. Left/Right changes tabs; Up/Down scrolls. Each tab remembers its scroll position. Enter opens raw evidence; token events are separate. Escape returns. Missing historical evidence is labeled as not recorded. Retry selection asks for confirmation, uses frozen candidates and policy, saves a new attempt, and generates no text.
 
 ## /keep
 
