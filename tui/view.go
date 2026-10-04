@@ -527,6 +527,12 @@ func (m *model) View() tea.View {
 			}
 		case 2:
 			title = "Inspector"
+			if m.inspectionRoot != nil {
+				title = "Inspect"
+				if m.inspectionParent != nil {
+					title = "Raw evidence"
+				}
+			}
 			body = m.inspector.View()
 			if m.inspection == "" {
 				body = "Exact inputs, source attribution and policy decisions appear here."
@@ -651,6 +657,12 @@ func (m *model) View() tea.View {
 		legend = "↑↓ select · ENTER run · ESC return · /keys"
 		if len(strings.Fields(m.command.Value())) > 1 || m.historyPosition > 0 {
 			legend = "↑↓ history · ENTER run · ESC return · /keys"
+		}
+	}
+	if m.showInspector && m.focus == 2 && m.inspectionRoot != nil {
+		legend = "↑↓ scroll · " + m.keyLabel("nav.enter") + " raw evidence · " + m.keyLabel("nav.back") + " back"
+		if m.inspectionParent != nil {
+			legend = "↑↓ scroll · " + m.keyLabel("nav.back") + " back"
 		}
 	}
 	if hint := templateHint(m.editing); hint != "" {

@@ -36,17 +36,17 @@ not a newly trained model. Carla currently ends at dataset curation/export.
 
 ## Inspect a generation or judgment
 
-`/inspect` opens a structured view of the focused document or conversation:
-**Overview**, **Generation**, **Monitoring**, **Selection**, **Evaluations**, and
-**Raw data**. Start with Overview to see what actually ran. Saved policy evidence
-is historical; changing a policy now does not change those results.
+`/inspect` opens one scrollable report for the focused document or conversation.
+Generation settings and prompts, monitoring findings and errors, selection reasons,
+and evaluation verdicts appear directly in the report. Sections without saved
+results are omitted and listed in a compact “Not recorded” line. Missing historical
+information does not imply a policy was off.
 
-Generation shows the exact prompt, output and settings for each saved generation.
-Monitoring shows checks and errors. Selection shows attempts, candidates and judge
-assessments, including paths that were not selected. Evaluations links the saved
-judgments of that version. Open an individual record for its details; raw JSON
-and token-stream events are available explicitly rather than filling the initial
-inspector screen.
+Press **Enter** for raw evidence. The saved record and token-event streams are
+separate entries, so long streams do not bury judge results. **Escape** returns
+to the report, then to the original view. Saved policy evidence is historical;
+changing a policy now does not change those results. Selection retries remain
+available in the evidence list and require confirmation.
 
 Monitoring results are metadata, never part of the document or conversation text.
 A title such as **complete · monitoring error** means generation completed but a

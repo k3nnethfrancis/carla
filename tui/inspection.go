@@ -78,11 +78,18 @@ func inspectionSummary(m map[string]any) string {
 	}
 	m = fields
 	var lines []string
-	for _, k := range []string{"title", "name", "id", "status", "passed", "error", "reason", "evidence", "created", "finished", "model", "provider", "call_mode", "phase", "tokens", "parent", "retry_of", "selected"} {
+	for _, k := range []string{"title", "name", "status", "passed", "error", "reason", "evidence", "model", "provider", "call_mode", "phase", "tokens", "parent", "retry_of", "selected"} {
 		if v, ok := m[k]; ok && v != nil {
 			label := inspectionLabel(k)
 			if k == "passed" {
-				label = "Verdict passed"
+				label = "Verdict"
+				if passed, ok := v.(bool); ok {
+					if passed {
+						v = "PASS"
+					} else {
+						v = "FAIL"
+					}
+				}
 				if status, ok := m["status"].(string); ok && status != "complete" {
 					lines = append(lines, "Verdict: unavailable (assessment incomplete)")
 					continue
@@ -92,41 +99,15 @@ func inspectionSummary(m map[string]any) string {
 		}
 	}
 	if len(lines) == 0 {
-		return "Saved record. Open a field below to inspect its evidence."
+		return "No summary fields recorded."
 	}
 	return strings.Join(lines, "\n")
 }
 func inspectionRecord(title string, value any) *inspectionPage {
 	p := &inspectionPage{title: title}
-	switch v := value.(type) {
-	case map[string]any:
-		p.text = inspectionSummary(v)
-		keys := make([]string, 0, len(v))
-		for key := range v {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		for _, key := range keys {
-			field := v[key]
-			switch field.(type) {
-			case map[string]any, []any:
-				if key == "events" {
-					p.children = append(p.children, &inspectionPage{title: fmt.Sprintf("Raw token events · %d", len(inspectionList(field))), text: inspectionJSON(field)})
-					continue
-				}
-				p.children = append(p.children, inspectionRecord(inspectionLabel(key), field))
-			default:
-				if field != nil {
-					p.children = append(p.children, &inspectionPage{title: inspectionLabel(key), text: inspectionScalar(field)})
-				}
-			}
-		}
-	case []any:
-		p.text = fmt.Sprintf("%d saved records", len(v))
-		for i, item := range v {
-			p.children = append(p.children, inspectionRecord(fmt.Sprintf("%d · %s", i+1, inspectionIdentity(item, "Record")), item))
-		}
-	default:
+	if record := inspectionMap(value); record != nil {
+		p.text = inspectionSummary(record)
+	} else {
 		p.text = inspectionScalar(value)
 	}
 	return p
@@ -151,7 +132,17 @@ func inspectionMonitoring(records []any) *inspectionPage {
 					state = status
 				}
 			}
-			p.children = append(p.children, inspectionRecord(fmt.Sprintf("%s · check %d · %s", inspectionIdentity(record, "Generation"), len(p.children)+1, status), check))
+			page := inspectionRecord(fmt.Sprintf("%s · check %d · %s", inspectionIdentity(record, "Generation"), len(p.children)+1, status), check)
+			if scores := inspectionMap(c["scores"]); len(scores) > 0 {
+				page.text += "\n" + inspectionSettings(scores)
+			}
+			for _, rawCall := range inspectionList(c["calls"]) {
+				call := inspectionMap(rawCall)
+				if call["error"] != nil {
+					page.text += "\n" + inspectionSummary(call)
+				}
+			}
+			p.children = append(p.children, page)
 		}
 	}
 	if len(p.children) > 0 {
@@ -161,17 +152,29 @@ func inspectionMonitoring(records []any) *inspectionPage {
 	return p
 }
 func inspectionGeneration(record map[string]any, inherited bool) *inspectionPage {
-	p := &inspectionPage{title: inspectionIdentity(record, "Generation"), text: inspectionSummary(record)}
+	p := &inspectionPage{title: inspectionIdentity(record, "Generation")}
+	fields := map[string]any{}
+	for _, key := range []string{"model", "provider", "error"} {
+		if value, ok := record[key]; ok {
+			fields[key] = value
+		} else if value, ok := inspectionMap(record["trace"])[key]; ok {
+			fields[key] = value
+		}
+	}
+	if len(fields) > 0 {
+		p.text = inspectionSummary(fields)
+	}
 	if inherited {
 		p.text = "Inherited generation evidence. This document has no generation trace of its own.\n\n" + p.text
 	}
-	for _, key := range []string{"prompt", "text", "settings", "policy_config", "trace"} {
+	for _, key := range []string{"prompt", "settings"} {
 		if v, ok := record[key]; ok {
 			label := inspectionLabel(key)
-			if key == "text" {
-				label = "Saved text"
+			text := inspectionScalar(v)
+			if fields := inspectionMap(v); fields != nil {
+				text = inspectionSettings(fields)
 			}
-			p.children = append(p.children, inspectionRecord(label, v))
+			p.children = append(p.children, &inspectionPage{title: label, text: text})
 		}
 	}
 	return p
@@ -188,9 +191,6 @@ func inspectionTree(data map[string]any) *inspectionPage {
 		overview.text = inspectionSummary(node)
 		if len(inspectionMap(node["policy_config"])) == 0 {
 			overview.text += "\nPolicy settings: not recorded (historical run)."
-		}
-		if config := inspectionMap(node["policy_config"]); len(config) > 0 {
-			overview.children = append(overview.children, inspectionRecord("Saved policy settings", config))
 		}
 		source := inspectionMap(data["generation"])
 		if len(source) == 0 {
@@ -225,7 +225,6 @@ func inspectionTree(data map[string]any) *inspectionPage {
 	} else if results := inspectionList(data["results"]); results != nil {
 		evaluations = results
 		root.title = "Inspect · " + inspectionIdentity(data, "Evaluation run")
-		overview.children = append(overview.children, inspectionRecord("Saved evaluation policy", data["policy"]))
 	} else {
 		evaluations = []any{data}
 	}
@@ -246,9 +245,6 @@ func inspectionTree(data map[string]any) *inspectionPage {
 	evals := &inspectionPage{title: "Evaluations · " + inspectionCount(len(evaluations), "result"), text: "Evaluations judge saved content separately from generation. Execution errors are distinct from pass/fail verdicts."}
 	for i, raw := range evaluations {
 		evals.children = append(evals.children, inspectionRecord(fmt.Sprintf("%d · %s", i+1, inspectionIdentity(raw, "Evaluation")), raw))
-	}
-	if runs := inspectionList(data["evaluation_runs"]); len(runs) > 0 {
-		evals.children = append(evals.children, inspectionRecord("Evaluation runs", runs))
 	}
 	if summaries := inspectionList(data["selection_summaries"]); len(summaries) > 0 {
 		summaryText := []string{}
@@ -282,7 +278,7 @@ func inspectionTree(data map[string]any) *inspectionPage {
 		}
 		policies.text = strings.Join(summaryText, "\n\n────────────────\n\n")
 	}
-	overview.text += "\n\n" + monitor.title + "\n" + policies.title + "\n" + evals.title
+
 	config := inspectionMap(inspectionMap(data["node"])["policy_config"])
 	if len(config) == 0 {
 		config = inspectionMap(data["config"])
@@ -293,8 +289,104 @@ func inspectionTree(data map[string]any) *inspectionPage {
 	if enabled, ok := config["selection_enabled"]; ok {
 		overview.text += "\nSaved selection enabled: " + inspectionScalar(enabled)
 	}
-	root.children = []*inspectionPage{overview, generation, monitor, policies, evals, {title: "Raw data", text: inspectionJSON(data)}}
+	root.text = overview.text
+	var absent []string
+	if generation.text != "No generation evidence recorded." && (strings.TrimSpace(generation.text) != "" || len(generation.children) > 0) {
+		root.text += "\n\n── Generation ──\n\n" + inspectionSection(generation)
+	}
+	if len(monitor.children) > 0 {
+		root.text += "\n\n── " + monitor.title + " ──\n\n"
+		for _, check := range monitor.children {
+			root.text += inspectionSection(check) + "\n\n"
+		}
+	} else {
+		absent = append(absent, "monitoring")
+	}
+	if len(selection) > 0 {
+		root.text += "\n\n── Selection ──\n\n" + policies.text
+		if len(inspectionList(data["selection_summaries"])) == 0 {
+			for _, attempt := range policies.children {
+				root.text += "\n\n" + attempt.text
+			}
+		}
+	} else {
+		absent = append(absent, "selection")
+	}
+	if len(evaluations) > 0 {
+		root.text += "\n\n── Evaluations ──\n\n"
+		for _, result := range evals.children {
+			root.text += result.text + "\n\n"
+		}
+	} else {
+		absent = append(absent, "evaluations")
+	}
+	if len(absent) > 0 {
+		root.text = strings.TrimSpace(root.text)
+		root.text += "\n\nNot recorded: " + strings.Join(absent, ", ") + "."
+	}
+	raw, events := inspectionRaw(data, "Record")
+	root.children = append(root.children, &inspectionPage{title: "Raw record · without token events", text: inspectionJSON(raw)})
+	root.children = append(root.children, events...)
+	for _, attempt := range policies.children {
+		if attempt.retry != "" {
+			root.children = append(root.children, &inspectionPage{title: "Retry selection · " + attempt.retry, retry: attempt.retry})
+		}
+	}
 	return root
+}
+
+func inspectionSettings(fields map[string]any) string {
+	keys := make([]string, 0, len(fields))
+	for k := range fields {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	lines := []string{}
+	for _, k := range keys {
+		lines = append(lines, inspectionLabel(k)+": "+inspectionScalar(fields[k]))
+	}
+	return strings.Join(lines, "\n")
+}
+func inspectionSection(p *inspectionPage) string {
+	text := p.text
+	for _, child := range p.children {
+		text += "\n\n" + child.title + "\n" + inspectionSection(child)
+	}
+	return strings.TrimSpace(text)
+}
+
+// Keep large streams out of both the readable report and the raw record preview.
+func inspectionRaw(value any, path string) (any, []*inspectionPage) {
+	var events []*inspectionPage
+	switch v := value.(type) {
+	case map[string]any:
+		result := map[string]any{}
+		keys := make([]string, 0, len(v))
+		for k := range v {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			if k == "events" {
+				events = append(events, &inspectionPage{title: fmt.Sprintf("Token events · %s · %d", path, len(inspectionList(v[k]))), text: inspectionJSON(v[k])})
+				result[k] = "Open Token events for the full saved stream"
+			} else {
+				child, streams := inspectionRaw(v[k], path+"/"+k)
+				result[k] = child
+				events = append(events, streams...)
+			}
+		}
+		return result, events
+	case []any:
+		result := make([]any, len(v))
+		for i, item := range v {
+			child, streams := inspectionRaw(item, fmt.Sprintf("%s/%d", path, i+1))
+			result[i] = child
+			events = append(events, streams...)
+		}
+		return result, events
+	}
+	return value, events
 }
 func (m *model) openInspection(raw json.RawMessage) {
 	var data map[string]any
@@ -303,62 +395,60 @@ func (m *model) openInspection(raw json.RawMessage) {
 		return
 	}
 	m.inspectionOrigin = m.focus
-	m.inspection = ""
-	m.showInspector = false
+	m.inspectionRoot = inspectionTree(data)
 	m.inspectionParent = nil
-	m.showInspectionPage(inspectionTree(data), nil)
+	m.dialog = nil
+	m.showInspectionReport()
+}
+func (m *model) showInspectionReport() {
+	m.inspection = m.inspectionRoot.title + "\n\n" + m.inspectionRoot.text
+	m.showInspector = true
+	m.focus = 2
+	m.reflow()
+	m.inspector.GotoTop()
 }
 func inspectionHeading(s string) string { return strings.Join(strings.Fields(safe(s)), " ") }
-func (m *model) showInspectionPage(p *inspectionPage, parent *dialog) {
-	d := &dialog{kind: "inspection", title: inspectionHeading(p.title), parent: parent, args: map[string]any{"page": p}}
-	if p.text != "" {
-		d.rows = append(d.rows, row{id: "summary", label: "Summary", preview: p.text})
+func (m *model) openInspectionRaw() {
+	if m.inspectionRoot == nil {
+		return
 	}
-	for i, child := range p.children {
-		d.rows = append(d.rows, row{id: fmt.Sprint(i), label: inspectionHeading(child.title), preview: child.text})
-	}
-	if p.retry != "" {
-		d.rows = append(d.rows, row{id: "retry", label: "Retry selection", preview: "Reassess saved candidates using this attempt's frozen policy. No generation or additional loops."})
+	d := &dialog{kind: "inspection", title: "Raw evidence", args: map[string]any{"page": m.inspectionRoot}}
+	for i, child := range m.inspectionRoot.children {
+		d.rows = append(d.rows, row{id: fmt.Sprint(i), label: inspectionHeading(child.title), preview: "ENTER opens saved evidence. ESC returns to the report."})
 	}
 	m.dialog = d
 }
 func (m *model) submitInspection() tea.Cmd {
 	d := m.dialog
 	p := d.args["page"].(*inspectionPage)
-	id := d.rows[d.index].id
-	if id == "retry" {
-		m.dialog = &dialog{kind: "selection-results", title: "Retry saved selection?", parent: d, args: map[string]any{"run": p.retry}, rows: []row{{id: "cancel", label: "Cancel"}, {id: "confirm", label: "Retry assessment and choice"}}}
-		return nil
-	}
-	child := p
-	if id != "summary" {
-		for i, c := range p.children {
-			if fmt.Sprint(i) == id {
-				child = c
-				break
-			}
+	for i, child := range p.children {
+		if fmt.Sprint(i) != d.rows[d.index].id {
+			continue
 		}
+		if child.retry != "" {
+			m.dialog = &dialog{kind: "selection-results", title: "Retry saved selection?", parent: d, args: map[string]any{"run": child.retry}, rows: []row{{id: "cancel", label: "Cancel"}, {id: "confirm", label: "Retry assessment and choice"}}}
+			return nil
+		}
+		m.inspection = child.title + "\n\n" + child.text
+		m.inspectionParent = d
+		m.dialog = nil
+		m.reflow()
+		m.inspector.GotoTop()
+		break
 	}
-	if id != "summary" && len(child.children) > 0 {
-		m.showInspectionPage(child, d)
-		return nil
-	}
-	m.inspection = child.title + "\n\n" + child.text
-	m.inspectionParent = d
-	m.dialog = nil
-	m.showInspector = true
-	m.focus = 2
-	m.reflow()
-	m.inspector.GotoTop()
 	return nil
 }
 func (m *model) backFromInspection() bool {
-	if m.focus != 2 || m.inspectionParent == nil {
+	if m.focus != 2 || !m.showInspector || m.inspectionRoot == nil {
 		return false
 	}
-	m.dialog = m.inspectionParent
-	m.inspectionParent = nil
-	m.showInspector = false
-	m.reflow()
+	if m.inspectionParent != nil {
+		m.dialog = m.inspectionParent
+		m.inspectionParent = nil
+	} else {
+		m.showInspector = false
+		m.focus = m.inspectionOrigin
+		m.reflow()
+	}
 	return true
 }
