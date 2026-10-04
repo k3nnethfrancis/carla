@@ -188,3 +188,85 @@ def test_source_labels_keep_source_metadata_and_migrate_legacy_names(tmp_path):
     assert (
         display_title(p.add("Next", parent=gen["id"])) == "continue-1-" + gen["label"]
     )
+
+
+def test_recovery_interrupts_policy_children_without_changing_saved_evidence(tmp_path):
+    import copy
+
+    p = Project(tmp_path)
+    finished = {"status": "complete", "scores": {"looping": 0.1}, "text": "evidence"}
+    pending = {
+        "status": "checking",
+        "calls": [copy.deepcopy(finished), {"status": "starting", "request": "exact"}],
+    }
+    node = p.add("exact partial text", status="generating", prompt="exact ")
+    node.update(
+        monitor=copy.deepcopy(pending), monitor_checks=[copy.deepcopy(finished)]
+    )
+    p.data["simulation_runs"] = [
+        {
+            "id": "simulation",
+            "status": "running",
+            "conversations": [
+                {
+                    "index": 0,
+                    "status": "running",
+                    "turns": [
+                        {
+                            "status": "generating",
+                            "text": "exact reply",
+                            "role": "character",
+                            "monitor": copy.deepcopy(pending),
+                            "monitor_checks": [copy.deepcopy(finished)],
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+    completed_assessment = {"status": "complete", "result": {"passed": True}}
+    p.data["policy_runs"] = [
+        {
+            "id": "selection",
+            "status": "running",
+            "steps": [
+                {
+                    "status": "assessing",
+                    "assessments": [
+                        {
+                            "records": [
+                                copy.deepcopy(completed_assessment),
+                                {
+                                    "status": "running",
+                                    "trace": {"raw_response": "partial"},
+                                },
+                                {"status": "queued"},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+    p.save()
+    restored = Project(tmp_path)
+    doc = restored.node(node["id"])
+    turn = restored.data["simulation_runs"][0]["conversations"][0]["turns"][0]
+    assert doc["text"] == "exact partial text" and doc["status"] == "interrupted"
+    assert turn["text"] == "exact reply" and turn["status"] == "interrupted"
+    for record in [doc, turn]:
+        assert record["monitor"]["status"] == "interrupted"
+        assert record["monitor"]["calls"][0] == finished
+        assert record["monitor"]["calls"][1] == {
+            "status": "interrupted",
+            "request": "exact",
+        }
+        assert record["monitor_checks"] == [finished]
+    selection = restored.data["policy_runs"][0]
+    assert selection["status"] == "interrupted"
+    assert selection["steps"][0]["status"] == "interrupted"
+    records = selection["steps"][0]["assessments"][0]["records"]
+    assert records[0] == completed_assessment
+    assert records[1] == {"status": "interrupted", "trace": {"raw_response": "partial"}}
+    assert records[2] == {"status": "interrupted"}
+    assert Project(tmp_path).data == restored.data

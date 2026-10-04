@@ -19,10 +19,10 @@ See the [README](../README.md#quick-start) for installation and model setup.
 4. Select promising versions with Space and `/add`. They appear in **Anthology**,
    a curated view of the branch tree. There is no required anthology size; choose
    coherent material that fits the context budget and your experiment.
-5. Open **Simulator**, then `/config`. Explicitly select anthology versions,
-   Character/Visitor models, templates, opening and sampling. Keeping documents
-   does not automatically include all of them in every simulation.
-6. Use `/clear`, then `/loom 3 --turns 2 --tokens 512` for three fresh conversations.
+5. Open **Simulator**, then `/config` to set Character/Visitor models, templates,
+   opening and sampling. Return to **Anthology** and select the documents to use.
+   Keeping documents does not automatically include all of them in every simulation.
+6. From Anthology, run `/loom 3 --turns 2 --tokens 512` for three fresh conversations.
    Each adds two Character replies, with Visitor messages between them. Open a
    conversation to inspect its text, prompts, settings and policy evidence.
 7. In **Evaluate → Data**, add saved conversations to a collection. In

@@ -5,8 +5,9 @@
 Carla opens its model setup dialog when no configured base GGUF exists.
 Use arrows and Enter to select, and Escape to go back one step or skip setup.
 File paths and URLs are entered in the same input controls as other Carla dialogs.
-`carla --setup-model` opens setup explicitly; inside Carla, use `/config` → models →
-`+ Add model`. An explicit `--models FILE` bypasses automatic detection.
+`carla --setup-model` opens setup explicitly. In Branches, use `/config` →
+Generation model → `+ Add model`. In Simulator, use `/config` → Models →
+Character model or Visitor model → `+ Add model`. An explicit `--models FILE` bypasses automatic detection.
 Both the installed launcher and direct TUI binary use this same setup flow.
 
 The preset menu offers the Qwen3 8B, 14B and 30B-A3B Base Q4_K_M files used in local
@@ -78,14 +79,14 @@ Selection and local evaluation are separate instruct-model judge calls.
 | Input | Editor | How it is used |
 | --- | --- | --- |
 | Document continuation | Branches → `/edit`, save, position cursor | Exact document prefix up to the cursor; no separate wrapper/template setting. |
-| Character template | Simulator → `/config` → Character prompt | Formatted with frozen anthology text and conversation history. |
-| Visitor template | Simulator → `/config` → Visitor prompt | Formatted with Visitor brief and conversation history by default. |
-| Visitor brief | Simulator → `/config` → Visitor brief | Text substituted into `{visitor_brief}`. |
-| Fixed opener | Simulator → `/config` → Opening → Fixed → Message | First Visitor message for fresh conversations; `--msg` overrides it for one run. |
-| Generated opener | Simulator → `/config` → Opening → Generated → Generation prompt | Raw completion using its selected model/sampling, once per fresh conversation. |
+| Character template | Simulator → `/config` → Prompts → Character prompt | Formatted with frozen anthology text and conversation history. |
+| Visitor template | Simulator → `/config` → Prompts → Visitor prompt | Formatted with Visitor brief and conversation history by default. |
+| Visitor brief | Simulator → `/config` → Prompts → Visitor brief | Text substituted into `{{visitor_brief}}`. |
+| Fixed opener | Simulator → `/config` → Opening → Mode: Fixed → Message | First Visitor message for fresh conversations; `--visitor` supplies the message for one run (`--msg` and `--message` are aliases). |
+| Generated opener | Simulator → `/config` → Opening → Mode: Generated → Generation prompt | Raw completion using its selected model/sampling, once per fresh conversation. |
 | Selection | `/policy` → Selection | Criteria and assessment/choice templates for candidate classification; never injected into generator text. |
 | Monitoring | `/policy` → Monitoring → a policy → Behaviors | Named behavior specs sent to local DiffusionGemma or Jev with context. The provider envelope is managed by Carla. |
-| Evaluation | Evaluate → Policies | Criteria and local judge template, or DiffusionGemma/Jev behavior spec/threshold. |
+| Evaluation | Evaluate → Policies → a policy → Behaviors or Judge | Behavior criteria and the local LLM judge template. New policies offer registered LLMs; saved legacy classifier settings remain supported. |
 
 ### Document continuations
 
@@ -154,7 +155,7 @@ The selection prompt must preserve its JSON contract: review each candidate once
 include valid evidence, and return an eligible candidate ID or null. The local
 assessment prompt must return `passed` (boolean observation of the criteria),
 `reason` and `evidence`. Carla then applies the behavior’s Present/Absent expectation.
-Selection has an Behavior assessment template for this step and a Branch selection template for
+Selection has a Behavior assessment template for this step and a Branch selection template for
 comparing eligible candidates. Full
 contracts/defaults are visible in their editors and in saved judge requests.
 Monitoring allows behavior specs, thresholds and actions; its transport envelope
@@ -165,7 +166,8 @@ is not a free-form prompt editor. See [policies and evaluations](evaluations.md)
 Document `/config` exposes model and shared sampling/context settings. Simulator
 has separate Character, Visitor and generated-opening sampling. Explicit Loom
 flags override one run; they do not rewrite saved configuration. Bare Loom always
-uses one alternative and one loop, plus one Character reply in Simulator.
+uses one alternative and one loop. Simulator uses the saved Turns value from
+`/config` → Generation unless `--turns` overrides it.
 
 `--tokens N` caps new output tokens; it is not a minimum length. `Max` uses the
 remaining available context. EOS and speaker boundaries may end output sooner.
@@ -245,10 +247,10 @@ The texts are not covered by Carla’s MIT software license.
 ## Optional monitoring
 
 Monitoring is Off by default. For an entirely local classifier, select
-**DiffusionGemma (local)** and follow [local judge setup](local-judge.md).
+**DiffusionGemma (classifier)** and follow [local judge setup](local-judge.md).
 After the one-time installation, Carla starts the cached local judge automatically
 on an available loopback port and stops it on exit. No server address or API key
-is needed. Its model setting is separate from the hosted Jev settings below.
+is needed. Choose the model under `/policy` → Monitoring → a policy → Judge → Model.
 
 The Jev option uses OpenRouter System One. Choose it only when you
 intend to send the full conversation history, including character output and
@@ -281,7 +283,8 @@ successful behavior scores and their configured actions still apply. A failed
 behavior is never treated as a negative score or a reason to stop. This setting
 covers live monitoring, not named evaluation judge execution.
 
-Checks apply to character replies and document continuations. In `/policy` →
+Simulator checks apply to character replies when its monitoring policy is On.
+Document continuations require `--monitoring on` for each operation. In `/policy` →
 Monitoring → a policy → Heartbeat, toggle after-reply and during-reply checks separately.
 Both default to on, with a 512-output-token interval when monitoring is enabled.
 Turning during-reply checks off preserves the interval. Legacy interval 0 still
@@ -332,8 +335,8 @@ picker. Heartbeat toggles use the same keys; Interval opens its numeric control.
 Typing filters the list, and the filter is retained after a setting changes.
 
 Open a policy’s **Behaviors** panel to edit names, specs and enabled states.
-**Judge** contains model, Call mode and monitoring **Detection rules**, with a
-separate rule/cutoff for each behavior. Policy-level **Actions** configures Warn
+**Judge** contains model and Call mode. Each monitoring behavior contains its
+own **Detection rule** and, when applicable, threshold. Policy-level **Actions** configures Warn
 or Stop and warning colors by behavior.
 **Heartbeat** controls when monitoring runs. Selection has the same direct
 Behaviors / Judge layout, with separate **Behavior assessment template** and **Branch selection template**
@@ -361,9 +364,9 @@ navigate. The heading shows the current line and total lines. New evaluation beh
 ask for a name first, then open this editor for criteria. Saving preserves the
 complete multiline text, including content outside the visible window.
 
-The local monitoring **Model alias** is the request identifier sent to OpenJev.
-`openjev-latest` routes to DiffusionGemma in Carla’s managed worker; it is not a
-second model. The Actions row counts enabled Warn/Stop rules and disabled Off rules.
+Saved local monitoring requests use `openjev-latest` as the OpenJev API identifier.
+It routes to DiffusionGemma in Carla’s managed worker; the model picker shows
+**DiffusionGemma (classifier)**, not a second model or alias control. The Actions row counts enabled Warn/Stop rules and disabled Off rules.
 
 Simulator Config groups settings into **Generation** (turns and output tokens),
 **Models** (speaker models and context limits), **Sampling**, **Opening**, and

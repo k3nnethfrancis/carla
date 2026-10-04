@@ -232,3 +232,111 @@ func TestInspectorUsesDocumentPaneAtWideAndCompactWidths(t *testing.T) {
 		}
 	}
 }
+
+func TestInspectionReplyRespectsNavigation(t *testing.T) {
+	for _, navigation := range []string{"stay", "section", "row", "focus", "outer", "dialog", "command"} {
+		t.Run(navigation, func(t *testing.T) {
+			m := fixture()
+			m.width, m.height, m.section, m.focus = 120, 36, 1, 0
+			m.data.Nodes = append(m.data.Nodes, node{ID: "other", Text: "Other"})
+			if m.perform("inspect") == nil || m.inspectionPending == nil {
+				t.Fatal("inspection request missing")
+			}
+			id := m.inspectionPending.id
+			switch navigation {
+			case "section":
+				m.switchSection(3)
+			case "row":
+				m.selected = 1
+			case "focus":
+				m.cycleFocus(1)
+			case "outer":
+				m.outerFocus()
+			case "dialog":
+				m.openPolicy()
+			case "command":
+				m.command.SetValue("/config")
+			}
+			focus := m.focus
+			m.apply(event{Type: "inspection", ID: id, Data: json.RawMessage(`{"kind":"document","node":{"id":"old","text":"old document"}}`)})
+			if navigation == "stay" {
+				if !m.showInspector || m.focus != 2 {
+					t.Fatal("matching report did not open")
+				}
+			} else if m.showInspector || m.focus != focus {
+				t.Fatal("late report changed navigation")
+			}
+			if m.pending || m.inspectionPending != nil {
+				t.Fatal("reply did not finish the request")
+			}
+		})
+	}
+}
+
+func TestInspectionSurvivesBackgroundCurrentDocumentChange(t *testing.T) {
+	for _, commandFocus := range []bool{false, true} {
+		m := fixture()
+		m.width, m.height, m.section, m.focus = 120, 36, 1, 0
+		m.data.Busy = true
+		m.openInspection(json.RawMessage(`{"kind":"document","node":{"id":"old","title":"Reading saved evidence","text":"old document"}}`))
+		root, report := m.inspectionRoot, m.inspection
+		if commandFocus {
+			m.cycleFocus(1)
+		}
+		focus := m.focus
+		next := m.data
+		next.Current = &node{ID: "next", Text: "new generation"}
+		next.Nodes = append(next.Nodes, *next.Current)
+		raw, _ := json.Marshal(next)
+		m.apply(event{Type: "state", Data: raw})
+		if !m.showInspector || m.focus != focus || m.inspectionRoot != root || m.inspection != report {
+			t.Fatalf("command focus %v: background generation dismissed or replaced saved report", commandFocus)
+		}
+		if commandFocus {
+			m.cycleFocus(-1)
+		}
+		m.backFromInspection()
+		if m.showInspector || m.focus != 0 {
+			t.Fatal("report no longer returns to its source focus")
+		}
+	}
+}
+
+func TestInspectionCompactFocusRoundTrip(t *testing.T) {
+	for _, width := range []int{60, 80, 120} {
+		m := fixture()
+		m.width, m.height, m.section, m.focus = width, 18, 1, 0
+		m.openInspection(json.RawMessage(`{"kind":"document","node":{"id":"old"}}`))
+		m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+		if m.focus != 3 {
+			t.Fatal("Tab did not reach command bar")
+		}
+		m.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+		if m.focus != 2 || !m.showInspector {
+			t.Fatalf("width %d: Shift+Tab lost Inspector focus", width)
+		}
+	}
+}
+
+func TestInspectionEmptyFilterDoesNotActivate(t *testing.T) {
+	m := fixture()
+	m.width, m.height = 120, 36
+	m.openInspection(json.RawMessage(`{"kind":"document","node":{"id":"doc","text":"saved"}}`))
+	m.openInspectionRaw()
+	dialog := m.dialog
+	m.Update(tea.KeyPressMsg{Text: "no-matching-evidence"})
+	if len(dialog.rows) != 0 {
+		t.Fatal("filter did not remove rows")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m.dialog != dialog || !m.showInspector {
+		t.Fatal("empty filter changed report")
+	}
+	for range len("no-matching-evidence") {
+		m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m.dialog != nil || m.inspectionParent != dialog || !strings.Contains(m.inspection, "saved") {
+		t.Fatal("clearing filter did not restore evidence activation")
+	}
+}

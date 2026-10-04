@@ -222,8 +222,9 @@ Existing named evaluations migrate into data collections and policies. Their
 saved judgments remain intact and available in run history. Older policies with
 behaviors nested under judges are migrated to a shared behavior set. Identical
 shared entries merge; conflicting versions are retained as separate entries.
-Future runs apply the shared set to every judge. Frozen historical runs keep
-their original assignments and results. Attaching existing
+Future runs apply the shared set through the policy’s single configured judge.
+Legacy policies with multiple judges require an explicit model choice before
+running again. Frozen historical runs keep their original assignments and results. Attaching existing
 monitoring observations preserves their partial/turn scope; selection evidence
 preserves its candidate-set context. Neither becomes a whole-item grade merely
 because it was added to Data.

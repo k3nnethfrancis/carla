@@ -325,3 +325,45 @@ async def test_leaf_scope_forks_beneath_exact_conversation_and_group_opens_while
     assert len(opened) == 2
     assert all(data["grid_group"] == scope["id"] for data in opened)
     forks[0]["status"] = "complete"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "options,selects",
+    [
+        ({"action": "loom", "count": 2, "loops": 2, "selection": False}, False),
+        ({"action": "loom", "count": 2, "loops": 1, "selection": True}, True),
+        ({"count": 2, "loops": 2}, True),  # Legacy loops always select.
+    ],
+)
+async def test_external_generator_ownership_depends_on_selection(
+    session, monkeypatch, options, selects
+):
+    await configure(session)
+    calls = []
+
+    class ExternalRuntime(FakeRuntime):
+        def __init__(self, folder, model):
+            super().__init__(folder, model)
+            self.process = None
+
+        async def judge(self, messages, trace):
+            calls.append(messages)
+            raise AssertionError("Cannot load a judge beside an external generator")
+
+    session.runtime_factory = ExternalRuntime
+    await session.execute("simulator.run", options, "external")
+    await session.job
+    run = session.project.data["simulation_runs"][0]
+    assert not calls
+    assert all(c["status"] == "complete" for c in run["conversations"])
+    if selects:
+        assert run["status"] == "failed"
+        assert "externally managed generator" in run["error"]
+        assert session.project.data["policy_runs"][-1]["status"] == "failed"
+    else:
+        assert run["status"] == "complete"
+        assert all(len(c["turns"]) == 4 for c in run["conversations"])
+        assert len(run["revisions"]) == 1
+        assert not session.project.data.get("policy_runs")
+        assert not [event for event in session.events if event[0] == "error"]

@@ -18,7 +18,7 @@ func (m *model) openBehaviors() {
 		}
 		d.rows = append(d.rows, row{id: item.ID, label: item.Name + " · " + enabled, preview: item.Spec})
 	}
-	d.rows = append(d.rows, row{id: "new", label: "+ New behavior", preview: "Name and describe a behavior. Configure detection in Judge and responses in Actions."})
+	d.rows = append(d.rows, row{id: "new", label: "+ New behavior", preview: "Name and describe a behavior, then set its detection rule. Configure responses in Actions."})
 	d.rows = append(d.rows, row{id: "library", label: "From library", preview: "Copy a saved behavior definition into this policy."})
 	m.dialog = d
 }
