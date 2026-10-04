@@ -125,9 +125,9 @@ The monitor labels source/continuation text without changing the base-model prom
 
 Branches show generation status before the name, including documents inside sets.
 Set rows summarize active members, and the app header counts active documents even
-when their rows are collapsed. Live document-monitor events update policy scores
-in the preview footer and Loom grid; `!` marks detections, which remain visible
-on completed documents. Saved monitor summaries restore when reopening a workspace.
+when their rows are collapsed. Policy status appears separately from document text.
+Use `/inspect` for monitoring scores, detections and errors; its Monitoring tab
+retains saved evidence after generation and workspace restart.
 
 ### Document names
 
@@ -146,9 +146,10 @@ separate; Carla does not infer a common Loom from timestamps.
 
 ### Branch tree width
 
-The tree fits the widest expanded row, with a minimum of 24 terminal columns,
-rounded up in four-column increments. Moving the highlight alone does not resize
-it. The document preview uses the remaining space and disappears when the tree
+The tree sizes for expanded rows, with each name contributing at most 16 terminal
+cells plus its indentation. Width has a minimum of 24 columns and grows in
+four-column increments. Long names are truncated; a focused name scrolls into view.
+Moving the highlight alone does not resize it. The document preview uses the remaining space and disappears when the tree
 needs the full width. Collapsing branches restores that space.
 
 Indentation retains the actual nesting depth. When the tree exceeds the available

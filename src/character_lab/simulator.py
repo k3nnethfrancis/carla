@@ -622,7 +622,15 @@ async def _generate(project, config, runtime_factory, emit, plans):
         for _, conversation in work:
             if conversation["status"] in {"queued", "running"}:
                 conversation["status"] = "complete"
-        if config.get("loops", 1) > 1 and runtime and runtime.process is None:
+        # Legacy repeated batches always select. Action-based loops can instead
+        # advance every conversation without changing models; even one selecting
+        # loop must release the generator before starting a judge.
+        selects = (
+            config.get("selection_enabled", False) and config.get("alternatives", 1) > 1
+            if config.get("action")
+            else config.get("loops", 1) > 1
+        )
+        if selects and runtime and runtime.process is None:
             raise ValueError(
                 "Stop the externally managed generator before switching to selection"
             )

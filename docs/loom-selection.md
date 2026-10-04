@@ -21,9 +21,9 @@ not chosen, criteria not met, or assessment error. Grid headers identify the loo
 and branch; generation status remains separate from the policy outcome. A checkmark
 still means your manual selection, never the judge's choice.
 
-Use `/inspect` on a selected Loom conversation to open Selection results. Each
-row previews assessment reasons; Enter opens exact saved judge traces. **Retry
-selection** reassesses the last loop's frozen candidates with its original policy
+Use `/inspect` on a Loom conversation, then use Left/Right to open the Selection
+tab. Up/Down scroll the saved assessment reasons. Enter opens the raw evidence
+list, including exact judge traces and **Retry selection**. Retrying reassesses the last loop's frozen candidates with its original policy
 and model configuration, then performs branch choice if possible. It saves a new
 attempt, preserves the old attempt, generates no new text, and does not automatically
 resume later loops. The latest attempt appears on those same branch outcomes.

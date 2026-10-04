@@ -18,6 +18,32 @@ type inspectionPage struct {
 	tabs               []*inspectionPage
 }
 
+// An asynchronous report may open only while its original navigation context
+// remains current. A reply must not take focus back from a different item/tab.
+type inspectionLocation struct {
+	workspace, run, group string
+	command, editing      string
+	dialog                *dialog
+	view                  workspaceView
+	focus, tile           int
+	outer                 bool
+}
+type inspectionRequest struct {
+	id       string
+	location inspectionLocation
+}
+
+func (m *model) inspectionLocation() inspectionLocation {
+	location := inspectionLocation{workspace: m.data.Workspace.Path, view: m.workspaceView(), focus: m.focus, outer: m.sectionFocus, dialog: m.dialog, editing: m.editing, command: m.command.Value()}
+	if m.section == 3 {
+		location.tile, location.group = m.gridSelection, m.gridGroup
+		if m.simulation != nil {
+			location.run = m.simulation.ID
+		}
+	}
+	return location
+}
+
 func inspectionMap(v any) map[string]any { m, _ := v.(map[string]any); return m }
 func inspectionList(v any) []any         { a, _ := v.([]any); return a }
 func inspectionJSON(v any) string        { b, _ := json.MarshalIndent(v, "", "  "); return string(b) }
@@ -429,6 +455,9 @@ func (m *model) openInspectionRaw() {
 }
 func (m *model) submitInspection() tea.Cmd {
 	d := m.dialog
+	if len(d.rows) == 0 {
+		return nil
+	}
 	p := d.args["page"].(*inspectionPage)
 	for i, child := range p.children {
 		if fmt.Sprint(i) != d.rows[d.index].id {

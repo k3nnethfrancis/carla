@@ -12,7 +12,7 @@ Normal single braces in JSON examples are literal in double-brace templates.
 
 ## Judge assessment
 
-Selection → Judge → Behavior assessment template and Evals → a policy → Judge → Prompt
+/policy → Selection → a policy → Judge → Behavior assessment template and Evals → a policy → Judge → Prompt
 template expose these variables:
 
 | Variable | Value |
@@ -53,7 +53,7 @@ and execution unchanged. New Evals judges start with an explicit template.
 
 ## Selection choice
 
-Selection → Judge → Branch selection template supports `{{behaviors}}`, `{{spec}}`,
+/policy → Selection → a policy → Judge → Branch selection template supports `{{behaviors}}`, `{{spec}}`,
 `{{candidates}}` and `{{assessments}}`. Candidates are the eligible options, each
 with `node`, `parent` and `continuation`. Assessments contain their behavior results.
 Include candidates and either behaviors/specs or the compiled spec. For example:
@@ -74,7 +74,7 @@ reviews and evidence. Generation prompts never receive these judge instructions.
 
 ## Conversation prompts
 
-Simulator → `/config` → Character prompt or Visitor prompt supports
+Simulator → `/config` → Prompts → Character prompt or Visitor prompt supports
 `{{history}}`, `{{anthology}}` and `{{visitor_brief}}`. Both prompts require history;
 Character also requires anthology. These are raw base-model completion templates,
 not judge prompts: no hidden judge contract or chat wrapper is added.

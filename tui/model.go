@@ -280,6 +280,7 @@ type model struct {
 	previewSelectionPending     bool
 	previewRequest              string
 	pendingActivation           *navigationIntent
+	inspectionPending           *inspectionRequest
 	inspection                  string
 	inspectionParent            *dialog
 	inspectionRoot              *inspectionPage
@@ -337,7 +338,11 @@ func (m *model) dispatch(command string, args map[string]any) (string, tea.Cmd) 
 	}
 	command, args = m.routeOperationalMutation(command, args)
 	m.pending = true
-	return m.client.request(command, args)
+	id, cmd := m.client.request(command, args)
+	if command == "inspect" || command == "simulator.inspect" {
+		m.inspectionPending = &inspectionRequest{id: id, location: m.inspectionLocation()}
+	}
+	return id, cmd
 }
 func (m *model) currentID() string {
 	if m.data.Current != nil {
@@ -1109,9 +1114,13 @@ func (m *model) apply(e event) (cmd tea.Cmd) {
 		}
 		if oldID != m.currentID() {
 			m.commandDocument = ""
-			m.inspection = ""
-			m.inspectionParent = nil
-			m.showInspector = false
+			// A saved report is an explicit reading target, independent of the
+			// document that becomes current as another generation completes.
+			if !m.showInspector || m.inspectionRoot == nil {
+				m.inspection = ""
+				m.inspectionParent = nil
+				m.showInspector = false
+			}
 			// Reveal a newly generated or externally opened node inside its tree.
 			parents := map[string]string{}
 			for _, n := range m.data.Nodes {
@@ -1239,9 +1248,19 @@ func (m *model) apply(e event) (cmd tea.Cmd) {
 			m.status += fmt.Sprintf(" · round %d", s.Round)
 		}
 	case "inspection":
+		request := m.inspectionPending
+		if request == nil || request.id != e.ID {
+			return nil
+		}
+		m.inspectionPending = nil
 		m.pending = false
-		m.openInspection(e.Data)
+		if request.location == m.inspectionLocation() {
+			m.openInspection(e.Data)
+		}
 	case "error":
+		if m.inspectionPending != nil && m.inspectionPending.id == e.ID {
+			m.inspectionPending = nil
+		}
 		if m.editRequest != "" && e.ID != "" && e.ID != m.editRequest {
 			return nil
 		}

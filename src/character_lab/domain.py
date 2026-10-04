@@ -19,6 +19,14 @@ def now():
     return datetime.now(timezone.utc).isoformat()
 
 
+def _interrupt_monitoring(record):
+    """Only live monitor records change on restart; saved results stay intact."""
+    for check in [record.get("monitor", {}), *record.get("monitor_checks", [])]:
+        for item in [check, *check.get("calls", [])]:
+            if item.get("status") in {"queued", "starting", "checking", "running"}:
+                item["status"] = "interrupted"
+
+
 def generation_status(node):
     status = node.get("status", "complete")
     if (
@@ -79,30 +87,27 @@ class Project:
         for node in self.data["nodes"]:
             if node.get("status") in {"generating", "queued"}:
                 node["status"] = "interrupted"
+            _interrupt_monitoring(node)
         for run in self.data.get("policy_runs", []):
             if run["status"] == "running":
                 run["status"] = "interrupted"
-                if run.get("steps") and run["steps"][-1]["status"] in {
-                    "generating",
-                    "queued",
-                    "selecting",
-                }:
-                    run["steps"][-1]["status"] = "interrupted"
+            for step in run.get("steps", []):
+                if step["status"] in {"generating", "queued", "assessing", "selecting"}:
+                    step["status"] = "interrupted"
+                for assessment in step.get("assessments", []):
+                    for record in assessment["records"]:
+                        if record["status"] in {"queued", "running"}:
+                            record["status"] = "interrupted"
         for run in self.data.get("simulation_runs", []):
             if run["status"] == "running":
                 run["status"] = "interrupted"
-                for conversation in run["conversations"]:
-                    if conversation["status"] in {"running", "queued"}:
-                        conversation["status"] = "interrupted"
-                    for turn in conversation["turns"]:
-                        if turn["status"] == "generating":
-                            turn["status"] = "interrupted"
-                        for check in [
-                            turn.get("monitor", {}),
-                            *turn.get("monitor_checks", []),
-                        ]:
-                            if check.get("status") == "checking":
-                                check["status"] = "interrupted"
+            for conversation in run["conversations"]:
+                if conversation["status"] in {"running", "queued"}:
+                    conversation["status"] = "interrupted"
+                for turn in conversation["turns"]:
+                    if turn["status"] == "generating":
+                        turn["status"] = "interrupted"
+                    _interrupt_monitoring(turn)
         for record in self.data.get("evaluations", []):
             if record["status"] in {"queued", "running"}:
                 record["status"] = "interrupted"

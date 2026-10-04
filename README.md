@@ -161,7 +161,7 @@ These use criteria to judge text, but serve different purposes:
 | --- | --- | --- |
 | Monitoring | During generation and/or after replies | Flags conditions such as looping; warns or stops only as configured. Off by default. |
 | Selection | Split Loom runs with explicit `--loops` | Reviews candidates and chooses one path to develop. Does not automatically keep or mark it for training. |
-| Evaluation | On saved items, or after `/loom --eval "name"` | Records whole-item judgments in a named collection for review and dataset curation. |
+| Evaluation | On saved items, or after `/loom --eval "name"` | Records whole-item judgments and frozen inputs in a saved run. Dataset membership is explicit. |
 
 Plain document `/loom`, `/loom N` and `/continue` generate without judging.
 Use `--monitoring on`, `--selection on` (with 2+ alternatives and explicit `--loops`)
@@ -249,7 +249,7 @@ and evaluation workflow, developed with collaborator feedback.
 
 - Inference uses local llama.cpp raw completions. Base-model continuations have
   no hidden assistant prompt, RAG memories or reflection step. Simulator templates
-  are explicit and inspectable; the selection classifier uses a separate chat endpoint.
+  are explicit and inspectable; the selection judge uses a separate chat endpoint.
 - Up to four requests share one resident model, subject to memory and full
   prompt/output context reservations. This is a conservative heuristic, not an
   optimal throughput scheduler. Large budgets can serialize requests. Same-model
@@ -299,7 +299,7 @@ For optional hosted monitoring and stored trace details, see
 
 ## Releases
 
-Carla uses versioned source releases: `v0.1.0`, `v0.1.1`, and so on. Each reviewed
+Carla uses versioned source releases, including `v0.1.0`, `v0.1.1`, and `v0.2.0`. Each reviewed
 promotion to `main` receives a new version and publishes a matching GitHub release
 after macOS/Linux checks pass. `dev` is ongoing work. See
 [GitHub releases](https://github.com/k3nnethfrancis/carla/releases) for pinned
