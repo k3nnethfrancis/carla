@@ -51,7 +51,7 @@ var commandDescriptions = map[string]string{
 	"models":      "Choose the Loom base model; on Simulator choose Character or Visitor. /model visitor jumps directly to that picker.",
 	"workspaces":  "Open a saved workspace or create a new one.",
 	"edit":        "Edit existing document text or a conversation message; saving preserves the original as a new version.",
-	"inspect":     "Browse saved generation and policy evidence: Overview, Generation, Monitoring, Selection and Evaluations. Read summaries first; open individual requests, responses or Raw data for exact JSON and token events. Missing historical evidence is labeled as not recorded. Retry selection asks for confirmation, uses frozen candidates and policy, saves a new attempt, and generates no text.",
+	"inspect":     "Read generation settings, monitoring findings, selection reasons and evaluation verdicts together in one scrollable report. Enter opens raw evidence; token events are separate. Escape returns. Missing historical evidence is labeled as not recorded. Retry selection asks for confirmation, uses frozen candidates and policy, saves a new attempt, and generates no text.",
 	"review":      "Attach a verdict and note to this document or a text range.",
 	"snapshot":    "Export selected saved items, or the current collection when nothing is selected. Saves content, provenance and judgment metadata to workspace files. Does not judge or train.",
 	"clear":       "Clear source/branch selection. In Simulator clear the conversation target so the next Loom starts fresh. Does not delete saved content.",

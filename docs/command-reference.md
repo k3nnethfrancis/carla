@@ -167,7 +167,7 @@ Add a local UTF-8 .txt or .md document to the shared Library. Title defaults to 
 
 ## /inspect
 
-Browse saved generation and policy evidence: Overview, Generation, Monitoring, Selection and Evaluations. Read summaries first; open individual requests, responses or Raw data for exact JSON and token events. Missing historical evidence is labeled as not recorded. Retry selection asks for confirmation, uses frozen candidates and policy, saves a new attempt, and generates no text.
+Read generation settings, monitoring findings, selection reasons and evaluation verdicts together in one scrollable report. Enter opens raw evidence; token events are separate. Escape returns. Missing historical evidence is labeled as not recorded. Retry selection asks for confirmation, uses frozen candidates and policy, saves a new attempt, and generates no text.
 
 ## /keep
 

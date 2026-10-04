@@ -19,10 +19,7 @@ func TestSelectionResultsUseLatestAttemptAndKeepGenerationStatus(t *testing.T) {
 		t.Fatal(items)
 	}
 	m.openInspection([]byte(`{"kind":"selection","id":"retry","status":"complete","steps":[{"loop":1}]}`))
-	m.dialog.index = 3
-	m.submitDialog()
-	m.dialog.index = 1
-	m.submitDialog()
+	m.openInspectionRaw()
 	m.dialog.index = len(m.dialog.rows) - 1
 	m.submitDialog()
 	if m.dialog.args["run"] != "retry" || m.dialog.rows[0].id != "cancel" {

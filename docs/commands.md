@@ -218,9 +218,9 @@ The [generated command reference](command-reference.md) is checked against the s
 
 ### Inspect saved work
 
-`/inspect` starts with readable generation and policy evidence, separated into
-Overview, Generation, Monitoring, Selection, Evaluations and Raw data. Open a
-section and a saved call to read its prompt, result or error. Token-stream events
-and full JSON are explicit drill-downs. A monitoring error is separate from the
-generation status and is not inserted into document text. See the
+`/inspect` opens one scrollable report with generation settings and prompts,
+monitoring findings, selection reasons and evaluation verdicts. Enter opens raw
+evidence; token streams remain separate. Escape returns to the report and then
+the original view. A monitoring error is separate from generation status and is
+not inserted into document text. See the
 [user guide](user-guide.md#inspect-a-generation-or-judgment) for the workflow.

@@ -377,9 +377,10 @@ func (m *model) filterDialog(msg tea.KeyPressMsg) bool {
 func (m *model) closeDialog() tea.Cmd {
 	d := m.dialog
 	if d != nil && d.kind == "inspection" && d.parent == nil {
-		m.focus = m.inspectionOrigin
-		m.showInspector = false
+		m.dialog = nil
 		m.inspectionParent = nil
+		m.showInspectionReport()
+		return nil
 	}
 	if d != nil && d.kind == "judge-prompt-confirm" {
 		return m.resumeJudgePromptDraft()

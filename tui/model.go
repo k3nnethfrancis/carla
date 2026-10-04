@@ -279,6 +279,7 @@ type model struct {
 	previewSelectionPending     bool
 	inspection                  string
 	inspectionParent            *dialog
+	inspectionRoot              *inspectionPage
 	inspectionOrigin            int
 	evalRunRaw                  json.RawMessage
 	showInspector               bool

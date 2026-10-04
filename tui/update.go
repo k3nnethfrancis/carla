@@ -406,6 +406,10 @@ func (m *model) update(message tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, m.cycleFocus(step)
 		case "nav.enter":
+			if m.focus == 2 && m.showInspector && m.inspectionParent == nil {
+				m.openInspectionRaw()
+				return m, nil
+			}
 			if m.focus == 0 {
 				return m, m.activate()
 			}
